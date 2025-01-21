@@ -13,20 +13,19 @@
 #include "solver.h"
 #include "util.h"
 
-static void matrixGenerate(
-    Parameter* p, Solver* s, Comm* c, bool use_7pt_stencil)
-{
+static void matrixGenerate(Parameter *p, Solver *s, Comm *c,
+                           bool use_7pt_stencil) {
   int size = c->size;
   int rank = c->rank;
 
   CG_UINT local_nrow = p->nx * p->ny * p->nz;
-  CG_UINT local_nnz  = 27 * local_nrow;
+  CG_UINT local_nnz = 27 * local_nrow;
 
   CG_UINT total_nrow = local_nrow * size;
-  CG_UINT total_nnz  = 27 * total_nrow;
+  CG_UINT total_nnz = 27 * total_nrow;
 
   int start_row = local_nrow * rank;
-  int stop_row  = start_row + local_nrow - 1;
+  int stop_row = start_row + local_nrow - 1;
 
   if (commIsMaster(c)) {
     if (use_7pt_stencil) {
@@ -37,22 +36,23 @@ static void matrixGenerate(
     printf("%d total rows and %d nonzeros\n", (int)total_nrow, (int)local_nnz);
   }
 
-  s->A.val = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(CG_FLOAT));
-  s->A.colInd = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
-      local_nnz * sizeof(CG_UINT));
-  s->A.rowPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
-      (local_nrow + 1) * sizeof(CG_UINT));
-  s->x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, local_nrow * sizeof(CG_FLOAT));
-  s->b = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, local_nrow * sizeof(CG_FLOAT));
-  s->xexact = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT,
-      local_nrow * sizeof(CG_FLOAT));
+  s->A.val =
+      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(CG_FLOAT));
+  s->A.colInd =
+      (CG_UINT *)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(CG_UINT));
+  s->A.rowPtr =
+      (CG_UINT *)allocate(ARRAY_ALIGNMENT, (local_nrow + 1) * sizeof(CG_UINT));
+  s->x = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, local_nrow * sizeof(CG_FLOAT));
+  s->b = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, local_nrow * sizeof(CG_FLOAT));
+  s->xexact =
+      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, local_nrow * sizeof(CG_FLOAT));
 
-  CG_FLOAT* curvalptr = s->A.val;
-  CG_UINT* curindptr  = s->A.colInd;
-  CG_UINT* currowptr  = s->A.rowPtr;
-  CG_FLOAT* x         = s->x;
-  CG_FLOAT* b         = s->b;
-  CG_FLOAT* xexact    = s->xexact;
+  CG_FLOAT *curvalptr = s->A.val;
+  CG_UINT *curindptr = s->A.colInd;
+  CG_UINT *currowptr = s->A.rowPtr;
+  CG_FLOAT *x = s->x;
+  CG_FLOAT *b = s->b;
+  CG_FLOAT *xexact = s->xexact;
 
   CG_UINT nnzglobal = 0;
   int nx = p->nx, ny = p->ny, nz = p->nz;
@@ -65,8 +65,8 @@ static void matrixGenerate(
       for (int ix = 0; ix < nx; ix++) {
 
         int curlocalrow = iz * nx * ny + iy * nx + ix;
-        int currow      = start_row + iz * nx * ny + iy * nx + ix;
-        int nnzrow      = 0;
+        int currow = start_row + iz * nx * ny + iy * nx + ix;
+        int nnzrow = 0;
 
         for (int sz = -1; sz <= 1; sz++) {
           for (int sy = -1; sy <= 1; sy++) {
@@ -99,8 +99,8 @@ static void matrixGenerate(
         *currowptr = *(currowptr - 1) + nnzrow;
         currowptr++;
         nnzglobal += nnzrow;
-        x[curlocalrow]      = 0.0;
-        b[curlocalrow]      = 27.0 - ((CG_FLOAT)(nnzrow - 1));
+        x[curlocalrow] = 0.0;
+        b[curlocalrow] = 27.0 - ((CG_FLOAT)(nnzrow - 1));
         xexact[curlocalrow] = 1.0;
       } // end ix loop
     } // end iy loop
@@ -113,16 +113,15 @@ static void matrixGenerate(
 #endif /* ifdef VERBOSE */
 
   s->A.startRow = start_row;
-  s->A.stopRow  = stop_row;
-  s->A.totalNr  = total_nrow;
+  s->A.stopRow = stop_row;
+  s->A.totalNr = total_nrow;
   s->A.totalNnz = total_nnz;
-  s->A.nr       = local_nrow;
-  s->A.nc       = local_nrow;
-  s->A.nnz      = local_nnz;
+  s->A.nr = local_nrow;
+  s->A.nc = local_nrow;
+  s->A.nnz = local_nnz;
 }
 
-void initSolver(Solver* s, Comm* c, Parameter* p)
-{
+void initSolver(Solver *s, Comm *c, Parameter *p) {
   if (!strcmp(p->filename, "generate")) {
     matrixGenerate(p, s, c, false);
   } else if (!strcmp(p->filename, "generate7P")) {
@@ -132,33 +131,28 @@ void initSolver(Solver* s, Comm* c, Parameter* p)
   }
 }
 
-void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y)
-{
+void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y) {
   CG_UINT numRows = m->nr;
-  CG_UINT* rowPtr = m->rowPtr;
-  CG_UINT* colInd = m->colInd;
-  CG_FLOAT* val   = m->val;
+  CG_UINT *rowPtr = m->rowPtr;
+  CG_UINT *colInd = m->colInd;
+  CG_FLOAT *val = m->val;
 
+#pragma omp parallel for
   for (int rowID = 0; rowID < numRows; rowID++) {
     CG_FLOAT tmp = y[rowID];
 
     // loop over all elements in row
-    for (int rowEntry = rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
-        rowEntry++) {
-      tmp += val[rowEntry] * x[colInd[rowEntry]];
+    for (int entry = rowPtr[rowID]; entry < rowPtr[rowID + 1]; entry++) {
+      tmp += val[entry] * x[colInd[entry]];
     }
 
     y[rowID] = tmp;
   }
 }
 
-void waxpby(const CG_UINT n,
-    const CG_FLOAT alpha,
-    const CG_FLOAT* restrict x,
-    const CG_FLOAT beta,
-    const CG_FLOAT* restrict y,
-    CG_FLOAT* const w)
-{
+void waxpby(const CG_UINT n, const CG_FLOAT alpha, const CG_FLOAT *restrict x,
+            const CG_FLOAT beta, const CG_FLOAT *restrict y,
+            CG_FLOAT *const w) {
   if (alpha == 1.0) {
     for (int i = 0; i < n; i++) {
       w[i] = x[i] + beta * y[i];
@@ -174,11 +168,8 @@ void waxpby(const CG_UINT n,
   }
 }
 
-void ddot(const CG_UINT n,
-    const CG_FLOAT* restrict x,
-    const CG_FLOAT* restrict y,
-    CG_FLOAT* restrict result)
-{
+void ddot(const CG_UINT n, const CG_FLOAT *restrict x,
+          const CG_FLOAT *restrict y, CG_FLOAT *restrict result) {
   CG_FLOAT sum = 0.0;
 
   if (y == x) {

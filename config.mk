@@ -1,7 +1,7 @@
 # Supported: GCC, CLANG, ICC
 TOOLCHAIN ?= CLANG
 ENABLE_MPI ?= true
-# ENABLE_OPENMP ?= false
+ENABLE_OPENMP ?= false
 
 #Feature options
 OPTIONS +=  -DARRAY_ALIGNMENT=64
