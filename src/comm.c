@@ -55,8 +55,8 @@ static void probeNeighbors(int *sendList, int numSendNeighbors, int *recvList,
 
 static void buildIndexMapping(Comm *c, Matrix *A, int *externals,
                               int *externalIndex, int *externalsReordered,
-                              int *externalRank, int externalCount) {
-
+                              int *externalRank) {
+  int externalCount = c->numExternal;
   /*Go through the external elements. For each newly encountered external
   point assign it the next index in the local sequence. Then look for other
   external elements who are updated by the same rank and assign them the next
@@ -102,7 +102,6 @@ static void buildIndexMapping(Comm *c, Matrix *A, int *externals,
   }
 
   free(externalLocalIndex);
-  c->numExternal = externalCount;
 }
 
 static void buildNeighborlist(Comm *c, int *externalRank, int externalCount) {
@@ -110,12 +109,10 @@ static void buildNeighborlist(Comm *c, int *externalRank, int externalCount) {
   int size = c->size;
 
   /* Count the number of neighbors from which we receive information to update
-   our external elements. Additionally, fill the array tmp_neighbors in the
-   following way:
-        tmp_neighbors[i] = 0   ==>  No external elements are updated by
-                                processor i.
-        tmp_neighbors[i] = x   ==>  (x-1)/size elements are updated from
-                                processor i.*/
+   our external elements. Additionally, fill the array sendNeighborEncoding in
+   the following way: sendNeighborEncoding[i] = 0   ==>  No external elements
+   are updated by processor i. sendNeighborEncoding[i] = x   ==>  (x-1)/size
+   elements are updated from processor i.*/
 
   int sendNeighborEncoding[size];
 
@@ -137,17 +134,16 @@ static void buildNeighborlist(Comm *c, int *externalRank, int externalCount) {
     sendNeighborEncoding[externalRank[i]] += size;
   }
 
-  // sum over all processors all the tmp_neighbors arrays
+  // sum over all processors all the sendNeighborEncoding arrays
   MPI_Allreduce(MPI_IN_PLACE, sendNeighborEncoding, size, MPI_INT, MPI_SUM,
                 MPI_COMM_WORLD);
 
-  /* decode the combined 'tmp_neighbors'  array from all ranks */
+  /* decode the combined 'sendNeighborEncoding'  array from all ranks */
   // Number of ranks that receive values from us
   int sendNeighborCount = sendNeighborEncoding[rank] % size;
 
-  /* decode 'tmp_neighbors[rank] to deduce total number of elements we must
-   * send
-   */
+  /* decode 'sendNeighborEncoding[rank] to deduce total number of elements we
+   * must send FIXME: Add one? */
   c->totalSendCount = (sendNeighborEncoding[rank] - sendNeighborCount) / size;
 
   /* Check to see if we have enough memory allocated.  This could be
@@ -220,7 +216,7 @@ static void buildNeighborlist(Comm *c, int *externalRank, int externalCount) {
     }
   }
 
-  // From here on only have one neighbor list for both send and recv
+  // From here on there is only one neighbor list for both send and recv
   c->numNeighbors = recvNeighborCount;
 
   if (c->numNeighbors > MAX_NUM_MESSAGES) {
@@ -236,11 +232,6 @@ static void buildNeighborlist(Comm *c, int *externalRank, int externalCount) {
   free(recvNeighborList);
 }
 
-// Ensure that all the neighbors we expect to receive from also send to us
-// sendList - All ranks receive values from us
-// numSendNeighbors - Number of entries in sendList
-// recvList - All ranks that send values from us
-// numRecvNeighbors - Number of entries in recvList
 static void buildMessageCounts(Comm *c, int *externalRank) {
   int neighborCount = c->numNeighbors;
   int externalCount = c->numExternal;
@@ -263,8 +254,7 @@ static void buildMessageCounts(Comm *c, int *externalRank) {
   for (int i = 0; i < neighborCount; i++) {
     int count = 0;
 
-    // go through list of external elements until updating
-    // processor changes
+    // go through list of external elements until updating rank changes
     while ((j < externalCount) && (externalRank[j] == neighbors[i])) {
       count++;
       j++;
@@ -346,33 +336,31 @@ void commPartition(Comm *c, Matrix *A) {
   int rank = c->rank;
   int size = c->size;
 
-  CG_UINT start_row = A->startRow;
-  CG_UINT stop_row = A->stopRow;
-  CG_UINT total_nrow = A->totalNr;
-  CG_UINT total_nnz = A->totalNnz;
-  CG_UINT local_nrow = A->nr;
-  CG_UINT local_nnz = A->nnz;
-  CG_UINT *row_ptr = A->rowPtr;
-  CG_UINT *col_ind = A->colInd;
+  CG_UINT startRow = A->startRow;
+  CG_UINT stopRow = A->stopRow;
+  CG_UINT numRowsTotal = A->totalNr;
+  CG_UINT numRows = A->nr;
+  CG_UINT *rowPtr = A->rowPtr;
+  CG_UINT *colInd = A->colInd;
 
   /***********************************************************************
    *    Step 1: Identify externals and create lookup maps
    ************************************************************************/
   // FIXME: Use a lookup table with size total number of rows. For lower
-  // memory consumption a map would be better choice.
-  int *externals = (int *)allocate(ARRAY_ALIGNMENT, total_nrow * sizeof(int));
+  // memory consumption a hashmap would be a better choice.
+  int *externals = (int *)allocate(ARRAY_ALIGNMENT, numRowsTotal * sizeof(int));
   int externalCount = 0; // local number of external indices
 
   // column indices that are not processed yet are marked with -1
-  for (int i = 0; i < total_nrow; i++) {
+  for (int i = 0; i < numRowsTotal; i++) {
     externals[i] = -1;
   }
 
   int *externalIndex =
       (int *)allocate(ARRAY_ALIGNMENT, MAX_EXTERNAL * sizeof(int));
 
-  for (int i = 0; i < local_nrow; i++) {
-    for (int j = row_ptr[i]; j < row_ptr[i + 1]; j++) {
+  for (int i = 0; i < numRows; i++) {
+    for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
       int cur_ind = A->colInd[j];
 
 #ifdef VERBOSE
@@ -381,8 +369,8 @@ void commPartition(Comm *c, Matrix *A) {
 #endif
 
       // convert local column references to local numbering
-      if (start_row <= cur_ind && cur_ind <= stop_row) {
-        col_ind[j] -= start_row;
+      if (startRow <= cur_ind && cur_ind <= stopRow) {
+        colInd[j] -= startRow;
       } else {
         // find out if we have already set up this point
         if (externals[cur_ind] == -1) {
@@ -391,7 +379,7 @@ void commPartition(Comm *c, Matrix *A) {
           if (externalCount <= MAX_EXTERNAL) {
             externalIndex[externalCount] = cur_ind;
             // mark in local column index as external by negating it
-            col_ind[j] = -col_ind[j];
+            colInd[j] = -colInd[j];
           } else {
             printf("Must increase MAX_EXTERNAL\n");
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
@@ -400,7 +388,7 @@ void commPartition(Comm *c, Matrix *A) {
           externalCount++;
         } else {
           // Mark index as external by adding 1 and negating it
-          col_ind[j] = -col_ind[j];
+          colInd[j] = -colInd[j];
         }
       }
     }
@@ -410,16 +398,18 @@ void commPartition(Comm *c, Matrix *A) {
    *    Step 2:  Identify owning rank for externals
    ************************************************************************/
   int externalRank[externalCount];
+  c->numExternal = externalCount;
 
   {
     int globalIndexOffsets[size];
 
-    MPI_Allgather(&start_row, 1, MPI_INT, globalIndexOffsets, 1, MPI_INT,
+    MPI_Allgather(&startRow, 1, MPI_INT, globalIndexOffsets, 1, MPI_INT,
                   MPI_COMM_WORLD);
 
     // Go through list of externals and find the processor that owns each
     for (int i = 0; i < externalCount; i++) {
       int globalIndex = externalIndex[i];
+
       for (int j = size - 1; j >= 0; j--) {
         if (globalIndexOffsets[j] <= globalIndex) {
           externalRank[i] = j;
@@ -432,11 +422,11 @@ void commPartition(Comm *c, Matrix *A) {
   /***********************************************************************
    *    Step 3:  Build and apply index mapping
    ************************************************************************/
-  int *externalReordered =
+  int *externalsReordered =
       (int *)allocate(ARRAY_ALIGNMENT, externalCount * sizeof(int));
 
-  buildIndexMapping(c, A, externals, externalIndex, externalReordered,
-                    externalRank, externalCount);
+  buildIndexMapping(c, A, externals, externalIndex, externalsReordered,
+                    externalRank);
   free(externalIndex);
   free(externals);
 
@@ -465,9 +455,9 @@ void commPartition(Comm *c, Matrix *A) {
   /***********************************************************************
    *    Step 6:  Build global index list for external communication
    ************************************************************************/
-  buildElementsToSend(c, A->startRow, externalRank, externalReordered);
+  buildElementsToSend(c, A->startRow, externalRank, externalsReordered);
 
-  free(externalReordered);
+  free(externalsReordered);
 #endif
 }
 
@@ -576,8 +566,7 @@ void commMatrixDump(Comm *c, Matrix *m) {
 
   for (int i = 0; i < size; i++) {
     if (i == rank) {
-      printf("Rank %d: %d non zeroes, number of rows %d\n", rank, m->nnz,
-             numRows);
+      printf("Rank %d: number of rows %d\n", rank, numRows);
 
       for (int rowID = 0; rowID < numRows; rowID++) {
         printf("Row [%d]: ", rowID);

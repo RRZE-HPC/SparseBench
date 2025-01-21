@@ -1,4 +1,4 @@
-## Overall MPI algorithm
+# Overall MPI algorithm
 
 ## Exchange
 
@@ -12,7 +12,7 @@ column indices in the matrix accordingly.
 ### Required data
 
 - `numNeighbors` The number of communication neighbors (same for send and
-receive)
+  receive)
 - `neighbors` Array with communication neighbor ranks
 - `recvCount` Array with number of external values we receive from each neighbor
 - `sendCount` Array with number of values we need to send to each neighbor
@@ -47,6 +47,7 @@ converted to a local column ordering.
 - Determine if an index targets a local or external value
 - If local, subtract start row id from index to get local index
 - If external, check if it was already taken care for:
+
   - If yes, do nothing
   - otherwise
     - add it to a list of external indices
@@ -54,7 +55,7 @@ converted to a local column ordering.
     - set up communication for SpMVM
 
 - `externalCount`: Number of externals for current rank
-- `externals` SIZE `externalCount` temporary: Lookup if index was already seen before
+- `externals` SIZE `externalCount` temporary: Lookup if index was already seen before. Map from global index to local id in external lookups.
 - `externalIndex` SIZE `externalCount` temporary: List of global ids for all
   external elements
 
@@ -77,10 +78,10 @@ Generate a local ordering for externals, starting at the end of the local
 elements. Give all indices belonging to same rank consecutive ids. Map all
 external column ids in matrix to new local index.
 
-- `externalLocalIndex` SIZE `externalCount` temporary: Local index for
+- `externalLocalIndex` SIZE `externalCount` temporary: Local compacted index for
   every external. Consecutive ids for elements owned by same rank.
 - `externalReordered` SIZE `externalCount` temporary: Map from external
-   new local id to global id
+  new local id to global id
 
 ### Step 4 Build list of neighbor ranks
 
@@ -88,7 +89,7 @@ Subroutine `buildNeighborlist`:
 Generate a list that encodes how many ranks need values from a rank and the
 total number of values that need to be sent.
 Make a list of the neighbors that will send information to update our
-   external elements (in the order that we will receive this information).
+external elements (in the order that we will receive this information).
 Create one neighbor list for both send and receive.
 
 - `neighborCount` persistent: Number of communication neighbors
