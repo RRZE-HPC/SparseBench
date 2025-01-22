@@ -1,6 +1,6 @@
 # Supported: GCC, CLANG, ICC
 TOOLCHAIN ?= CLANG
-ENABLE_MPI ?= true
+ENABLE_MPI ?= false
 ENABLE_OPENMP ?= false
 
 #Feature options

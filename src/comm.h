@@ -15,6 +15,14 @@
 #define MAX_NUM_MESSAGES   500
 #define MAX_NUM_NEIGHBOURS MAX_NUM_MESSAGES
 
+#define BANNER \
+"                                                                                  \n"\
+"  _|_|_|    _|_|_|              _|_|_|                                  _|        \n"\
+"_|        _|                    _|    _|    _|_|    _|_|_|      _|_|_|  _|_|_|    \n"\
+"_|        _|  _|_|  _|_|_|_|_|  _|_|_|    _|_|_|_|  _|    _|  _|        _|    _|  \n"\
+"_|        _|    _|              _|    _|  _|        _|    _|  _|        _|    _|  \n"\
+"  _|_|_|    _|_|_|              _|_|_|      _|_|_|  _|    _|    _|_|_|  _|    _|  \n"
+
 enum op { MAX = 0, SUM };
 
 typedef struct {
@@ -39,6 +47,13 @@ extern void commPrintConfig(Comm* c);
 extern void commMatrixDump(Comm* c, Matrix* m);
 extern void commExchange(Comm* c, Matrix* A, double* x);
 extern void commReduction(double* v, int op);
+extern void commPrintBanner(Comm* c);
 
 static inline int commIsMaster(Comm* c) { return c->rank == 0; }
+static inline void commBarrier(void)
+{
+#if defined(_MPI)
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
+}
 #endif // __COMM_H_

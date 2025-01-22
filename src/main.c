@@ -15,23 +15,6 @@
 #include "timing.h"
 #include "util.h"
 
-CG_FLOAT compute_residual(Solver* s)
-{
-  CG_FLOAT residual = 0.0;
-  int n             = s->A.nr;
-  CG_FLOAT* v1      = s->x;
-  CG_FLOAT* v2      = s->xexact;
-
-  for (int i = 0; i < n; i++) {
-    double diff = fabs(v1[i] - v2[i]);
-    if (diff > residual) residual = diff;
-  }
-
-  commReduction(&residual, MAX);
-
-  return residual;
-}
-
 int main(int argc, char** argv)
 {
   double timeStart, timeStop;
@@ -51,11 +34,13 @@ int main(int argc, char** argv)
   }
 
   readParameter(&param, argv[1]);
+  commPrintBanner(&comm);
 
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param);
   // commMatrixDump(&comm, &s.A);
+  // exit(EXIT_SUCCESS);
   commPartition(&comm, &s.A);
   commPrintConfig(&comm);
 
@@ -65,36 +50,53 @@ int main(int argc, char** argv)
   CG_FLOAT* p  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, ncol * sizeof(CG_FLOAT));
   CG_FLOAT* Ap = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
   CG_FLOAT normr  = 0.0;
-  CG_FLOAT rtrans = 0.0, oldrtrans;
+  CG_FLOAT rtrans = 0.0, oldrtrans = 0.0;
+
+  int print_freq = itermax / 10;
+  if (print_freq > 50) {
+    print_freq = 50;
+  }
+  if (print_freq < 1) {
+    print_freq = 1;
+  }
+
+  printf("nrow = %d, ncol = %d\n", ncol, nrow);
 
   waxpby(nrow, 1.0, s.x, 0.0, s.x, p);
+  commExchange(&comm, &s.A, p);
   spMVM(&s.A, p, Ap);
   waxpby(nrow, 1.0, s.b, -1.0, Ap, r);
   ddot(nrow, r, r, &rtrans);
 
   normr = sqrt(rtrans);
-
-  // initial iteration
-  waxpby(nrow, 1.0, r, 0.0, r, p);
-
-  commExchange(&comm, &s.A, p);
-  spMVM(&s.A, p, Ap);
-  double alpha = 0.0;
-  ddot(nrow, p, Ap, &alpha);
-  alpha = rtrans / alpha;
-  waxpby(nrow, 1.0, s.x, alpha, p, s.x);
-  waxpby(nrow, 1.0, r, -alpha, Ap, r);
+  if (commIsMaster(&comm)) {
+    printf("Initial Residual = %E\n", normr);
+  }
 
   int k;
   timeStart = getTimeStamp();
   for (k = 1; k < itermax && normr > eps; k++) {
-    oldrtrans = rtrans;
-    ddot(nrow, r, r, &rtrans);
-    double beta = rtrans / oldrtrans;
-    waxpby(nrow, 1.0, r, beta, p, p);
+    if (k == 1) {
+      waxpby(nrow, 1.0, r, 0.0, r, p);
+    } else {
+      oldrtrans = rtrans;
+      ddot(nrow, r, r, &rtrans);
+      double beta = rtrans / oldrtrans;
+      waxpby(nrow, 1.0, r, beta, p, p);
+    }
+    normr = sqrt(rtrans);
+
+    if (commIsMaster(&comm) && (k % print_freq == 0 || k + 1 == itermax)) {
+      printf("Iteration = %d Residual = %E\n", k, normr);
+    }
+
     commExchange(&comm, &s.A, p);
     spMVM(&s.A, p, Ap);
-    alpha = 0.0;
+    // printf("ITERATION = %d ################### Ap\n", k);
+    // for (int i = 0; i < nrow; i++) {
+    //   printf("%f\n", Ap[i]);
+    // }
+    double alpha = 0.0;
     ddot(nrow, p, Ap, &alpha);
     alpha = rtrans / alpha;
     waxpby(nrow, 1.0, s.x, alpha, p, s.x);
@@ -102,15 +104,13 @@ int main(int argc, char** argv)
   }
   timeStop = getTimeStamp();
 
-  double residual = compute_residual(&s);
-
   if (commIsMaster(&comm)) {
     printf("Solution performed %d iterations and took %.2fs\n",
         k,
         timeStop - timeStart);
-    printf("Difference between computed and exact  = %f\n", residual);
   }
 
+  solverCheckResidual(&s, &comm);
   commFinalize(&comm);
   return EXIT_SUCCESS;
 }

@@ -7,5 +7,5 @@ nx 10
 ny 10
 nz 10
 
-itermax 10000
-eps 0.0001
+itermax 150
+eps 0.0
