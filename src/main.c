@@ -42,7 +42,7 @@ int main(int argc, char** argv)
   // commMatrixDump(&comm, &s.A);
   // exit(EXIT_SUCCESS);
   commPartition(&comm, &s.A);
-  commPrintConfig(&comm);
+  // commPrintConfig(&comm);
 
   CG_UINT nrow = s.A.nr;
   CG_UINT ncol = s.A.nc;
@@ -59,8 +59,6 @@ int main(int argc, char** argv)
   if (print_freq < 1) {
     print_freq = 1;
   }
-
-  printf("nrow = %d, ncol = %d\n", ncol, nrow);
 
   waxpby(nrow, 1.0, s.x, 0.0, s.x, p);
   commExchange(&comm, &s.A, p);
