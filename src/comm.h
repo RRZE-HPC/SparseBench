@@ -21,14 +21,14 @@ typedef struct {
   int rank;
   int size;
 #if defined(_MPI)
-  int numNeighbors;
-  int numExternal;
+  int neighborCount;
+  int externalCount;
   int totalSendCount;
   int* elementsToSend;
   int neighbors[MAX_NUM_NEIGHBOURS];
   int recvCount[MAX_NUM_NEIGHBOURS];
   int sendCount[MAX_NUM_NEIGHBOURS];
-  CG_FLOAT* send_buffer;
+  CG_FLOAT* sendBuffer;
 #endif
 } Comm;
 

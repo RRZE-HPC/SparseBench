@@ -5,7 +5,9 @@
 #ifndef __MATRIX_H_
 #define __MATRIX_H_
 #include <stdbool.h>
+#include <stddef.h>
 
+#include "parameter.h"
 #include "util.h"
 
 typedef struct {
@@ -15,13 +17,22 @@ typedef struct {
 } Entry;
 
 typedef struct {
+  size_t count;
+  int nr, nnz;
+  Entry* entries;
+} MmMatrix;
+
+typedef struct {
   CG_UINT nr, nc, nnz;       // number of rows, columns and non zeros
-  CG_UINT totalNr, totalNnz; // number of rows and non zeros
-  CG_UINT startRow, stopRow;
-  CG_UINT *colInd, *rowPtr; // colum Indices, row Pointer
-  CG_FLOAT* val;
+  CG_UINT *colInd, *rowPtr;  // colum Indices, row Pointer
+  CG_UINT totalNr, totalNnz; // number of total rows and non zeros
+  CG_UINT startRow, stopRow; // range of rows owned by current rank
+  CG_FLOAT* val;             // matrix entries
 } Matrix;
 
-extern void matrixRead(Matrix* m, char* filename);
+extern void matrixRead(MmMatrix* m, char* filename);
+extern void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size);
+extern void matrixGenerate(
+    Matrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil);
 
 #endif // __MATRIX_H_
