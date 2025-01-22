@@ -240,9 +240,14 @@ void matrixRead(MmMatrix* m, char* filename)
 
 void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 {
+  if (size < 1) {
+    m->nr = sizeOfRank(rank, size, mm->nr);
+  } else {
+    m->nr = mm->nr;
+  }
 
-  m->nr     = mm->nr;
-  m->nnz    = mm->nnz;
+  m->nnz = mm->nnz;
+
   m->rowPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
       (m->nr + 1) * sizeof(CG_UINT));
   m->colInd = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(CG_UINT));

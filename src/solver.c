@@ -32,7 +32,7 @@ void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y)
   CG_UINT* colInd = m->colInd;
   CG_FLOAT* val   = m->val;
 
-#pragma omp parallel for
+#pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int rowID = 0; rowID < numRows; rowID++) {
     CG_FLOAT tmp = y[rowID];
 
@@ -53,14 +53,17 @@ void waxpby(const CG_UINT n,
     CG_FLOAT* const w)
 {
   if (alpha == 1.0) {
+#pragma omp parallel for schedule(static)
     for (int i = 0; i < n; i++) {
       w[i] = x[i] + beta * y[i];
     }
   } else if (beta == 1.0) {
+#pragma omp parallel for schedule(static)
     for (int i = 0; i < n; i++) {
       w[i] = alpha * x[i] + y[i];
     }
   } else {
+#pragma omp parallel for schedule(static)
     for (int i = 0; i < n; i++) {
       w[i] = alpha * x[i] + beta * y[i];
     }
@@ -75,10 +78,12 @@ void ddot(const CG_UINT n,
   CG_FLOAT sum = 0.0;
 
   if (y == x) {
+#pragma omp parallel for reduction(+ : sum) schedule(static)
     for (int i = 0; i < n; i++) {
       sum += x[i] * x[i];
     }
   } else {
+#pragma omp parallel for reduction(+ : sum) schedule(static)
     for (int i = 0; i < n; i++) {
       sum += x[i] * y[i];
     }
