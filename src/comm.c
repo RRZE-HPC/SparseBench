@@ -548,6 +548,7 @@ void commExchange(Comm* c, Matrix* A, CG_FLOAT* x)
   }
 
   // Copy values for all ranks into send buffer
+  // FIXME: Add openmp parallel for
   for (int i = 0; i < c->totalSendCount; i++) {
     sendBuffer[i] = x[elementsToSend[i]];
   }
