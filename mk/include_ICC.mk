@@ -12,7 +12,7 @@ OPENMP   = -qopenmp
 endif
 
 VERSION  = --version
-CFLAGS   =  -fast -xHost -std=c99 $(OPENMP)
+CFLAGS   =  -O3 -ffast-math -xHost -std=c99 $(OPENMP)
 LFLAGS   = $(OPENMP)
 DEFINES  = -D_GNU_SOURCE
 INCLUDES =

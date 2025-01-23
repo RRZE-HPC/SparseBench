@@ -3,14 +3,27 @@
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <limits.h>
+#include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifdef __linux__
+#include <sys/syscall.h>
+#include <sys/types.h>
 #include <unistd.h>
+#define gettid() (int)syscall(SYS_gettid)
+#endif
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #ifdef _MPI
 #include <mpi.h>
 #endif
 
+#include "affinity.h"
 #include "allocate.h"
 #include "comm.h"
 
@@ -375,11 +388,54 @@ void commPrintBanner(Comm* c)
             host,
             master_pid);
       }
-      commBarrier();
+#ifdef _OPENMP
+#pragma omp parallel
+      {
+#pragma omp single
+        printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
+#pragma omp barrier
+
+#pragma omp critical
+        {
+          printf("Rank %d Thread %d running on Node %s core %d with pid %d "
+                 "and tid "
+                 "%d\n",
+              rank,
+              omp_get_thread_num(),
+              host,
+              sched_getcpu(),
+              master_pid,
+              gettid());
+          affinity_getmask();
+        }
+      }
+#endif
     }
+    commBarrier();
   } else {
     printf(BANNER "\n");
     printf("Running with only one process!\n");
+#ifdef _OPENMP
+#pragma omp parallel
+    {
+#pragma omp single
+      printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
+
+#pragma omp critical
+      {
+        printf("Rank %d Thread %d running on Node %s core %d with pid %d "
+               "and tid "
+               "%d\n",
+            rank,
+            omp_get_thread_num(),
+            host,
+            sched_getcpu(),
+            master_pid,
+            gettid());
+        affinity_getmask();
+      }
+    }
+#endif
   }
 }
 

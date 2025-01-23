@@ -232,9 +232,15 @@ void matrixRead(MmMatrix* m, char* filename)
 
   // sort by column
   qsort(m->entries, m->count, sizeof(Entry), compareColumn);
-  // dumpMMMatrix(entries, nz);
-  // sort by row
+// dumpMMMatrix(entries, nz);
+// sort by row requires a stable sort. As glibc qsort is mergesort this
+// hopefully works.
+#ifdef __linux__
+  qsort(m->entries, m->count, sizeof(Entry), compareColumn);
+#else
+  // BSD has a dedicated mergesort available in its libc
   mergesort(m->entries, m->count, sizeof(Entry), compareRow);
+#endif
   // dumpMMMatrix(entries, nz);
 }
 
