@@ -52,12 +52,12 @@ int main(int argc, char** argv)
   CG_FLOAT normr  = 0.0;
   CG_FLOAT rtrans = 0.0, oldrtrans = 0.0;
 
-  int print_freq = itermax / 10;
-  if (print_freq > 50) {
-    print_freq = 50;
+  int printFreq = itermax / 10;
+  if (printFreq > 50) {
+    printFreq = 50;
   }
-  if (print_freq < 1) {
-    print_freq = 1;
+  if (printFreq < 1) {
+    printFreq = 1;
   }
 
   waxpby(nrow, 1.0, s.x, 0.0, s.x, p);
@@ -84,16 +84,12 @@ int main(int argc, char** argv)
     }
     normr = sqrt(rtrans);
 
-    if (commIsMaster(&comm) && (k % print_freq == 0 || k + 1 == itermax)) {
+    if (commIsMaster(&comm) && (k % printFreq == 0 || k + 1 == itermax)) {
       printf("Iteration = %d Residual = %E\n", k, normr);
     }
 
     commExchange(&comm, &s.A, p);
     spMVM(&s.A, p, Ap);
-    // printf("ITERATION = %d ################### Ap\n", k);
-    // for (int i = 0; i < nrow; i++) {
-    //   printf("%f\n", Ap[i]);
-    // }
     double alpha = 0.0;
     ddot(nrow, p, Ap, &alpha);
     alpha = rtrans / alpha;
