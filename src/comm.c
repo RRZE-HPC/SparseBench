@@ -2,10 +2,10 @@
  * All rights reserved. This file is part of CG-Bench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
-#include "util.h"
-#include <stddef.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #ifdef _MPI
 #include <mpi.h>
@@ -15,8 +15,6 @@
 #include "comm.h"
 
 #ifdef _MPI
-// subroutines local to this module
-
 static void probeNeighbors(
     int* sendList, int numSendNeighbors, int* recvList, int numRecvNeighbors)
 {
@@ -45,13 +43,9 @@ static void probeNeighbors(
   }
 
   // Receive message from each send neighbor to construct 'sendList'.
-  MPI_Status status;
   for (int i = 0; i < numSendNeighbors; i++) {
-    if (MPI_Wait(request + i, &status)) {
-      printf("MPI_Wait error\n");
-      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-      exit(EXIT_FAILURE);
-    }
+    MPI_Status status;
+    MPI_Wait(request + i, &status);
     sendList[i] = status.MPI_SOURCE;
   }
 }
@@ -155,7 +149,7 @@ static void buildNeighborlist(Comm* c, int* externalRank, int externalCount)
   int sendNeighborCount = sendNeighborEncoding[rank] % size;
 
   /* decode 'sendNeighborEncoding[rank] to deduce total number of elements we
-   * must send FIXME: Add one? */
+   * must send */
   c->totalSendCount = (sendNeighborEncoding[rank] - sendNeighborCount) / size;
 
   /* Check to see if we have enough memory allocated.  This could be
@@ -295,13 +289,10 @@ static void buildMessageCounts(Comm* c, int* externalRank)
     MPI_Send(&count, 1, MPI_INT, neighbors[i], MPI_MY_TAG, MPI_COMM_WORLD);
   }
 
-  MPI_Status status;
+  MPI_Waitall(neighborCount, request, MPI_STATUSES_IGNORE);
+
   // Complete the receives of the number of externals
   for (int i = 0; i < neighborCount; i++) {
-    if (MPI_Wait(request + i, &status)) {
-      printf("MPI_Wait error\n");
-      exit(EXIT_FAILURE);
-    }
     sendCount[i] = lengths[i];
   }
 }
@@ -353,14 +344,7 @@ static void buildElementsToSend(
         MPI_COMM_WORLD);
   }
 
-  MPI_Status status;
-  // receive from each neighbor the global index list of external elements
-  for (int i = 0; i < neighborCount; i++) {
-    if (MPI_Wait(request + i, &status)) {
-      printf("MPI_Wait error\n");
-      exit(EXIT_FAILURE);
-    }
-  }
+  MPI_Waitall(neighborCount, request, MPI_STATUSES_IGNORE);
 
   /// replace global indices by local indices
   for (int i = 0; i < c->totalSendCount; i++) {
@@ -368,6 +352,36 @@ static void buildElementsToSend(
   }
 }
 #endif
+
+void commPrintBanner(Comm* c)
+{
+  int rank = c->rank;
+  int size = c->size;
+
+  char host[_POSIX_HOST_NAME_MAX];
+  pid_t master_pid = getpid();
+  gethostname(host, _POSIX_HOST_NAME_MAX);
+
+  if (c->size > 1) {
+    if (commIsMaster(c)) {
+      printf(BANNER "\n");
+      printf("MPI parallel using %d ranks\n", c->size);
+    }
+    commBarrier();
+    for (int i = 0; i < size; i++) {
+      if (i == rank) {
+        printf("Process with rank %d running on Node %s with pid %d\n",
+            rank,
+            host,
+            master_pid);
+      }
+      commBarrier();
+    }
+  } else {
+    printf(BANNER "\n");
+    printf("Running with only one process!\n");
+  }
+}
 
 void commPartition(Comm* c, Matrix* A)
 {
@@ -567,15 +581,7 @@ void commExchange(Comm* c, Matrix* A, CG_FLOAT* x)
     sendBuffer += count;
   }
 
-  // Complete the receives issued above
-  MPI_Status status;
-  for (int i = 0; i < neighborCount; i++) {
-    if (MPI_Wait(request + i, &status)) {
-      printf("MPI_Wait error\n");
-      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-      exit(EXIT_FAILURE);
-    }
-  }
+  MPI_Waitall(neighborCount, request, MPI_STATUSES_IGNORE);
 #endif
 }
 

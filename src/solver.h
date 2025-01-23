@@ -16,17 +16,18 @@ typedef struct {
   CG_FLOAT* xexact;
 } Solver;
 
-void initSolver(Solver* s, Comm* c, Parameter*);
-void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y);
+extern void initSolver(Solver* s, Comm* c, Parameter*);
+extern void solverCheckResidual(Solver* s, Comm* c);
+extern void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y);
 
-void waxpby(const CG_UINT n,
+extern void waxpby(const CG_UINT n,
     const CG_FLOAT alpha,
     const CG_FLOAT* restrict x,
     const CG_FLOAT beta,
     const CG_FLOAT* restrict y,
     double* restrict w);
 
-void ddot(const CG_UINT n,
+extern void ddot(const CG_UINT n,
     const CG_FLOAT* restrict e,
     const CG_FLOAT* restrict y,
     CG_FLOAT* restrict result);
