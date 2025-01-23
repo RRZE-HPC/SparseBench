@@ -1,8 +1,13 @@
-CC   = gcc
-GCC  = gcc
-LINKER = $(CC)
+ifeq ($(strip $(ENABLE_MPI)),true)
+CC = mpicc
+DEFINES = -D_MPI
+else
+CC = clang
+endif
 
-ifeq ($(ENABLE_OPENMP),true)
+LD = $(CC)
+
+ifeq ($(strip $(ENABLE_OPENMP)),true)
 OPENMP   = -fopenmp
 endif
 
