@@ -3,11 +3,9 @@
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #ifdef __linux__
-#ifdef _OPENMP
 #include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -27,6 +25,7 @@ static int getProcessorID(cpu_set_t* cpu_set)
   return processorId;
 }
 
+#ifdef _OPENMP
 int affinity_getProcessorId()
 {
   cpu_set_t cpu_set;
@@ -57,7 +56,7 @@ void affinity_pinProcess(int processorId)
 }
 #endif /*_OPENMP*/
 
-static void get_sched(void)
+void affinity_getmask(void)
 {
   int i = 0;
   cpu_set_t my_set;

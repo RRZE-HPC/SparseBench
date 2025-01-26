@@ -8,5 +8,6 @@
 extern int affinity_getProcessorId();
 extern void affinity_pinProcess(int);
 extern void affinity_pinThread(int);
+extern void affinity_getmask(void);
 
 #endif /*AFFINITY_H*/

@@ -1,13 +1,18 @@
-CC   = icc
-GCC  = gcc
-LINKER = $(CC)
+ifeq ($(strip $(ENABLE_MPI)),true)
+CC = mpiicx
+DEFINES = -D_MPI
+else
+CC = icx
+endif
 
-ifeq ($(ENABLE_OPENMP),true)
+LD = $(CC)
+
+ifeq ($(strip $(ENABLE_OPENMP)),true)
 OPENMP   = -qopenmp
 endif
 
 VERSION  = --version
-CFLAGS   =  -fast -xHost -qopt-streaming-stores=always -std=c99 -ffreestanding $(OPENMP)
+CFLAGS   =  -O3 -ffast-math -xHost -std=c99 $(OPENMP)
 LFLAGS   = $(OPENMP)
 DEFINES  = -D_GNU_SOURCE
 INCLUDES =
