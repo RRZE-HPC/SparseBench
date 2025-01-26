@@ -2,16 +2,17 @@
  * All rights reserved. This file is part of CG-Bench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
+#include "matrix.h"
 #include <limits.h>
 #include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #ifdef __linux__
 #include <sys/syscall.h>
 #include <sys/types.h>
-#include <unistd.h>
 #define gettid() (int)syscall(SYS_gettid)
 #endif
 
@@ -438,6 +439,8 @@ void commPrintBanner(Comm* c)
 #endif
   }
 }
+
+void commDistributeMatrix(Comm* c, MmMatrix* m) {}
 
 void commPartition(Comm* c, Matrix* A)
 {
