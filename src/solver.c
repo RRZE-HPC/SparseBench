@@ -59,7 +59,6 @@ void solverCheckResidual(Solver* s, Comm* c)
 void initSolver(Solver* s, Comm* c, Parameter* p)
 {
   s->xexact = NULL;
-  printf("Filename ##%s## \n", p->filename);
 
   if (strcmp(p->filename, "generate") == 0) {
     matrixGenerate(&s->A, p, c->rank, c->size, false);
@@ -77,7 +76,6 @@ void initSolver(Solver* s, Comm* c, Parameter* p)
     commDistributeMatrix(c, &m, &mLocal);
     matrixConvertMMtoCRS(&m, &s->A, c->rank, c->size);
   }
-  exit(EXIT_SUCCESS);
 
   s->x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, s->A.nr * sizeof(CG_FLOAT));
   s->b = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, s->A.nr * sizeof(CG_FLOAT));
