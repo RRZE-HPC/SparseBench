@@ -14,6 +14,6 @@ endif
 VERSION  = --version
 CFLAGS   =  -O3 -ffast-math -xHost -std=c99 $(OPENMP)
 LFLAGS   = $(OPENMP)
-DEFINES  = -D_GNU_SOURCE
+DEFINES  += -D_GNU_SOURCE
 INCLUDES =
 LIBS     =
