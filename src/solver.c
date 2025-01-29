@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "allocate.h"
+#include "comm.h"
 #include "matrix.h"
 #include "solver.h"
 #include "util.h"
@@ -58,7 +59,7 @@ void solverCheckResidual(Solver* s, Comm* c)
 void initSolver(Solver* s, Comm* c, Parameter* p)
 {
   s->xexact = NULL;
-  printf("Filename %s \n", p->filename);
+  printf("Filename ##%s## \n", p->filename);
 
   if (strcmp(p->filename, "generate") == 0) {
     matrixGenerate(&s->A, p, c->rank, c->size, false);
@@ -69,8 +70,11 @@ void initSolver(Solver* s, Comm* c, Parameter* p)
     s->xexact = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT,
         s->A.nr * sizeof(CG_FLOAT));
   } else {
-    MmMatrix m;
-    matrixRead(&m, p->filename);
+    MmMatrix m, mLocal;
+    if (commIsMaster(c)) {
+      matrixRead(&m, p->filename);
+    }
+    commDistributeMatrix(c, &m, &mLocal);
     matrixConvertMMtoCRS(&m, &s->A, c->rank, c->size);
   }
   exit(EXIT_SUCCESS);

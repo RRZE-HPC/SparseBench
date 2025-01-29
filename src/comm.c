@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sched.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -445,28 +446,90 @@ void commPrintBanner(Comm* c)
   }
 }
 
-void commDistributeMatrix(Comm* c, MmMatrix* m)
+static void scanMM(
+    MmMatrix* m, int startRow, int stopRow, int* entryCount, int* entryOffset)
 {
-  int nr  = m->nr;
-  int nnz = m->nnz;
+  Entry* e = m->entries;
+  int in   = 0;
+
+  for (size_t i; i < m->count; i++) {
+    if (e->row == startRow && in == 0) {
+      *entryOffset = i;
+      in           = 1;
+    }
+    if (e->row == (stopRow + 1)) {
+      *entryCount = i - *entryOffset;
+      break;
+    }
+  }
+}
+
+void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
+{
+  int rank = c->rank;
+  int size = c->size;
+  int totalCounts[2];
+
+  if (rank == 0) {
+    totalCounts[0] = m->nr;
+    totalCounts[1] = m->nnz;
+  }
+
+  MPI_Bcast(&totalCounts, 2, MPI_INT, 0, MPI_COMM_WORLD);
+  int totalNr = totalCounts[0], totalNnz = totalCounts[1];
+  MPI_Aint displ[2];
+  {
+    Entry* dummy = m->entries;
+    MPI_Aint base_address;
+    MPI_Get_address(dummy, &base_address);
+    MPI_Get_address(&(dummy->col), &displ[0]);
+    MPI_Get_address(&(dummy->val), &displ[1]);
+    displ[0] = MPI_Aint_diff(displ[0], base_address);
+    displ[1] = MPI_Aint_diff(displ[1], base_address);
+  }
 
   MPI_Datatype entryType;
   int blocklengths[2]   = { 2, 1 };
-  MPI_Aint displ[2]     = {};
   MPI_Datatype types[2] = { MPI_INT, MPI_DOUBLE };
+  MPI_Type_create_struct(2, blocklengths, displ, types, &entryType);
+  MPI_Type_commit(&entryType);
 
-  for (int i = 0; i < c->size; i++) {
-    // Step 1 - Distribute matrix rows on ranks
-    int numRows = sizeOfRank(i, c->size, m->nr);
+  int sendcounts[size];
+  int senddispls[size];
+  int cursor = 0;
 
-    // Step 2 - Send MM sub matrices
-    MPI_Type_create_struct(2,
-        blocklengths,
-        displ,
-        const MPI_Datatype* array_of_types,
-        &entryType)
+  for (int i = 0; i < size; i++) {
+    int numRows  = sizeOfRank(i, size, totalNr);
+    int startRow = cursor;
+    cursor += numRows;
+    int stopRow = cursor - 1;
+    scanMM(m, startRow, stopRow, &sendcounts[i], &senddispls[i]);
   }
-  // Step 3 - Initialize global matrix attributes
+
+  int count;
+  MPI_Scatter(sendcounts, 1, MPI_INT, &count, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  mLocal->count    = count;
+  mLocal->totalNr  = totalNr;
+  mLocal->totalNnz = totalNnz;
+  mLocal->entries  = (Entry*)allocate(ARRAY_ALIGNMENT, count * sizeof(Entry));
+
+  MPI_Scatterv(m->entries,
+      sendcounts,
+      senddispls,
+      entryType,
+      mLocal->entries,
+      sendcounts[rank],
+      entryType,
+      0,
+      MPI_COMM_WORLD);
+
+  mLocal->startRow = mLocal->entries[0].row;
+  mLocal->stopRow  = mLocal->entries[count - 1].row;
+  mLocal->nr       = mLocal->stopRow - mLocal->startRow + 1;
+  mLocal->nnz      = count;
+
+  MPI_Type_free(&entryType);
 }
 
 void commPartition(Comm* c, Matrix* A)

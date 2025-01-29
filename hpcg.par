@@ -2,7 +2,8 @@
 #                              HPCG 27pt stencil
 #==============================================================================
 
-filename generate
+filename generate #Space is required after string!
+
 nx 100
 ny 100
 nz 100
