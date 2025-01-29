@@ -10,11 +10,6 @@
 #include "matrix.h"
 #include "mmio.h"
 
-static int sizeOfRank(int rank, int size, int N)
-{
-  return N / size + ((N % size > rank) ? 1 : 0);
-}
-
 static inline int compareColumn(const void* a, const void* b)
 {
   const Entry* a_ = (const Entry*)a;
@@ -138,11 +133,12 @@ void matrixGenerate(
 void matrixRead(MmMatrix* m, char* filename)
 {
   MM_typecode matcode;
-  FILE* f;
+  FILE* f = NULL;
   int M, N, nz;
 
   if ((f = fopen(filename, "r")) == NULL) {
     printf("Unable to open file");
+    exit(EXIT_FAILURE);
   }
 
   if (mm_read_banner(f, &matcode) != 0) {
@@ -232,7 +228,7 @@ void matrixRead(MmMatrix* m, char* filename)
 
   // sort by column
   qsort(m->entries, m->count, sizeof(Entry), compareColumn);
-// dumpMMMatrix(entries, nz);
+// dumpMMMatrix(m);
 // sort by row requires a stable sort. As glibc qsort is mergesort this
 // hopefully works.
 #ifdef __linux__
@@ -241,17 +237,12 @@ void matrixRead(MmMatrix* m, char* filename)
   // BSD has a dedicated mergesort available in its libc
   mergesort(m->entries, m->count, sizeof(Entry), compareRow);
 #endif
-  // dumpMMMatrix(entries, nz);
+  // dumpMMMatrix(m);
 }
 
 void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 {
-  if (size < 1) {
-    m->nr = sizeOfRank(rank, size, mm->nr);
-  } else {
-    m->nr = mm->nr;
-  }
-
+  m->nr  = mm->nr;
   m->nnz = mm->nnz;
 
   m->rowPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT,

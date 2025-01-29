@@ -49,6 +49,7 @@ void readParameter(Parameter* param, const char* filename)
 #define PARSE_REAL(p)   PARSE_PARAM(p, atof)
 
     if (tok != NULL && val != NULL) {
+      PARSE_STRING(filename);
       PARSE_INT(nx);
       PARSE_INT(ny);
       PARSE_INT(nz);

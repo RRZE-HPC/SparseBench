@@ -19,14 +19,16 @@ typedef struct {
 typedef struct {
   size_t count;
   int nr, nnz;
+  int totalNr, totalNnz; // number of total rows and non zeros
+  int startRow, stopRow; // range of rows owned by current rank
   Entry* entries;
 } MmMatrix;
 
 typedef struct {
   CG_UINT nr, nc, nnz;       // number of rows, columns and non zeros
-  CG_UINT *colInd, *rowPtr;  // colum Indices, row Pointer
   CG_UINT totalNr, totalNnz; // number of total rows and non zeros
   CG_UINT startRow, stopRow; // range of rows owned by current rank
+  CG_UINT *colInd, *rowPtr;  // colum Indices, row Pointer
   CG_FLOAT* val;             // matrix entries
 } Matrix;
 

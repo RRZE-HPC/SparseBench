@@ -29,6 +29,11 @@
 #include "comm.h"
 
 #ifdef _MPI
+static int sizeOfRank(int rank, int size, int N)
+{
+  return N / size + ((N % size > rank) ? 1 : 0);
+}
+
 static void probeNeighbors(
     int* sendList, int numSendNeighbors, int* recvList, int numRecvNeighbors)
 {
@@ -440,7 +445,29 @@ void commPrintBanner(Comm* c)
   }
 }
 
-void commDistributeMatrix(Comm* c, MmMatrix* m) {}
+void commDistributeMatrix(Comm* c, MmMatrix* m)
+{
+  int nr  = m->nr;
+  int nnz = m->nnz;
+
+  MPI_Datatype entryType;
+  int blocklengths[2]   = { 2, 1 };
+  MPI_Aint displ[2]     = {};
+  MPI_Datatype types[2] = { MPI_INT, MPI_DOUBLE };
+
+  for (int i = 0; i < c->size; i++) {
+    // Step 1 - Distribute matrix rows on ranks
+    int numRows = sizeOfRank(i, c->size, m->nr);
+
+    // Step 2 - Send MM sub matrices
+    MPI_Type_create_struct(2,
+        blocklengths,
+        displ,
+        const MPI_Datatype* array_of_types,
+        &entryType)
+  }
+  // Step 3 - Initialize global matrix attributes
+}
 
 void commPartition(Comm* c, Matrix* A)
 {
