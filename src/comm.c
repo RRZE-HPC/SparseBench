@@ -452,13 +452,17 @@ static void scanMM(
   Entry* e = m->entries;
   int in   = 0;
 
-  for (size_t i; i < m->count; i++) {
-    if (e->row == startRow && in == 0) {
+  for (size_t i = 0; i < m->count; i++) {
+    if (e[i].row == startRow && in == 0) {
       *entryOffset = i;
       in           = 1;
     }
-    if (e->row == (stopRow + 1)) {
-      *entryCount = i - *entryOffset;
+    if (e[i].row == (stopRow + 1)) {
+      *entryCount = (i - *entryOffset);
+      break;
+    }
+    if (i == m->count - 1) {
+      *entryCount = (i - *entryOffset + 1);
       break;
     }
   }
@@ -482,7 +486,7 @@ void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
     Entry* dummy = m->entries;
     MPI_Aint base_address;
     MPI_Get_address(dummy, &base_address);
-    MPI_Get_address(&(dummy->col), &displ[0]);
+    MPI_Get_address(&(dummy->row), &displ[0]);
     MPI_Get_address(&(dummy->val), &displ[1]);
     displ[0] = MPI_Aint_diff(displ[0], base_address);
     displ[1] = MPI_Aint_diff(displ[1], base_address);
@@ -496,14 +500,22 @@ void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
 
   int sendcounts[size];
   int senddispls[size];
-  int cursor = 0;
 
-  for (int i = 0; i < size; i++) {
-    int numRows  = sizeOfRank(i, size, totalNr);
-    int startRow = cursor;
-    cursor += numRows;
-    int stopRow = cursor - 1;
-    scanMM(m, startRow, stopRow, &sendcounts[i], &senddispls[i]);
+  if (commIsMaster(c)) {
+    int cursor = 0;
+    for (int i = 0; i < size; i++) {
+      int numRows  = sizeOfRank(i, size, totalNr);
+      int startRow = cursor;
+      cursor += numRows;
+      int stopRow = cursor - 1;
+      scanMM(m, startRow, stopRow, &sendcounts[i], &senddispls[i]);
+      // printf("Rank %d count %d displ %d start %d stop %d\n",
+      //     i,
+      //     sendcounts[i],
+      //     senddispls[i],
+      //     startRow,
+      //     stopRow);
+    }
   }
 
   int count;
@@ -519,7 +531,7 @@ void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
       senddispls,
       entryType,
       mLocal->entries,
-      sendcounts[rank],
+      count,
       entryType,
       0,
       MPI_COMM_WORLD);
@@ -528,6 +540,11 @@ void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
   mLocal->stopRow  = mLocal->entries[count - 1].row;
   mLocal->nr       = mLocal->stopRow - mLocal->startRow + 1;
   mLocal->nnz      = count;
+  // printf("Rank %d count: %d start %d stop %d\n",
+  //     rank,
+  //     count,
+  //     mLocal->startRow,
+  //     mLocal->stopRow);
 
   MPI_Type_free(&entryType);
 }
@@ -776,6 +793,27 @@ void commPrintConfig(Comm* c)
     MPI_Barrier(MPI_COMM_WORLD);
   }
 #endif
+}
+
+void commMMMatrixDump(Comm* c, MmMatrix* m)
+{
+  int rank        = c->rank;
+  int size        = c->size;
+  CG_UINT numRows = m->nr;
+
+  for (int i = 0; i < size; i++) {
+    if (i == rank) {
+      printf("RANK %d with %lu entries %d nonzeros and %d rows\n",
+          rank,
+          m->count,
+          m->nnz,
+          numRows);
+      dumpMMMatrix(m);
+    }
+#ifdef _MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+  }
 }
 
 void commMatrixDump(Comm* c, Matrix* m)

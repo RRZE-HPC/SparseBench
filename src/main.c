@@ -39,8 +39,8 @@ int main(int argc, char** argv)
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param);
-  // commMatrixDump(&comm, &s.A);
-  // exit(EXIT_SUCCESS);
+  commMatrixDump(&comm, &s.A);
+  commAbort("After initSolver");
   commPartition(&comm, &s.A);
   // commPrintConfig(&comm);
 

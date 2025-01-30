@@ -26,7 +26,7 @@ static inline int compareRow(const void* a, const void* b)
   return (a_->row > b_->row) - (a_->row < b_->row);
 }
 
-static void dumpMMMatrix(MmMatrix* mm)
+void dumpMMMatrix(MmMatrix* mm)
 {
   Entry* entries = mm->entries;
 

@@ -32,6 +32,7 @@ typedef struct {
   CG_FLOAT* val;             // matrix entries
 } Matrix;
 
+extern void dumpMMMatrix(MmMatrix* m);
 extern void matrixRead(MmMatrix* m, char* filename);
 extern void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size);
 extern void matrixGenerate(
