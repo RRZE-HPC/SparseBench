@@ -242,8 +242,13 @@ void matrixRead(MmMatrix* m, char* filename)
 
 void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 {
-  m->nr  = mm->nr;
-  m->nnz = mm->nnz;
+  m->startRow = mm->startRow;
+  m->stopRow  = mm->stopRow;
+  m->totalNr  = mm->totalNr;
+  m->totalNnz = mm->totalNnz;
+  m->nr       = mm->nr;
+  m->nc       = mm->nr;
+  m->nnz      = mm->nnz;
 
   m->rowPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
       (m->nr + 1) * sizeof(CG_UINT));
@@ -257,9 +262,10 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
   }
 
   Entry* entries = mm->entries;
+  int startRow   = m->startRow;
 
   for (int i = 0; i < mm->count; i++) {
-    valsPerRow[entries[i].row]++;
+    valsPerRow[entries[i].row - startRow]++;
   }
 
   m->rowPtr[0] = 0;

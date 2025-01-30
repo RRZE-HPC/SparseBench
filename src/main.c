@@ -39,10 +39,11 @@ int main(int argc, char** argv)
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param);
-  commMatrixDump(&comm, &s.A);
-  commAbort("After initSolver");
+  // commMatrixDump(&comm, &s.A);
+  // commAbort("After initSolver");
   commPartition(&comm, &s.A);
   // commPrintConfig(&comm);
+  // commAbort("After initSolver");
 
   CG_UINT nrow = s.A.nr;
   CG_UINT ncol = s.A.nc;

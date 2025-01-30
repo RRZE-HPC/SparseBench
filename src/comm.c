@@ -470,6 +470,8 @@ static void scanMM(
 
 void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
 {
+#ifdef _MPI
+
   int rank = c->rank;
   int size = c->size;
   int totalCounts[2];
@@ -547,6 +549,14 @@ void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
   //     mLocal->stopRow);
 
   MPI_Type_free(&entryType);
+#else
+  mLocal->startRow = 0;
+  mLocal->stopRow  = m->nr - 1;
+  mLocal->count    = m->count;
+  mLocal->nr       = m->nr;
+  mLocal->nnz      = m->nnz;
+  mLocal->entries  = m->entries;
+#endif /* ifdef _MPI */
 }
 
 void commPartition(Comm* c, Matrix* A)
