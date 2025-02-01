@@ -25,7 +25,7 @@ clist = $(subst $(eval) ,$c,$(strip $1))
 
 define CLANGD_TEMPLATE
 CompileFlags:
-  Add: [$(call clist,$(INCLUDES)), $(call clist,$(DEFINES)), $(call clist,$(OPTIONS)), -xc]
+  Add: [$(call clist,$(CPPFLAGS)), $(call clist,$(CFLAGS)), -xc]
   Compiler: clang
 endef
 

@@ -402,6 +402,7 @@ void commPrintBanner(Comm* c)
         printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
 #pragma omp barrier
 
+#ifdef VERBOSE_AFFINITY
 #pragma omp critical
         {
           printf("Rank %d Thread %d running on Node %s core %d with pid %d "
@@ -415,6 +416,7 @@ void commPrintBanner(Comm* c)
               gettid());
           affinity_getmask();
         }
+#endif
       }
 #endif
     }
@@ -428,6 +430,7 @@ void commPrintBanner(Comm* c)
 #pragma omp single
       printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
 
+#ifdef VERBOSE_AFFINITY
 #pragma omp critical
       {
         printf("Rank %d Thread %d running on Node %s core %d with pid %d "
@@ -441,6 +444,7 @@ void commPrintBanner(Comm* c)
             gettid());
         affinity_getmask();
       }
+#endif
     }
 #endif
   }
