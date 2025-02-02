@@ -11,13 +11,14 @@
 #include "comm.h"
 #include "matrix.h"
 #include "parameter.h"
+#include "profiler.h"
 #include "solver.h"
 #include "timing.h"
 #include "util.h"
 
 int main(int argc, char** argv)
 {
-  double timeStart, timeStop;
+  double timeStart, timeStop, ts;
   Parameter param;
   Solver s;
   Comm comm;
@@ -39,6 +40,7 @@ int main(int argc, char** argv)
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param);
+  profilerInit(&s);
   // commMatrixDump(&comm, &s.A);
   // commAbort("After initSolver");
   commPartition(&comm, &s.A);
@@ -61,11 +63,11 @@ int main(int argc, char** argv)
     printFreq = 1;
   }
 
-  waxpby(nrow, 1.0, s.x, 0.0, s.x, p);
+  PROFILE(WAXPBY, waxpby(nrow, 1.0, s.x, 0.0, s.x, p));
   commExchange(&comm, &s.A, p);
-  spMVM(&s.A, p, Ap);
-  waxpby(nrow, 1.0, s.b, -1.0, Ap, r);
-  ddot(nrow, r, r, &rtrans);
+  PROFILE(SPMVM, spMVM(&s.A, p, Ap));
+  PROFILE(WAXPBY, waxpby(nrow, 1.0, s.b, -1.0, Ap, r));
+  PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
 
   normr = sqrt(rtrans);
   if (commIsMaster(&comm)) {
@@ -76,12 +78,12 @@ int main(int argc, char** argv)
   timeStart = getTimeStamp();
   for (k = 1; k < itermax && normr > eps; k++) {
     if (k == 1) {
-      waxpby(nrow, 1.0, r, 0.0, r, p);
+      PROFILE(WAXPBY, waxpby(nrow, 1.0, r, 0.0, r, p));
     } else {
       oldrtrans = rtrans;
-      ddot(nrow, r, r, &rtrans);
+      PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
       double beta = rtrans / oldrtrans;
-      waxpby(nrow, 1.0, r, beta, p, p);
+      PROFILE(WAXPBY, waxpby(nrow, 1.0, r, beta, p, p));
     }
     normr = sqrt(rtrans);
 
@@ -90,12 +92,12 @@ int main(int argc, char** argv)
     }
 
     commExchange(&comm, &s.A, p);
-    spMVM(&s.A, p, Ap);
+    PROFILE(SPMVM, spMVM(&s.A, p, Ap));
     double alpha = 0.0;
-    ddot(nrow, p, Ap, &alpha);
+    PROFILE(DDOT, ddot(nrow, p, Ap, &alpha));
     alpha = rtrans / alpha;
-    waxpby(nrow, 1.0, s.x, alpha, p, s.x);
-    waxpby(nrow, 1.0, r, -alpha, Ap, r);
+    PROFILE(WAXPBY, waxpby(nrow, 1.0, s.x, alpha, p, s.x));
+    PROFILE(WAXPBY, waxpby(nrow, 1.0, r, -alpha, Ap, r));
   }
   timeStop = getTimeStamp();
 
@@ -105,7 +107,9 @@ int main(int argc, char** argv)
         timeStop - timeStart);
   }
 
+  profilerPrint(&comm, &s, k);
   solverCheckResidual(&s, &comm);
+  profilerFinalize();
   commFinalize(&comm);
   return EXIT_SUCCESS;
 }

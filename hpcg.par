@@ -4,9 +4,9 @@
 
 filename generate #Space is required after string!
 
-nx 100
-ny 100
-nz 100
+nx 200
+ny 200
+nz 200
 
 itermax 150
 eps 0.0

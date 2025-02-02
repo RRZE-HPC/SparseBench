@@ -54,7 +54,9 @@ void matrixGenerate(
     } else {
       printf("Generate 27pt matrix with ");
     }
-    printf("%d total rows and %d nonzeros\n", (int)total_nrow, (int)local_nnz);
+    printf("%.2e total rows and %.2e nonzeros\n",
+        (double)total_nrow,
+        (double)local_nnz);
   }
 
   m->val = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(CG_FLOAT));

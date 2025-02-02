@@ -5,6 +5,9 @@
 #ifndef __UTIL_H_
 #define __UTIL_H_
 
+#define HLINE                                                                  \
+  "----------------------------------------------------------------------\n"
+
 #ifndef MIN
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 #endif
