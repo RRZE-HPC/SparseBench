@@ -2,6 +2,7 @@
 TOOLCHAIN ?= ICC
 ENABLE_MPI ?= true
 ENABLE_OPENMP ?= true
+PRECISION ?= 2 # 1 for float, 2 for double
 
 #Feature options
 OPTIONS +=  -DARRAY_ALIGNMENT=64
