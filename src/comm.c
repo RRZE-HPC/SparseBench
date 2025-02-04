@@ -3,6 +3,7 @@
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include "matrix.h"
+#include "util.h"
 #include <limits.h>
 #include <pthread.h>
 #include <sched.h>
@@ -765,13 +766,13 @@ void commExchange(Comm* c, Matrix* A, CG_FLOAT* x)
 #endif
 }
 
-void commReduction(double* v, int op)
+void commReduction(CG_FLOAT* v, int op)
 {
 #ifdef _MPI
   if (op == MAX) {
-    MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_FLOAT_TYPE, MPI_MAX, MPI_COMM_WORLD);
   } else if (op == SUM) {
-    MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_FLOAT_TYPE, MPI_SUM, MPI_COMM_WORLD);
   }
 #endif
 }

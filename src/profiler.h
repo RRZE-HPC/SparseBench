@@ -11,7 +11,9 @@
 #ifdef LIKWID_PERFMON
 #define PROFILE(tag, call)                                                     \
   _Pragma("omp parallel") { LIKWID_MARKER_START(#tag); }                       \
+  ts = getTimeStamp();                                                         \
   call;                                                                        \
+  _t[tag] += (getTimeStamp() - ts);                                            \
   _Pragma("omp parallel") { LIKWID_MARKER_STOP(#tag); }
 #else /* LIKWID_PERFMON */
 #define PROFILE(tag, call)                                                     \
@@ -23,7 +25,7 @@
 typedef enum { WAXPBY = 0, SPMVM, DDOT, COMM, NUMREGIONS } regions;
 
 extern double _t[NUMREGIONS];
-extern void profilerInit(Solver* s);
+extern void profilerInit();
 extern void profilerPrint(Comm* c, Solver* s, int iterations);
 extern void profilerFinalize(void);
 #endif // __PROFILER_H

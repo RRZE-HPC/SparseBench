@@ -40,7 +40,7 @@ int main(int argc, char** argv)
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param);
-  profilerInit(&s);
+  profilerInit();
   // commMatrixDump(&comm, &s.A);
   // commAbort("After initSolver");
   commPartition(&comm, &s.A);
@@ -64,7 +64,7 @@ int main(int argc, char** argv)
   }
 
   PROFILE(WAXPBY, waxpby(nrow, 1.0, s.x, 0.0, s.x, p));
-  commExchange(&comm, &s.A, p);
+  PROFILE(COMM, commExchange(&comm, &s.A, p));
   PROFILE(SPMVM, spMVM(&s.A, p, Ap));
   PROFILE(WAXPBY, waxpby(nrow, 1.0, s.b, -1.0, Ap, r));
   PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
@@ -91,7 +91,7 @@ int main(int argc, char** argv)
       printf("Iteration = %d Residual = %E\n", k, normr);
     }
 
-    commExchange(&comm, &s.A, p);
+    PROFILE(COMM, commExchange(&comm, &s.A, p));
     PROFILE(SPMVM, spMVM(&s.A, p, Ap));
     double alpha = 0.0;
     PROFILE(DDOT, ddot(nrow, p, Ap, &alpha));
