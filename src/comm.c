@@ -777,7 +777,7 @@ void commReduction(CG_FLOAT* v, int op)
 #endif
 }
 
-void commPrintConfig(Comm* c)
+void commPrintConfig(Comm* c, int nr, int startRow, int stopRow)
 {
 #ifdef _MPI
   fflush(stdout);
@@ -788,8 +788,12 @@ void commPrintConfig(Comm* c)
 
   for (int i = 0; i < c->size; i++) {
     if (i == c->rank) {
-      printf("Rank %d has %d neighbors with %d externals:\n",
+      printf("Rank %d has %d rows (%d to %d) and %d neighbors with %d "
+             "externals:\n",
           c->rank,
+          nr,
+          startRow,
+          stopRow,
           c->neighborCount,
           c->externalCount);
       for (int j = 0; j < c->neighborCount; j++) {
@@ -798,11 +802,11 @@ void commPrintConfig(Comm* c)
             c->recvCount[j],
             c->sendCount[j]);
       }
-      printf("\tSend %d elements: [", c->totalSendCount);
-      for (int j = 0; j < c->totalSendCount; j++) {
-        printf("%d, ", c->elementsToSend[j]);
-      }
-      printf("]\n");
+      /*printf("\tSend %d elements: [", c->totalSendCount);*/
+      /*for (int j = 0; j < c->totalSendCount; j++) {*/
+      /*  printf("%d ", c->elementsToSend[j]);*/
+      /*}*/
+      /*printf("]\n");*/
       fflush(stdout);
     }
     MPI_Barrier(MPI_COMM_WORLD);

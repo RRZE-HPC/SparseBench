@@ -40,12 +40,13 @@ int main(int argc, char** argv)
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param);
-  profilerInit();
+  // profilerInit();
   // commMatrixDump(&comm, &s.A);
   // commAbort("After initSolver");
-  commPartition(&comm, &s.A);
-  // commPrintConfig(&comm);
-  // commAbort("After initSolver");
+  // commPartition(&comm, &s.A);
+  // commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
+  // commMatrixDump(&comm, &s.A);
+  // commAbort("After commPartition");
 
   CG_UINT nrow = s.A.nr;
   CG_UINT ncol = s.A.nc;
