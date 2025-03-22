@@ -476,7 +476,6 @@ static void scanMM(
 void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
 {
 #ifdef _MPI
-
   int rank = c->rank;
   int size = c->size;
   int totalCounts[2];
