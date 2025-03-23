@@ -36,6 +36,7 @@ enum op { MAX = 0, SUM };
 typedef struct {
   int rank;
   int size;
+  FILE* logFile;
 #if defined(_MPI)
   int neighborCount;
   int externalCount;

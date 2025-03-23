@@ -19,6 +19,7 @@
 #endif
 
 #ifdef _OPENMP
+#include "affinity.h"
 #include <omp.h>
 #endif
 
@@ -26,7 +27,6 @@
 #include <mpi.h>
 #endif
 
-#include "affinity.h"
 #include "allocate.h"
 #include "comm.h"
 
@@ -80,11 +80,13 @@ static void buildIndexMapping(Comm* c,
 {
   int externalCount = c->externalCount;
   /*Go through the external elements. For each newly encountered external
-  point assign it the next index in the local sequence. Then look for other
+  assign it the next index in the local sequence. Then look for other
   external elements who are updated by the same rank and assign them the next
   set of index numbers in the local sequence (ie. elements updated by the same
   rank have consecutive indices).*/
   int* externalLocalIndex = (int*)allocate(ARRAY_ALIGNMENT,
+      externalCount * sizeof(int));
+  int* newExternalRank    = (int*)allocate(ARRAY_ALIGNMENT,
       externalCount * sizeof(int));
 
   int count = A->nr;
@@ -93,16 +95,37 @@ static void buildIndexMapping(Comm* c,
     externalLocalIndex[i] = -1;
   }
 
+  int index = 0;
+
   for (int i = 0; i < externalCount; i++) {
     if (externalLocalIndex[i] == -1) {
-      externalLocalIndex[i] = count++;
+      externalLocalIndex[i]    = count++;
+      newExternalRank[index++] = externalRank[i];
 
       for (int j = i + 1; j < externalCount; j++) {
         if (externalRank[j] == externalRank[i]) {
-          externalLocalIndex[j] = count++;
+          externalLocalIndex[j]    = count++;
+          newExternalRank[index++] = externalRank[j];
         }
       }
     }
+  }
+
+#ifdef VERBOSE
+  fprintf(c->logFile, "REORDER last index %d\n", index);
+#endif
+
+  // Rewrite externalRank for new ordering
+  for (int i = 0; i < externalCount; i++) {
+#ifdef VERBOSE
+    fprintf(c->logFile,
+        "Rank %d External %d old: %d new: %d \n",
+        c->rank,
+        i,
+        externalRank[i],
+        newExternalRank[i]);
+#endif
+    externalRank[i] = newExternalRank[i];
   }
 
   // map all external column ids in the matrix to the new local index
@@ -113,8 +136,8 @@ static void buildIndexMapping(Comm* c,
   for (int i = 0; i < numRows; i++) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
       if (colInd[j] < 0) {
-        int cur_ind = -colInd[j];
-        colInd[j]   = externalLocalIndex[externals[cur_ind]];
+        int curIndex = -colInd[j];
+        colInd[j]    = externalLocalIndex[externals[curIndex]];
       }
     }
   }
@@ -124,6 +147,7 @@ static void buildIndexMapping(Comm* c,
   }
 
   free(externalLocalIndex);
+  free(newExternalRank);
 }
 
 static void buildNeighborlist(Comm* c, int* externalRank, int externalCount)
@@ -156,6 +180,18 @@ static void buildNeighborlist(Comm* c, int* externalRank, int externalCount)
     }
     sendNeighborEncoding[externalRank[i]] += size;
   }
+#ifdef VERBOSE
+  fprintf(c->logFile, "STEP ENCODE \n");
+  fprintf(c->logFile,
+      "Rank %d of %d with %d externals\n",
+      rank,
+      size,
+      externalCount);
+
+  for (int i = 0; i < size; i++) {
+    fprintf(c->logFile, "Neighbor %d encode %d\n", i, sendNeighborEncoding[i]);
+  }
+#endif
 
   // sum over all processors all the sendNeighborEncoding arrays
   MPI_Allreduce(MPI_IN_PLACE,
@@ -172,6 +208,19 @@ static void buildNeighborlist(Comm* c, int* externalRank, int externalCount)
   /* decode 'sendNeighborEncoding[rank] to deduce total number of elements we
    * must send */
   c->totalSendCount = (sendNeighborEncoding[rank] - sendNeighborCount) / size;
+
+#ifdef VERBOSE
+  fprintf(c->logFile,
+      "Rank %d of %d with %d sendneighbors sending total %d elements\n",
+      rank,
+      size,
+      sendNeighborCount,
+      c->totalSendCount);
+
+  for (int i = 0; i < size; i++) {
+    fprintf(c->logFile, "Neighbor %d encode %d\n", i, sendNeighborEncoding[i]);
+  }
+#endif
 
   /* Check to see if we have enough memory allocated.  This could be
    dynamically modified, but let's keep it simple for now...*/
@@ -190,18 +239,18 @@ static void buildNeighborlist(Comm* c, int* externalRank, int externalCount)
   }
 
 #ifdef VERBOSE
-  printf("Rank %d of %d: tmp_neighbors = %d\n",
+  printf("Rank %d of %d: sendNeighborEncoding = %d\n",
       rank,
       size,
-      tmp_neighbors[rank]);
+      sendNeighborEncoding[rank]);
   printf("Rank %d of %d: Number of send neighbors = %d\n",
       rank,
       size,
-      num_send_neighbors);
+      sendNeighborCount);
   printf("Rank %d of %d: Number of receive neighbors = %d\n",
       rank,
       size,
-      num_recv_neighbors);
+      recvNeighborCount);
   printf("Rank %d of %d: Total number of elements to send = %d\n",
       rank,
       size,
@@ -247,8 +296,8 @@ static void buildNeighborlist(Comm* c, int* externalRank, int externalCount)
       printf("Process %d of %d: recv_list[%d] = %d\n",
           rank,
           size,
-          num_recv_neighbors,
-          send_list[j]);
+          recvNeighborCount,
+          sendNeighborList[j]);
 #endif
       recvNeighborList[recvNeighborCount] = sendNeighborList[j];
       recvNeighborCount++;
@@ -278,7 +327,7 @@ static void buildMessageCounts(Comm* c, int* externalRank)
   int* neighbors    = c->neighbors;
   int lengths[neighborCount];
   int MPI_MY_TAG = 100;
-  MPI_Request request[MAX_NUM_MESSAGES];
+  MPI_Request request[neighborCount];
 
   // First post receives
   for (int i = 0; i < neighborCount; i++) {
@@ -294,6 +343,16 @@ static void buildMessageCounts(Comm* c, int* externalRank)
   int* recvCount = c->recvCount;
   int* sendCount = c->sendCount;
 
+  // #ifdef VERBOSE
+  //   for (int i = 0; i < externalCount; i++) {
+  //     fprintf(c->logFile,
+  //         "Rank %d external %d rank %d\n",
+  //         c->rank,
+  //         i,
+  //         externalRank[i]);
+  //   }
+  // #endif
+
   int j = 0;
 
   for (int i = 0; i < neighborCount; i++) {
@@ -303,8 +362,32 @@ static void buildMessageCounts(Comm* c, int* externalRank)
     while ((j < externalCount) && (externalRank[j] == neighbors[i])) {
       count++;
       j++;
-      if (j == externalCount) break;
+#ifdef VERBOSE
+      fprintf(c->logFile,
+          "Rank %d externalRank[%d] %d neighbor[%d]=%d j=%d externalCount %d "
+          "count=%d\n",
+          c->rank,
+          j,
+          externalRank[j],
+          i,
+          neighbors[i],
+          j,
+          externalCount,
+          count);
+#endif
+      if (j == externalCount) {
+        fprintf(c->logFile, "Rank %d BREAK at %d with %d\n", c->rank, j, count);
+        break;
+      }
     }
+#ifdef VERBOSE
+    fprintf(c->logFile,
+        "Rank %d with %d external receives %d elements from %d\n",
+        c->rank,
+        externalCount,
+        count,
+        neighbors[i]);
+#endif
 
     recvCount[i] = count;
     MPI_Send(&count, 1, MPI_INT, neighbors[i], MPI_MY_TAG, MPI_COMM_WORLD);
@@ -315,6 +398,13 @@ static void buildMessageCounts(Comm* c, int* externalRank)
   // Complete the receives of the number of externals
   for (int i = 0; i < neighborCount; i++) {
     sendCount[i] = lengths[i];
+#ifdef VERBOSE
+    fprintf(c->logFile,
+        "Rank %d sends %d elements to %d\n",
+        c->rank,
+        lengths[i],
+        neighbors[i]);
+#endif
   }
 }
 
@@ -576,6 +666,16 @@ void commPartition(Comm* c, Matrix* A)
   CG_UINT* rowPtr      = A->rowPtr;
   CG_UINT* colInd      = A->colInd;
 
+#ifdef VERBOSE
+  fprintf(c->logFile,
+      "Rank %d of %d owns %d rows: %d to %d\n",
+      rank,
+      size,
+      numRows,
+      startRow,
+      stopRow);
+#endif
+
   /***********************************************************************
    *    Step 1: Identify externals and create lookup maps
    ************************************************************************/
@@ -592,29 +692,33 @@ void commPartition(Comm* c, Matrix* A)
   int* externalIndex = (int*)allocate(ARRAY_ALIGNMENT,
       MAX_EXTERNAL * sizeof(int));
 
+#ifdef VERBOSE
+  fprintf(c->logFile, "STEP 1 \n");
+#endif
   for (int i = 0; i < numRows; i++) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
-      int cur_ind = A->colInd[j];
+      int curIndex = A->colInd[j];
 
 #ifdef VERBOSE
-      printf("Rank %d of %d getting entry %d:index %d in local row %d\n",
+      fprintf(c->logFile,
+          "Rank %d of %d processing entry %d:index %d in local row %d\n",
           rank,
           size,
           j,
-          cur_ind,
+          curIndex,
           i);
 #endif
 
       // convert local column references to local numbering
-      if (startRow <= cur_ind && cur_ind <= stopRow) {
+      if (startRow <= curIndex && curIndex <= stopRow) {
         colInd[j] -= startRow;
       } else {
         // find out if we have already set up this point
-        if (externals[cur_ind] == -1) {
-          externals[cur_ind] = externalCount;
+        if (externals[curIndex] == -1) {
+          externals[curIndex] = externalCount;
 
           if (externalCount <= MAX_EXTERNAL) {
-            externalIndex[externalCount] = cur_ind;
+            externalIndex[externalCount] = curIndex;
             // mark in local column index as external by negating it
             colInd[j] = -colInd[j];
           } else {
@@ -622,6 +726,13 @@ void commPartition(Comm* c, Matrix* A)
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
             exit(EXIT_FAILURE);
           }
+#ifdef VERBOSE
+          fprintf(c->logFile,
+              "Register external %d:index %d in local row %d\n",
+              externalCount,
+              curIndex,
+              i);
+#endif
           externalCount++;
         } else {
           // Mark index as external by adding 1 and negating it
@@ -631,10 +742,14 @@ void commPartition(Comm* c, Matrix* A)
     }
   }
 
+  printf("Rank %d: %d externals\n", c->rank, externalCount);
+
   /***********************************************************************
    *    Step 2:  Identify owning rank for externals
    ************************************************************************/
-  int externalRank[externalCount];
+  int* externalRank = (int*)allocate(ARRAY_ALIGNMENT,
+      externalCount * sizeof(int));
+
   c->externalCount = externalCount;
 
   {
@@ -648,7 +763,7 @@ void commPartition(Comm* c, Matrix* A)
         MPI_INT,
         MPI_COMM_WORLD);
 
-    // Go through list of externals and find the processor that owns each
+    // Go through list of externals and find the processor that owns it
     for (int i = 0; i < externalCount; i++) {
       int globalIndex = externalIndex[i];
 
@@ -673,18 +788,25 @@ void commPartition(Comm* c, Matrix* A)
       externalIndex,
       externalsReordered,
       externalRank);
+
   free(externalIndex);
   free(externals);
 
 #ifdef VERBOSE
-  printf("Rank %d of %d: %d externals\n", rank, size, num_external);
+  fprintf(c->logFile, "STEP 3 \n");
+  fprintf(c->logFile,
+      "Rank %d of %d: %d externals\n",
+      rank,
+      size,
+      externalCount);
 
-  for (int i = 0; i < num_external; i++) {
-    printf("Rank %d of %d: external[%d] owned by %d\n",
+  for (int i = 0; i < externalCount; i++) {
+    fprintf(c->logFile,
+        "Rank %d of %d: external[%d] owned by %d\n",
         rank,
         size,
         i,
-        external_processor[i]);
+        externalRank[i]);
   }
 #endif
 
@@ -881,6 +1003,9 @@ void commInit(Comm* c, int argc, char** argv)
   c->rank = 0;
   c->size = 1;
 #endif
+  char filename[30];
+  sprintf(filename, "out-%d.txt", c->rank);
+  c->logFile = fopen(filename, "w");
 }
 
 void commFinalize(Comm* c)
@@ -888,4 +1013,6 @@ void commFinalize(Comm* c)
 #ifdef _MPI
   MPI_Finalize();
 #endif
+
+  fclose(c->logFile);
 }
