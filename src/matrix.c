@@ -174,8 +174,8 @@ void matrixRead(MmMatrix* m, char* filename)
       printf(" * matrix has to be real or pattern\n");
     }
 
-    if (!mm_is_symmetric(matcode) && !mm_is_general(matcode)) {
-      printf(" * matrix has to be either general or symmetric\n");
+    if (!mm_is_symmetric(matcode)) {
+      printf(" * matrix has to be symmetric\n");
     }
 
     exit(EXIT_FAILURE);
@@ -225,7 +225,7 @@ void matrixRead(MmMatrix* m, char* filename)
 
   fclose(f);
   m->nr    = M;
-  m->nnz   = nz;
+  m->nnz   = cursor;
   m->count = cursor;
 
   // sort by column
@@ -265,6 +265,7 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 
   Entry* entries = mm->entries;
   int startRow   = m->startRow;
+  // printf("count %lu startRow %d\n", mm->count, startRow);
 
   for (int i = 0; i < mm->count; i++) {
     valsPerRow[entries[i].row - startRow]++;
@@ -274,8 +275,11 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 
   // convert to CRS format
   for (int rowID = 0; rowID < m->nr; rowID++) {
+    // printf("rowID %d valPerRow %d\n", rowID, valsPerRow[rowID]);
 
     m->rowPtr[rowID + 1] = m->rowPtr[rowID] + valsPerRow[rowID];
+    // printf("row ptr from %d to %d\n", m->rowPtr[rowID], m->rowPtr[rowID +
+    // 1]);
 
     // loop over all elements in Row
     for (int id = m->rowPtr[rowID]; id < m->rowPtr[rowID + 1]; id++) {

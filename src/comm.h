@@ -36,6 +36,7 @@ enum op { MAX = 0, SUM };
 typedef struct {
   int rank;
   int size;
+  FILE* logFile;
 #if defined(_MPI)
   int neighborCount;
   int externalCount;
@@ -52,7 +53,7 @@ extern void commInit(Comm* c, int argc, char** argv);
 extern void commFinalize(Comm* c);
 extern void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal);
 extern void commPartition(Comm* c, Matrix* m);
-extern void commPrintConfig(Comm* c);
+extern void commPrintConfig(Comm* c, int nr, int startRow, int stopRow);
 extern void commMMMatrixDump(Comm* c, MmMatrix* m);
 extern void commMatrixDump(Comm* c, Matrix* m);
 extern void commExchange(Comm* c, Matrix* A, double* x);

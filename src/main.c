@@ -44,8 +44,12 @@ int main(int argc, char** argv)
   // commMatrixDump(&comm, &s.A);
   // commAbort("After initSolver");
   commPartition(&comm, &s.A);
-  // commPrintConfig(&comm);
-  // commAbort("After initSolver");
+  // commBarrier();
+  commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
+  // commMatrixDump(&comm, &s.A);
+  // commAbort("After commPartition");
+  // commFinalize(&comm);
+  // return EXIT_SUCCESS;
 
   CG_UINT nrow = s.A.nr;
   CG_UINT ncol = s.A.nc;
