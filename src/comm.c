@@ -29,6 +29,22 @@
 
 #include "allocate.h"
 #include "comm.h"
+#include "hashmap.h"
+
+static int intcompare(const void* kva, const void* kvb, void* udata)
+{
+  kv* a  = (kv*)kva;
+  kv* b  = (kv*)kvb;
+  int ia = a->k;
+  int ib = b->k;
+  return a < b ? -1 : a > b ? +1 : 0;
+}
+
+static uint64_t inthash(const void* item, uint64_t seed0, uint64_t seed1)
+{
+  const kv* kv = item;
+  return hashmap_sip(&kv->k, sizeof(CG_UINT), seed0, seed1);
+}
 
 #ifdef _MPI
 static int sizeOfRank(int rank, int size, int N)
@@ -73,7 +89,7 @@ static void probeNeighbors(
 
 static void buildIndexMapping(Comm* c,
     Matrix* A,
-    int* externals,
+    map* externals,
     int* externalIndex,
     int* externalsReordered,
     int* externalRank)
@@ -132,12 +148,17 @@ static void buildIndexMapping(Comm* c,
   CG_UINT* rowPtr = A->rowPtr;
   CG_UINT* colInd = A->colInd;
   CG_UINT numRows = A->nr;
+  kv* colCursor;
 
   for (int i = 0; i < numRows; i++) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
       if (colInd[j] < 0) {
         int curIndex = -colInd[j];
-        colInd[j]    = externalLocalIndex[externals[curIndex]];
+        colCursor    = (kv*)hashmap_get(externals, &(kv) { .k = curIndex });
+        if (colCursor == NULL) {
+          printf("ERROR: No match for %d", curIndex);
+        }
+        colInd[j] = externalLocalIndex[colCursor->v];
       }
     }
   }
@@ -679,16 +700,27 @@ void commPartition(Comm* c, Matrix* A)
   /***********************************************************************
    *    Step 1: Identify externals and create lookup maps
    ************************************************************************/
+  map* map = hashmap_new(sizeof(kv),
+      MAX_EXTERNAL,
+      0,
+      0,
+      inthash,
+      intcompare,
+      NULL,
+      NULL);
+
   // FIXME: Use a lookup table with size total number of rows. For lower
   // memory consumption a hashmap would be a better choice.
-  int* externals = (int*)allocate(ARRAY_ALIGNMENT, numRowsTotal * sizeof(int));
+  // int* externals = (int*)allocate(ARRAY_ALIGNMENT, numRowsTotal *
+  // sizeof(int));
   int externalCount = 0; // local number of external indices
 
   // column indices that are not processed yet are marked with -1
-  for (int i = 0; i < numRowsTotal; i++) {
-    externals[i] = -1;
-  }
+  // for (int i = 0; i < numRowsTotal; i++) {
+  //   externals[i] = -1;
+  // }
 
+  kv* colCursor;
   int* externalIndex = (int*)allocate(ARRAY_ALIGNMENT,
       MAX_EXTERNAL * sizeof(int));
 
@@ -696,8 +728,8 @@ void commPartition(Comm* c, Matrix* A)
   fprintf(c->logFile, "STEP 1 \n");
 #endif
   for (int i = 0; i < numRows; i++) {
-    for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
-      int curIndex = A->colInd[j];
+    for (CG_UINT j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
+      CG_UINT curIndex = A->colInd[j];
 
 #ifdef VERBOSE
       fprintf(c->logFile,
@@ -714,8 +746,11 @@ void commPartition(Comm* c, Matrix* A)
         colInd[j] -= startRow;
       } else {
         // find out if we have already set up this point
-        if (externals[curIndex] == -1) {
-          externals[curIndex] = externalCount;
+        // if (externals[curIndex] == -1) {
+        colCursor = (kv*)hashmap_get(map, &(kv) { .k = curIndex });
+        if (colCursor == NULL) {
+          hashmap_set(map, &(kv) { .k = curIndex, .v = externalCount });
+          // externals[curIndex] = externalCount;
 
           if (externalCount <= MAX_EXTERNAL) {
             externalIndex[externalCount] = curIndex;
@@ -782,15 +817,10 @@ void commPartition(Comm* c, Matrix* A)
   int* externalsReordered = (int*)allocate(ARRAY_ALIGNMENT,
       externalCount * sizeof(int));
 
-  buildIndexMapping(c,
-      A,
-      externals,
-      externalIndex,
-      externalsReordered,
-      externalRank);
+  buildIndexMapping(c, A, map, externalIndex, externalsReordered, externalRank);
 
   free(externalIndex);
-  free(externals);
+  hashmap_free(map);
 
 #ifdef VERBOSE
   fprintf(c->logFile, "STEP 3 \n");

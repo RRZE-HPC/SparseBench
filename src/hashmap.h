@@ -5,11 +5,13 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
+#include "util.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 struct hashmap;
+typedef struct hashmap map;
 
 struct hashmap* hashmap_new(size_t elsize,
     size_t cap,
@@ -63,5 +65,10 @@ void hashmap_set_load_factor(struct hashmap* map, double load_factor);
 
 // DEPRECATED: use `hashmap_new_with_allocator`
 void hashmap_set_allocator(void* (*malloc)(size_t), void (*free)(void*));
+
+typedef struct {
+  CG_UINT k;
+  CG_UINT v;
+} kv;
 
 #endif // HASHMAP_H
