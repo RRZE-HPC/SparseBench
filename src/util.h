@@ -27,7 +27,7 @@
 #endif
 
 // #define CG_UINT unsigned long long int
-#define CG_UINT int
+#define CG_UINT unsigned int
 
 #if PRECISION == 1
 #define CG_FLOAT         float

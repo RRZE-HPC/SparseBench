@@ -129,16 +129,21 @@ static void buildIndexMapping(Comm* c,
     externalRank[i] = newExternalRank[i];
   }
 
-  // map all external column ids in the matrix to the new local index
-  CG_UINT* rowPtr = A->rowPtr;
-  CG_UINT* colInd = A->colInd;
-  CG_UINT numRows = A->nr;
+  // map all column ids in the matrix to the new local index
+  CG_UINT* rowPtr  = A->rowPtr;
+  CG_UINT* colInd  = A->colInd;
+  CG_UINT numRows  = A->nr;
+  CG_UINT startRow = A->startRow;
+  CG_UINT stopRow  = A->stopRow;
 
   for (int i = 0; i < numRows; i++) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
-      if (colInd[j] < 0) {
-        int curIndex = -colInd[j];
-        colInd[j]    = externalLocalIndex[bstFind(externals, curIndex)];
+      CG_UINT curIndex = colInd[j];
+
+      if (startRow <= curIndex && curIndex <= stopRow) {
+        colInd[j] -= startRow;
+      } else {
+        colInd[j] = externalLocalIndex[bstFind(externals, curIndex)];
       }
     }
   }
@@ -687,24 +692,6 @@ void commPartition(Comm* c, Matrix* A)
   // sizeof(int));
   int externalCount = 0; // local number of external indices
 
-  // bstInsert(externals, 22, 11);
-  // bstInsert(externals, 21, 12);
-  // bstInsert(externals, 19, 13);
-  // bstInsert(externals, 18, 14);
-  // bstInsert(externals, 24, 15);
-  //
-  // if (bstExists(externals, 21)) {
-  //   CG_UINT val = bstFind(externals, 21);
-  //   printf("Found %d\n", val);
-  // } else {
-  //   printf("Not found\n");
-  // }
-  //
-  // column indices that are not processed yet are marked with -1
-  // for (int i = 0; i < numRowsTotal; i++) {
-  //   externals[i] = -1;
-  // }
-
   int* externalIndex = (int*)allocate(ARRAY_ALIGNMENT,
       MAX_EXTERNAL * sizeof(int));
 
@@ -726,19 +713,13 @@ void commPartition(Comm* c, Matrix* A)
 #endif
 
       // convert local column references to local numbering
-      if (startRow <= curIndex && curIndex <= stopRow) {
-        colInd[j] -= startRow;
-      } else {
+      if (curIndex < startRow || curIndex > stopRow) {
         // find out if we have already set up this point
-        // if (externals[curIndex] == -1) {
         if (!bstExists(externals, curIndex)) {
           bstInsert(externals, curIndex, externalCount);
-          // externals[curIndex] = externalCount;
 
           if (externalCount <= MAX_EXTERNAL) {
             externalIndex[externalCount] = curIndex;
-            // mark in local column index as external by negating it
-            colInd[j] = -colInd[j];
           } else {
             printf("Must increase MAX_EXTERNAL\n");
             bstWalk(externals);
@@ -753,9 +734,6 @@ void commPartition(Comm* c, Matrix* A)
               i);
 #endif
           externalCount++;
-        } else {
-          // Mark index as external by adding 1 and negating it
-          colInd[j] = -colInd[j];
         }
       }
     }

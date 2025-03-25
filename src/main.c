@@ -43,6 +43,7 @@ int main(int argc, char** argv)
   profilerInit();
   commPartition(&comm, &s.A);
   commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
+  // commMatrixDump(&comm, &s.A);
   // commFinalize(&comm);
   // return EXIT_SUCCESS;
 
