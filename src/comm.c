@@ -28,23 +28,8 @@
 #endif
 
 #include "allocate.h"
+#include "bstree.h"
 #include "comm.h"
-#include "hashmap.h"
-
-static int intcompare(const void* kva, const void* kvb, void* udata)
-{
-  kv* a  = (kv*)kva;
-  kv* b  = (kv*)kvb;
-  int ia = a->k;
-  int ib = b->k;
-  return a < b ? -1 : a > b ? +1 : 0;
-}
-
-static uint64_t inthash(const void* item, uint64_t seed0, uint64_t seed1)
-{
-  const kv* kv = item;
-  return hashmap_sip(&kv->k, sizeof(CG_UINT), seed0, seed1);
-}
 
 #ifdef _MPI
 static int sizeOfRank(int rank, int size, int N)
@@ -89,7 +74,7 @@ static void probeNeighbors(
 
 static void buildIndexMapping(Comm* c,
     Matrix* A,
-    map* externals,
+    Bstree* externals,
     int* externalIndex,
     int* externalsReordered,
     int* externalRank)
@@ -148,17 +133,12 @@ static void buildIndexMapping(Comm* c,
   CG_UINT* rowPtr = A->rowPtr;
   CG_UINT* colInd = A->colInd;
   CG_UINT numRows = A->nr;
-  kv* colCursor;
 
   for (int i = 0; i < numRows; i++) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
       if (colInd[j] < 0) {
         int curIndex = -colInd[j];
-        colCursor    = (kv*)hashmap_get(externals, &(kv) { .k = curIndex });
-        if (colCursor == NULL) {
-          printf("ERROR: No match for %d", curIndex);
-        }
-        colInd[j] = externalLocalIndex[colCursor->v];
+        colInd[j]    = externalLocalIndex[bstFind(externals, curIndex)];
       }
     }
   }
@@ -700,27 +680,31 @@ void commPartition(Comm* c, Matrix* A)
   /***********************************************************************
    *    Step 1: Identify externals and create lookup maps
    ************************************************************************/
-  map* map = hashmap_new(sizeof(kv),
-      MAX_EXTERNAL,
-      0,
-      0,
-      inthash,
-      intcompare,
-      NULL,
-      NULL);
 
-  // FIXME: Use a lookup table with size total number of rows. For lower
-  // memory consumption a hashmap would be a better choice.
+  Bstree* externals;
+  externals = bstNew();
   // int* externals = (int*)allocate(ARRAY_ALIGNMENT, numRowsTotal *
   // sizeof(int));
   int externalCount = 0; // local number of external indices
 
+  // bstInsert(externals, 22, 11);
+  // bstInsert(externals, 21, 12);
+  // bstInsert(externals, 19, 13);
+  // bstInsert(externals, 18, 14);
+  // bstInsert(externals, 24, 15);
+  //
+  // if (bstExists(externals, 21)) {
+  //   CG_UINT val = bstFind(externals, 21);
+  //   printf("Found %d\n", val);
+  // } else {
+  //   printf("Not found\n");
+  // }
+  //
   // column indices that are not processed yet are marked with -1
   // for (int i = 0; i < numRowsTotal; i++) {
   //   externals[i] = -1;
   // }
 
-  kv* colCursor;
   int* externalIndex = (int*)allocate(ARRAY_ALIGNMENT,
       MAX_EXTERNAL * sizeof(int));
 
@@ -747,9 +731,8 @@ void commPartition(Comm* c, Matrix* A)
       } else {
         // find out if we have already set up this point
         // if (externals[curIndex] == -1) {
-        colCursor = (kv*)hashmap_get(map, &(kv) { .k = curIndex });
-        if (colCursor == NULL) {
-          hashmap_set(map, &(kv) { .k = curIndex, .v = externalCount });
+        if (!bstExists(externals, curIndex)) {
+          bstInsert(externals, curIndex, externalCount);
           // externals[curIndex] = externalCount;
 
           if (externalCount <= MAX_EXTERNAL) {
@@ -758,6 +741,7 @@ void commPartition(Comm* c, Matrix* A)
             colInd[j] = -colInd[j];
           } else {
             printf("Must increase MAX_EXTERNAL\n");
+            bstWalk(externals);
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
             exit(EXIT_FAILURE);
           }
@@ -817,10 +801,15 @@ void commPartition(Comm* c, Matrix* A)
   int* externalsReordered = (int*)allocate(ARRAY_ALIGNMENT,
       externalCount * sizeof(int));
 
-  buildIndexMapping(c, A, map, externalIndex, externalsReordered, externalRank);
+  buildIndexMapping(c,
+      A,
+      externals,
+      externalIndex,
+      externalsReordered,
+      externalRank);
 
   free(externalIndex);
-  hashmap_free(map);
+  bstFree(externals);
 
 #ifdef VERBOSE
   fprintf(c->logFile, "STEP 3 \n");

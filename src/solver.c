@@ -73,14 +73,8 @@ void initSolver(Solver* s, Comm* c, Parameter* p)
     if (commIsMaster(c)) {
       matrixRead(&m, p->filename);
     }
-    // commMMMatrixDump(c, &m);
-    // commAbort("Exit before Distribute");
     commDistributeMatrix(c, &m, &mLocal);
-    // commMMMatrixDump(c, &mLocal);
-    // commAbort("Exit after Distribute");
-
     matrixConvertMMtoCRS(&mLocal, &s->A, c->rank, c->size);
-    // commAbort("Exit after Distribute");
   }
 
   s->x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, s->A.nr * sizeof(CG_FLOAT));

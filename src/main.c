@@ -41,13 +41,8 @@ int main(int argc, char** argv)
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param);
   profilerInit();
-  // commMatrixDump(&comm, &s.A);
-  // commAbort("After initSolver");
   commPartition(&comm, &s.A);
-  // commBarrier();
   commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
-  // commMatrixDump(&comm, &s.A);
-  // commAbort("After commPartition");
   // commFinalize(&comm);
   // return EXIT_SUCCESS;
 

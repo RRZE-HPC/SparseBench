@@ -3,65 +3,119 @@
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "bstree.h"
+#include "util.h"
 
-void bstNew(node** root, CG_UINT key, CG_UINT value)
+Bstree* bstNew(void)
 {
-  (*root)        = malloc(sizeof(node));
-  (*root)->key   = key;
-  (*root)->value = value;
-  (*root)->left  = NULL;
-  (*root)->right = NULL;
+  Bstree* b;
+
+  b       = (Bstree*)malloc(sizeof(Bstree));
+  b->root = NULL;
+  return b;
 }
 
-void bstFree(node* root) {}
+static void recursive_free_bstree(Node* bn)
+{
+  if (bn == NULL) return;
+  if (bn->left != NULL) recursive_free_bstree(bn->left);
+  if (bn->right != NULL) recursive_free_bstree(bn->right);
+  free(bn);
+  return;
+}
 
-CG_UINT bstSearch(node* leaf, CG_UINT key)
+void bstFree(Bstree* b)
+{
+  recursive_free_bstree(b->root);
+  free(b);
+  return;
+}
+
+bool bstExists(Bstree* b, CG_UINT key)
+{
+  Node* tmp;
+
+  tmp = b->root;
+  while (1) {
+    if (tmp == NULL) return false;
+    if (key < tmp->key) {
+      tmp = tmp->left;
+    } else if (key > tmp->key) {
+      tmp = tmp->right;
+    } else {
+      return true;
+    }
+  }
+}
+
+CG_UINT bstFind(Bstree* b, CG_UINT key)
+{
+  Node* tmp;
+
+  tmp = b->root;
+  while (1) {
+    if (tmp == NULL) return 0;
+    if (key < tmp->key) {
+      tmp = tmp->left;
+    } else if (key > tmp->key) {
+      tmp = tmp->right;
+    } else {
+      return tmp->value;
+    }
+  }
+}
+
+static void rWalk(Node* leaf)
 {
   if (leaf) {
-    if (key == leaf->key) {
-      return leaf->value;
-    }
-    if (key < leaf->key) {
-      bstSearch(leaf->left, key);
-    } else {
-      bstSearch(leaf->right, key);
-    }
+    rWalk(leaf->left);
+    printf("%d\n", leaf->value);
+    rWalk(leaf->right);
   }
-
-  return -1; // default/error case
 }
 
-void bstInsert(node* leaf, CG_UINT key, CG_UINT value)
+void bstWalk(Bstree* b) { rWalk(b->root); }
+
+void bstInsert(Bstree* b, CG_UINT key, CG_UINT value)
 {
-  if (leaf == NULL) {
-    bstNew(&leaf, key, value);
+  Node *bs, *tmp;
+
+  /* First, create the new node */
+  bs        = (Node*)malloc(sizeof(Node));
+  bs->left  = NULL;
+  bs->right = NULL;
+  bs->key   = key;
+  bs->value = value;
+
+  /* If it is the first node, put it there */
+  if (b->root == NULL) {
+    b->root = bs;
+    return;
   }
 
-  if (key < leaf->key) {
-    if (leaf->left != NULL) {
-      bstInsert(leaf->left, key, value);
+  tmp = b->root;
+
+  while (1) {
+    if (key < tmp->key) {
+      if (tmp->left == NULL) {
+        tmp->left = bs;
+        return;
+      } else {
+        tmp = tmp->left;
+      }
+    } else if (key > tmp->key) {
+      if (tmp->right == NULL) {
+        tmp->right = bs;
+        return;
+      } else {
+        tmp = tmp->right;
+      }
     } else {
-      leaf->left        = malloc(sizeof(node));
-      leaf->left->key   = key;
-      leaf->left->value = value;
-      leaf->left->left  = NULL;
-      leaf->left->right = NULL;
+      fprintf(stderr, "No duplicates permitted! Omitting...\n");
     }
-  } else if (key > leaf->key) {
-    if (leaf->right != NULL) {
-      bstInsert(leaf->right, key, value);
-    } else {
-      leaf->right        = malloc(sizeof(node));
-      leaf->right->key   = key;
-      leaf->right->value = value;
-      leaf->right->left  = NULL;
-      leaf->right->right = NULL;
-    }
-  } else {
-    fprintf(stderr, "No duplicates permitted! Omitting...\n");
   }
 }

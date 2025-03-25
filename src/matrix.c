@@ -230,7 +230,6 @@ void matrixRead(MmMatrix* m, char* filename)
 
   // sort by column
   qsort(m->entries, m->count, sizeof(Entry), compareColumn);
-// dumpMMMatrix(m);
 // sort by row requires a stable sort. As glibc qsort is mergesort this
 // hopefully works.
 #ifdef __linux__
@@ -239,7 +238,6 @@ void matrixRead(MmMatrix* m, char* filename)
   // BSD has a dedicated mergesort available in its libc
   mergesort(m->entries, m->count, sizeof(Entry), compareRow);
 #endif
-  // dumpMMMatrix(m);
 }
 
 void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
@@ -265,7 +263,6 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 
   Entry* entries = mm->entries;
   int startRow   = m->startRow;
-  // printf("count %lu startRow %d\n", mm->count, startRow);
 
   for (int i = 0; i < mm->count; i++) {
     valsPerRow[entries[i].row - startRow]++;
@@ -275,11 +272,7 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 
   // convert to CRS format
   for (int rowID = 0; rowID < m->nr; rowID++) {
-    // printf("rowID %d valPerRow %d\n", rowID, valsPerRow[rowID]);
-
     m->rowPtr[rowID + 1] = m->rowPtr[rowID] + valsPerRow[rowID];
-    // printf("row ptr from %d to %d\n", m->rowPtr[rowID], m->rowPtr[rowID +
-    // 1]);
 
     // loop over all elements in Row
     for (int id = m->rowPtr[rowID]; id < m->rowPtr[rowID + 1]; id++) {
