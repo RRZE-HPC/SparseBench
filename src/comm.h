@@ -38,14 +38,19 @@ typedef struct {
   int size;
   FILE* logFile;
 #if defined(_MPI)
-  int neighborCount;
   int externalCount;
   int totalSendCount;
   int* elementsToSend;
-  int neighbors[MAX_NUM_NEIGHBOURS];
-  int recvCount[MAX_NUM_NEIGHBOURS];
-  int sendCount[MAX_NUM_NEIGHBOURS];
+  int indegree;
+  int outdegree;
+  int* sources;
+  int* recvCounts;
+  int* rdispls;
+  int* destinations;
+  int* sendCounts;
+  int* sdispls;
   CG_FLOAT* sendBuffer;
+  MPI_Comm communicator;
 #endif
 } Comm;
 

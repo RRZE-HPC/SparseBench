@@ -62,9 +62,11 @@ void profilerPrint(Comm* c, Solver* s, int iterations)
     }
 
     int commWords = 0;
-    for (int i = 0; i < c->neighborCount; i++) {
-      commWords += c->recvCount[i];
-      commWords += c->sendCount[i];
+    for (int i = 0; i < c->outdegree; i++) {
+      commWords += c->sendCounts[i];
+    }
+    for (int i = 0; i < c->indegree; i++) {
+      commWords += c->recvCounts[i];
     }
 
     _regions[COMM].words = sizeof(CG_FLOAT) * commWords;
