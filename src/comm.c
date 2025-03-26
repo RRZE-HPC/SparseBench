@@ -37,41 +37,6 @@ static int sizeOfRank(int rank, int size, int N)
   return N / size + ((N % size > rank) ? 1 : 0);
 }
 
-static void probeNeighbors(
-    int* sendList, int numSendNeighbors, int* recvList, int numRecvNeighbors)
-{
-
-  int val;
-
-  for (int i = 0; i < numSendNeighbors; i++) {
-    sendList[i] = -1;
-  }
-
-  int MPI_MY_TAG = 99;
-  MPI_Request request[MAX_NUM_MESSAGES];
-
-  for (int i = 0; i < numSendNeighbors; i++) {
-    MPI_Irecv(&val,
-        1,
-        MPI_INT,
-        MPI_ANY_SOURCE,
-        MPI_MY_TAG,
-        MPI_COMM_WORLD,
-        request + i);
-  }
-
-  for (int i = 0; i < numRecvNeighbors; i++) {
-    MPI_Send(&val, 1, MPI_INT, recvList[i], MPI_MY_TAG, MPI_COMM_WORLD);
-  }
-
-  // Receive message from each send neighbor to construct 'sendList'.
-  for (int i = 0; i < numSendNeighbors; i++) {
-    MPI_Status status;
-    MPI_Wait(request + i, &status);
-    sendList[i] = status.MPI_SOURCE;
-  }
-}
-
 static void buildIndexMapping(Comm* c,
     Matrix* A,
     Bstree* externals,
@@ -159,7 +124,7 @@ static void buildElementsToSend(
   c->sendBuffer  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT,
       c->totalSendCount * sizeof(CG_FLOAT));
   int MPI_MY_TAG = 100;
-  MPI_Request request[MAX_NUM_MESSAGES];
+  MPI_Request request[c->outdegree];
   c->elementsToSend   = (int*)allocate(ARRAY_ALIGNMENT,
       c->totalSendCount * sizeof(int));
   int* elementsToSend = c->elementsToSend;
@@ -374,11 +339,6 @@ void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal)
   mLocal->stopRow  = mLocal->entries[count - 1].row;
   mLocal->nr       = mLocal->stopRow - mLocal->startRow + 1;
   mLocal->nnz      = count;
-  // printf("Rank %d count: %d start %d stop %d\n",
-  //     rank,
-  //     count,
-  //     mLocal->startRow,
-  //     mLocal->stopRow);
 
   MPI_Type_free(&entryType);
 #else
@@ -434,16 +394,6 @@ void commPartition(Comm* c, Matrix* A)
     for (CG_UINT j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
       CG_UINT curIndex = A->colInd[j];
 
-#ifdef VERBOSE
-      fprintf(c->logFile,
-          "Rank %d of %d processing entry %d:index %d in local row %d\n",
-          rank,
-          size,
-          j,
-          curIndex,
-          i);
-#endif
-
       // convert local column references to local numbering
       if (curIndex < startRow || curIndex > stopRow) {
         // find out if we have already set up this point
@@ -454,17 +404,9 @@ void commPartition(Comm* c, Matrix* A)
             externalIndex[externalCount] = curIndex;
           } else {
             printf("Must increase MAX_EXTERNAL\n");
-            bstWalk(externals);
             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
             exit(EXIT_FAILURE);
           }
-#ifdef VERBOSE
-          fprintf(c->logFile,
-              "Register external %d:index %d in local row %d\n",
-              externalCount,
-              curIndex,
-              i);
-#endif
           externalCount++;
         }
       }
@@ -783,6 +725,14 @@ void commInit(Comm* c, int argc, char** argv)
 void commFinalize(Comm* c)
 {
 #ifdef _MPI
+  free(c->sources);
+  free(c->recvCounts);
+  free(c->rdispls);
+  free(c->destinations);
+  free(c->sendCounts);
+  free(c->sdispls);
+  free(c->elementsToSend);
+  free(c->sendBuffer);
   MPI_Finalize();
 #endif
 

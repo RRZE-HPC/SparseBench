@@ -13,9 +13,7 @@
 
 #include "matrix.h"
 
-#define MAX_EXTERNAL       100000
-#define MAX_NUM_MESSAGES   500
-#define MAX_NUM_NEIGHBOURS MAX_NUM_MESSAGES
+#define MAX_EXTERNAL 100000
 
 #define BANNER                                                                 \
   "                                                                          " \
