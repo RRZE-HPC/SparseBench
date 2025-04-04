@@ -281,3 +281,8 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
     }
   }
 }
+
+void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int rank, int size)
+{
+  printf("TODO\n");
+}
