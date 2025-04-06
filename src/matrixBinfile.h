@@ -4,8 +4,8 @@
  * license that can be found in the LICENSE file. */
 #ifndef __MATRIXBINFILE_H_
 #define __MATRIXBINFILE_H_
-#include "Comm.h"
-#include "Matrix.h"
+#include "comm.h"
+#include "matrix.h"
 #include "util.h"
 
 // Matrix binary file format:

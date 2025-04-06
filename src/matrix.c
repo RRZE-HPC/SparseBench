@@ -26,6 +26,126 @@ static inline int compareRow(const void* a, const void* b)
   return (a_->row > b_->row) - (a_->row < b_->row);
 }
 
+static inline int compareDesc(const void *a, const void *b)
+{
+  const int val_a = *(const int *)a;
+  const int val_b = *(const int *)b;
+
+  return (val_b - val_a);
+}
+
+static inline int compareDescSCS(const void* a, const void* b) {
+  
+  const SellCSigmaPair* pa = (const SellCSigmaPair*)a;
+  const SellCSigmaPair* pb = (const SellCSigmaPair*)b;
+
+  if (pa->count < pb->count) return 1;  // Descending order
+  if (pa->count > pb->count) return -1;
+  return 0;  // Stable if equal
+}
+
+void dumpSCSMatrixToFile(SellCSigmaMatrix* m, FILE* file){
+  fprintf(file, "m->startRow = %d\n", m->startRow);
+  fprintf(file, "m->stopRow = %d\n", m->stopRow);
+  fprintf(file, "m->totalNr = %d\n", m->totalNr);
+  fprintf(file, "m->totalNnz = %d\n", m->totalNnz);
+  fprintf(file, "m->nr = %d\n", m->nr);      
+  fprintf(file, "m->nc = %d\n", m->nc);      
+  fprintf(file, "m->nnz = %d\n", m->nnz);    
+  fprintf(file, "m->c = %d\n", m->c);       
+  fprintf(file, "m->sigma = %d\n", m->sigma);   
+  fprintf(file, "m->nChunks = %d\n", m->nChunks); 
+  fprintf(file, "m->nrPadded = %d\n", m->nrPadded);
+
+  // Dump permutation arrays
+  fprintf(file, "oldToNewPerm: ");
+  for(int i = 0; i < m->nr; ++i){
+    fprintf(file, "%d, ", m->oldToNewPerm[i]);
+  }
+  fprintf(file, "\n");
+  fprintf(file, "newToOldPerm: ");
+  for(int i = 0; i < m->nr; ++i){
+    fprintf(file, "%d, ", m->newToOldPerm[i]);
+  }
+  fprintf(file, "\n");
+
+  // Dump chunk data
+  fprintf(file, "chunkLens: ");
+  for(int i = 0; i < m->nChunks; ++i){
+    fprintf(file, "%d, ", m->chunkLens[i]);
+  }
+  fprintf(file, "\n");
+  fprintf(file, "chunkPtr: ");
+  for(int i = 0; i < m->nChunks+1; ++i){
+    fprintf(file, "%d, ", m->chunkPtr[i]);
+  }
+  fprintf(file, "\n");
+
+  // Dump matrix data
+  fprintf(file, "colInd: ");
+  for(int i = 0; i < m->nElems; ++i){
+    fprintf(file, "%d, ", m->colInd[i]);
+  }
+  fprintf(file, "\n");
+  fprintf(file, "val: ");
+  for(int i = 0; i < m->nElems; ++i){
+    fprintf(file, "%f, ", m->val[i]);
+  }
+  fprintf(file, "\n");
+}
+
+// This version just goes to stdout
+void dumpSCSMatrix(SellCSigmaMatrix* m)
+{
+  printf("m->startRow = %d\n", m->startRow);
+  printf("m->stopRow = %d\n", m->stopRow);
+  printf("m->totalNr = %d\n", m->totalNr);
+  printf("m->totalNnz = %d\n", m->totalNnz);
+  printf("m->nr = %d\n", m->nr);      
+  printf("m->nc = %d\n", m->nc);      
+  printf("m->nnz = %d\n", m->nnz);    
+  printf("m->c = %d\n", m->c);       
+  printf("m->sigma = %d\n", m->sigma);   
+  printf("m->nChunks = %d\n", m->nChunks); 
+  printf("m->nrPadded = %d\n", m->nrPadded);
+
+  // Dump permutation arrays
+  printf("oldToNewPerm: ");
+  for(int i = 0; i < m->nr; ++i){
+    printf("%d, ", m->oldToNewPerm[i]);
+  }
+  printf("\n");
+  printf("newToOldPerm: ");
+  for(int i = 0; i < m->nr; ++i){
+    printf("%d, ", m->newToOldPerm[i]);
+  }
+  printf("\n");
+
+  // Dump chunk data
+  printf("chunkLens: ");
+  for(int i = 0; i < m->nChunks; ++i){
+    printf("%d, ", m->chunkLens[i]);
+  }
+  printf("\n");
+  printf("chunkPtr: ");
+  for(int i = 0; i < m->nChunks+1; ++i){
+    printf("%d, ", m->chunkPtr[i]);
+  }
+  printf("\n");
+
+  // Dump matrix data
+  printf("colInd: ");
+  for(int i = 0; i < m->nElems; ++i){
+    printf("%d, ", m->colInd[i]);
+  }
+  printf("\n");
+  printf("val: ");
+  for(int i = 0; i < m->nElems; ++i){
+    printf("%f, ", m->val[i]);
+  }
+  printf("\n");
+}
+
 void dumpMMMatrix(MmMatrix* mm)
 {
   Entry* entries = mm->entries;
@@ -139,7 +259,7 @@ void matrixRead(MmMatrix* m, char* filename)
   int M, N, nz;
 
   if ((f = fopen(filename, "r")) == NULL) {
-    printf("Unable to open file");
+    printf("Unable to open file.\n");
     exit(EXIT_FAILURE);
   }
 
@@ -282,7 +402,138 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
   }
 }
 
-void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int rank, int size)
+void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int c, int sigma, int rank, int size)
 {
-  printf("TODO\n");
+  m->startRow = mm->startRow;
+  m->stopRow  = mm->stopRow;
+  m->totalNr  = mm->totalNr;
+  m->totalNnz = mm->totalNnz;
+  m->nr       = mm->nr;
+  m->nc       = mm->nr;
+  m->nnz      = mm->nnz;
+  m->c        = c;  // Just take as function arg for now
+  m->sigma    = sigma;  // Just take as function arg for now
+  m->nChunks  = (m->nr + m->c - 1) / m->c;
+  m->nrPadded = m->nChunks * m->c;
+
+  // (Temporary array) Assign an index to each row to use for row sorting
+  SellCSigmaPair* elemsPerRow = (SellCSigmaPair*)allocate(ARRAY_ALIGNMENT, m->nrPadded * sizeof(SellCSigmaPair));
+
+  for(int i = 0; i < m->nrPadded; ++i){
+    elemsPerRow[i].index = i;
+    elemsPerRow[i].count = 0;
+  }
+
+  // Collect the number of elements in each row
+  for(int i = 0; i < m->nnz; ++i){
+    Entry e = mm->entries[i];
+    ++(elemsPerRow[e.row].count);
+  }
+
+  // Sort rows over a scope of sigma
+  for(int i = 0; i < m->nrPadded; i += m->sigma){
+    int chunkStart = i;
+    int chunkStop = ((i + m->sigma) < m->nrPadded) 
+                  ? i + m->sigma : m->nrPadded;
+    int size = chunkStop - chunkStart;
+
+  // Sorting rows by element count using struct keeps index/count together
+#ifdef __linux__
+    qsort(&elemsPerRow[chunkStart], size, sizeof(SellCSigmaPair), compareDescSCS);
+#else
+    // BSD has a dedicated mergesort available in its libc
+    mergesort(&elemsPerRow[chunkStart], size, sizeof(SellCSigmaPair), compareDescSCS);
+#endif
+  }
+
+  m->chunkLens = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nChunks * sizeof(CG_UINT));
+  m->chunkPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT, (m->nChunks + 1) * sizeof(CG_UINT));
+  
+  CG_UINT currentChunkPtr = 0;
+
+  for(int i = 0; i < m->nChunks; ++i){
+    // Note sure about this yet
+    // int chunkStart = elemsPerRow[i * m->c].count;
+    // int chunkStop = ((i * m->c + m->c) < m->nrPadded) 
+    //               ? elemsPerRow[i * m->c + m->c].count
+    //               : elemsPerRow[m->nrPadded - 1].count;
+    SellCSigmaPair chunkStart = elemsPerRow[i * m->c];
+    SellCSigmaPair chunkStop = (i * m->c + m->c) < (m->nrPadded - 1) 
+                             ? elemsPerRow[i * m->c + m->c]
+                             : elemsPerRow[m->nrPadded - 1];
+
+    int size = chunkStop.index - chunkStart.index; 
+
+    // Collect longest row in chunk as chunk length
+    CG_UINT maxLength = 0;
+    for(int j = 0; j < m->c; ++j){
+      CG_UINT rowLenth = elemsPerRow[i * m->c + j].count;
+      if(rowLenth > maxLength) maxLength = rowLenth;
+    }
+
+    // Collect chunk data to arrays
+    m->chunkLens[i] = maxLength;
+    m->chunkPtr[i] = currentChunkPtr;
+    currentChunkPtr += m->chunkLens[i] * m->c;
+  }
+
+  // Account for final chunk
+  m->nElems = m->chunkPtr[m->nChunks - 1] + \
+    m->chunkLens[m->nChunks - 1] * m->c;
+
+  m->chunkPtr[m->nChunks] = m->nElems;
+
+  // Construct permutation vector
+  m->oldToNewPerm = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(CG_UINT));
+  for(int i = 0; i < m->nrPadded; ++i){
+    CG_UINT oldRow = elemsPerRow[i].index;
+    if(oldRow < m->nr) m->oldToNewPerm[oldRow] = i;
+  }
+
+  // Construct inverse permutation vector
+  m->newToOldPerm = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(CG_UINT));
+  for(int i = 0; i < m->nr; ++i){
+#ifdef VERBOSE
+    // Sanity check for common error
+    if(m->oldToNewPerm[i] >= m->nr){
+      fprintf(stderr, "ERROR matrixConvertMMtoSCS: m->oldToNewPerm[%d]=%d" \
+        " is out of bounds (>%d).\n", i, m->oldToNewPerm[i], m->nr);
+    }
+#endif
+    m->newToOldPerm[m->oldToNewPerm[i]] = i;
+  }
+
+  // Now that chunk data is collected, fill with matrix data
+  m->colInd = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(CG_UINT));
+  m->val = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(CG_FLOAT));
+
+  // (Temporary array) Keep track of how many elements we've seen in each row
+  int* rowLocalElemCount = (int*)allocate(ARRAY_ALIGNMENT, m->nrPadded * sizeof(int));
+  for(int i = 0; i < m->nrPadded; ++i){
+    rowLocalElemCount[i] = 0;
+  }
+
+  for(int i = 0; i < m->nnz; ++i){
+    Entry e = mm->entries[i];
+
+    int rowOld = e.row;
+    int row = m->oldToNewPerm[rowOld];
+    int chunkIdx = row / m->c;
+    int chunkStart = m->chunkPtr[chunkIdx];
+    int chunkRow = row % m->c;
+    int idx = chunkStart + rowLocalElemCount[row] * m->c + chunkRow;
+    m->colInd[idx] = e.col;
+#ifdef VERBOSE
+    // Sanity check for common error
+    if(m->colInd[idx] >= m->nc){
+      fprintf(stderr, "ERROR matrixConvertMMtoSCS: m->colInd[%d]=%d" \
+        " is out of bounds (>%d).\n", idx, m->colInd[idx], m->nc);
+    }
+#endif
+    m->val[idx] = e.val;
+    ++rowLocalElemCount[row];
+  }
+
+  free(elemsPerRow);
+  free(rowLocalElemCount);
 }

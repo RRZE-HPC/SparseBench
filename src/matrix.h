@@ -6,6 +6,7 @@
 #define __MATRIX_H_
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #include "parameter.h"
 #include "util.h"
@@ -46,10 +47,17 @@ typedef struct {
   CG_FLOAT* val;              // value of matrix entries
 } SellCSigmaMatrix;
 
+typedef struct {
+  int index;
+  int count;
+} SellCSigmaPair;
+
 extern void dumpMMMatrix(MmMatrix* m);
+extern void dumpSCSMatrix(SellCSigmaMatrix* m);
+extern void dumpSCSMatrixToFile(SellCSigmaMatrix* m, FILE* file);
 extern void matrixRead(MmMatrix* m, char* filename);
 extern void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size);
-extern void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int rank, int size);
+extern void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int c, int sigma, int rank, int size);
 
 extern void matrixGenerate(
     Matrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil);
