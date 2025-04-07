@@ -19,15 +19,12 @@
 	strcat((path), (expect));              												\
 
 	typedef struct {
-		int c;
+		int C;
 		int sigma;
 	} Args;
 
 int test_convertSCS(void* args, char* dataDir){
 
-	Args* arguments = (Args*)args;
-	int c = arguments->c;
-	int sigma = arguments->sigma;
 	int rank = 0;
 	int size = 1;
 
@@ -55,14 +52,17 @@ int test_convertSCS(void* args, char* dataDir){
 			m.totalNr = m.nr;
 			m.totalNnz = m.nnz;
 		
-			SellCSigmaMatrix A;
-			matrixConvertMMtoSCS(&m, &A, c, sigma, rank, size);
+			Matrix A;
+			Args* arguments = (Args*)args;
+			A.C = arguments->C;
+			A.sigma = arguments->sigma;
+			matrixConvertMMtoSCS(&m, &A, rank, size);
 
 			// String preprocessing
 			char c_str[20];                           
-			sprintf(c_str, "%d", (c));                
+			sprintf(c_str, "%d", (A.C));                
 			char sigma_str[20];                       
-			sprintf(sigma_str, "%d", (sigma));        
+			sprintf(sigma_str, "%d", (A.sigma));        
 			char *dot = strrchr((entry)->d_name, '.');
 			if (dot != NULL) {                        
 					*dot = '\0';                          

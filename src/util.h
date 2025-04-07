@@ -5,6 +5,8 @@
 #ifndef __UTIL_H_
 #define __UTIL_H_
 
+#include <string.h>
+
 #define HLINE                                                                  \
   "----------------------------------------------------------------------\n"
 
@@ -18,6 +20,10 @@
 
 #ifndef ABS
 #define ABS(a) ((a) >= 0 ? (a) : -(a))
+#endif
+
+#ifndef IS_EQUAL
+#define IS_EQUAL(a, b) (strcmp((a), (b)) == 0)
 #endif
 
 #define DEBUG_MESSAGE debug_printf

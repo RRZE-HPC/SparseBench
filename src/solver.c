@@ -56,7 +56,7 @@ void solverCheckResidual(Solver* s, Comm* c)
   }
 }
 
-void initSolver(Solver* s, Comm* c, Parameter* p)
+void initSolver(Solver* s, Comm* c, Parameter* p, char* matrixFormat)
 {
   s->xexact = NULL;
 
@@ -74,7 +74,16 @@ void initSolver(Solver* s, Comm* c, Parameter* p)
       matrixRead(&m, p->filename);
     }
     commDistributeMatrix(c, &m, &mLocal);
-    matrixConvertMMtoCRS(&mLocal, &s->A, c->rank, c->size);
+    if(IS_EQUAL(matrixFormat, "CRS")){
+      matrixConvertMMtoCRS(&mLocal, &s->A, c->rank, c->size);
+    }
+    else if(IS_EQUAL(matrixFormat, "SCS")){
+      // DL: For testing
+      s->A.C = 1;
+      s->A.sigma = 1;
+      matrixConvertMMtoSCS(&mLocal, &s->A, c->rank, c->size);
+    }
+    s->A.matrixFormat = matrixFormat;
   }
 
   s->x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, s->A.nr * sizeof(CG_FLOAT));
@@ -84,22 +93,52 @@ void initSolver(Solver* s, Comm* c, Parameter* p)
 
 void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y)
 {
-  CG_UINT numRows = m->nr;
-  CG_UINT* rowPtr = m->rowPtr;
   CG_UINT* colInd = m->colInd;
   CG_FLOAT* val   = m->val;
 
-#pragma omp parallel for schedule(OMP_SCHEDULE)
-  for (int i = 0; i < numRows; i++) {
-    CG_FLOAT sum = 0.0;
+  if(IS_EQUAL(m->matrixFormat, "CRS")){
+    CG_UINT numRows = m->nr;
+    CG_UINT* rowPtr = m->rowPtr;
 
-    // loop over all elements in row
-    for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
-      sum += val[j] * x[colInd[j]];
+    #pragma omp parallel for schedule(OMP_SCHEDULE)
+    for (int i = 0; i < numRows; i++) {
+      CG_FLOAT sum = 0.0;
+  
+      // loop over all elements in row
+      for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
+        sum += val[j] * x[colInd[j]];
+      }
+  
+      y[i] = sum;
     }
-
-    y[i] = sum;
   }
+  else if(IS_EQUAL(m->matrixFormat, "SCS")){
+    CG_UINT numChunks = m->nChunks;
+    CG_UINT C = m->C;
+    CG_UINT* chunkPtr = m->chunkPtr;
+    CG_UINT* chunkLens = m->chunkLens;
+
+    #pragma omp parallel for schedule(OMP_SCHEDULE)
+    for(int i = 0; i < numChunks; ++i){
+      CG_FLOAT tmp[C];
+      for(int j = 0; j < C; ++j){
+        tmp[j] = 0.0;
+      }
+
+      int chunkOffset = chunkPtr[i];
+      for(int j = 0; j < chunkLens[i]; ++j){
+        // NOTE: SIMD should be applied here
+        for(int k = 0; k < C; ++k){
+          tmp[k] += val[chunkOffset + j * C + k] * x[colInd[chunkOffset + j * C + k]];
+        }
+      }
+
+      for(int j = 0; j < C; ++j){
+        y[i * C + j] = tmp[j];
+      }
+    }
+  }
+
 }
 
 void waxpby(const CG_UINT n,

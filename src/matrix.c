@@ -44,7 +44,7 @@ static inline int compareDescSCS(const void* a, const void* b) {
   return 0;  // Stable if equal
 }
 
-void dumpSCSMatrixToFile(SellCSigmaMatrix* m, FILE* file){
+void dumpSCSMatrixToFile(Matrix* m, FILE* file){
   fprintf(file, "m->startRow = %d\n", m->startRow);
   fprintf(file, "m->stopRow = %d\n", m->stopRow);
   fprintf(file, "m->totalNr = %d\n", m->totalNr);
@@ -52,7 +52,7 @@ void dumpSCSMatrixToFile(SellCSigmaMatrix* m, FILE* file){
   fprintf(file, "m->nr = %d\n", m->nr);      
   fprintf(file, "m->nc = %d\n", m->nc);      
   fprintf(file, "m->nnz = %d\n", m->nnz);    
-  fprintf(file, "m->c = %d\n", m->c);       
+  fprintf(file, "m->C = %d\n", m->C);       
   fprintf(file, "m->sigma = %d\n", m->sigma);   
   fprintf(file, "m->nChunks = %d\n", m->nChunks); 
   fprintf(file, "m->nrPadded = %d\n", m->nrPadded);
@@ -95,7 +95,7 @@ void dumpSCSMatrixToFile(SellCSigmaMatrix* m, FILE* file){
 }
 
 // This version just goes to stdout
-void dumpSCSMatrix(SellCSigmaMatrix* m)
+void dumpSCSMatrix(Matrix* m)
 {
   printf("m->startRow = %d\n", m->startRow);
   printf("m->stopRow = %d\n", m->stopRow);
@@ -104,7 +104,7 @@ void dumpSCSMatrix(SellCSigmaMatrix* m)
   printf("m->nr = %d\n", m->nr);      
   printf("m->nc = %d\n", m->nc);      
   printf("m->nnz = %d\n", m->nnz);    
-  printf("m->c = %d\n", m->c);       
+  printf("m->C = %d\n", m->C);       
   printf("m->sigma = %d\n", m->sigma);   
   printf("m->nChunks = %d\n", m->nChunks); 
   printf("m->nrPadded = %d\n", m->nrPadded);
@@ -402,7 +402,7 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
   }
 }
 
-void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int c, int sigma, int rank, int size)
+void matrixConvertMMtoSCS(MmMatrix* mm, Matrix* m, int rank, int size)
 {
   m->startRow = mm->startRow;
   m->stopRow  = mm->stopRow;
@@ -411,10 +411,8 @@ void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int c, int sigma, i
   m->nr       = mm->nr;
   m->nc       = mm->nr;
   m->nnz      = mm->nnz;
-  m->c        = c;  // Just take as function arg for now
-  m->sigma    = sigma;  // Just take as function arg for now
-  m->nChunks  = (m->nr + m->c - 1) / m->c;
-  m->nrPadded = m->nChunks * m->c;
+  m->nChunks  = (m->nr + m->C - 1) / m->C;
+  m->nrPadded = m->nChunks * m->C;
 
   // (Temporary array) Assign an index to each row to use for row sorting
   SellCSigmaPair* elemsPerRow = (SellCSigmaPair*)allocate(ARRAY_ALIGNMENT, m->nrPadded * sizeof(SellCSigmaPair));
@@ -453,33 +451,33 @@ void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int c, int sigma, i
 
   for(int i = 0; i < m->nChunks; ++i){
     // Note sure about this yet
-    // int chunkStart = elemsPerRow[i * m->c].count;
-    // int chunkStop = ((i * m->c + m->c) < m->nrPadded) 
-    //               ? elemsPerRow[i * m->c + m->c].count
+    // int chunkStart = elemsPerRow[i * m->C].count;
+    // int chunkStop = ((i * m->C + m->C) < m->nrPadded) 
+    //               ? elemsPerRow[i * m->C + m->C].count
     //               : elemsPerRow[m->nrPadded - 1].count;
-    SellCSigmaPair chunkStart = elemsPerRow[i * m->c];
-    SellCSigmaPair chunkStop = (i * m->c + m->c) < (m->nrPadded - 1) 
-                             ? elemsPerRow[i * m->c + m->c]
+    SellCSigmaPair chunkStart = elemsPerRow[i * m->C];
+    SellCSigmaPair chunkStop = (i * m->C + m->C) < (m->nrPadded - 1) 
+                             ? elemsPerRow[i * m->C + m->C]
                              : elemsPerRow[m->nrPadded - 1];
 
     int size = chunkStop.index - chunkStart.index; 
 
     // Collect longest row in chunk as chunk length
     CG_UINT maxLength = 0;
-    for(int j = 0; j < m->c; ++j){
-      CG_UINT rowLenth = elemsPerRow[i * m->c + j].count;
+    for(int j = 0; j < m->C; ++j){
+      CG_UINT rowLenth = elemsPerRow[i * m->C + j].count;
       if(rowLenth > maxLength) maxLength = rowLenth;
     }
 
     // Collect chunk data to arrays
     m->chunkLens[i] = maxLength;
     m->chunkPtr[i] = currentChunkPtr;
-    currentChunkPtr += m->chunkLens[i] * m->c;
+    currentChunkPtr += m->chunkLens[i] * m->C;
   }
 
   // Account for final chunk
   m->nElems = m->chunkPtr[m->nChunks - 1] + \
-    m->chunkLens[m->nChunks - 1] * m->c;
+    m->chunkLens[m->nChunks - 1] * m->C;
 
   m->chunkPtr[m->nChunks] = m->nElems;
 
@@ -518,10 +516,10 @@ void matrixConvertMMtoSCS(MmMatrix* mm, SellCSigmaMatrix* m, int c, int sigma, i
 
     int rowOld = e.row;
     int row = m->oldToNewPerm[rowOld];
-    int chunkIdx = row / m->c;
+    int chunkIdx = row / m->C;
     int chunkStart = m->chunkPtr[chunkIdx];
-    int chunkRow = row % m->c;
-    int idx = chunkStart + rowLocalElemCount[row] * m->c + chunkRow;
+    int chunkRow = row % m->C;
+    int idx = chunkStart + rowLocalElemCount[row] * m->C + chunkRow;
     m->colInd[idx] = e.col;
 #ifdef VERBOSE
     // Sanity check for common error
