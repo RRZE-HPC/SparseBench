@@ -5,10 +5,11 @@ m->totalNnz = 18
 m->nr = 10
 m->nc = 10
 m->nnz = 18
-m->c = 1
+m->C = 1
 m->sigma = 1
 m->nChunks = 10
 m->nrPadded = 10
+m->nElems = 18
 oldToNewPerm: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
 newToOldPerm: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 
 chunkLens: 3, 1, 3, 1, 1, 3, 1, 3, 1, 1, 

@@ -18,10 +18,22 @@
 	strcat((path), (sigma_str));                                  \
 	strcat((path), (expect));              												\
 
-	typedef struct {
-		int C;
-		int sigma;
-	} Args;
+#define FORMAT_AND_STRIP(A, entry, c_str, sigma_str)	\
+{                                                     \
+	sprintf((c_str), "%d", (A).C);                      \
+	sprintf((sigma_str), "%d", (A).sigma);              \
+	char *dot = strrchr((entry)->d_name, '.');          \
+	if (dot != NULL) {                                  \
+		*dot = '\0';                                      \
+	}                                                   \
+}
+
+#define STR_LEN 1024
+
+typedef struct {
+	int C;
+	int sigma;
+} Args;
 
 int test_convertSCS(void* args, char* dataDir){
 
@@ -29,7 +41,10 @@ int test_convertSCS(void* args, char* dataDir){
 	int size = 1;
 
 	// Open the directory
-	DIR *dir = opendir( strcat(dataDir, "testMatrices/") );
+	char *pathToMatrices = malloc(strlen(dataDir) + strlen("testMatrices/") + 1);
+	strcpy(pathToMatrices, dataDir);	
+	strcat(pathToMatrices, "testMatrices/");
+	DIR *dir = opendir( pathToMatrices );
 	if (dir == NULL) {
 			perror("Error opening directory");
 			return 1;
@@ -39,54 +54,62 @@ int test_convertSCS(void* args, char* dataDir){
 	struct dirent *entry;
 	while ((entry = readdir(dir)) != NULL) {
 		if (strstr(entry->d_name, ".mtx") != NULL){
-			char *pathToMatrix = malloc(strlen(dataDir) + strlen(entry->d_name) + 1); // +1 for the null terminator
-			strcpy(pathToMatrix, dataDir);	
+			char *pathToMatrix = malloc(strlen(pathToMatrices) + strlen(entry->d_name) + 1);
+			strcpy(pathToMatrix, pathToMatrices);	
 			strcat(pathToMatrix, entry->d_name);
 
-			MmMatrix m;
-			matrixRead( &m, pathToMatrix );
-
-			// Set single rank defaults for MmMatrix
-			m.startRow = 0;
-			m.stopRow = m.nr;
-			m.totalNr = m.nr;
-			m.totalNnz = m.nnz;
-		
 			Matrix A;
 			Args* arguments = (Args*)args;
 			A.C = arguments->C;
 			A.sigma = arguments->sigma;
-			matrixConvertMMtoSCS(&m, &A, rank, size);
 
 			// String preprocessing
-			char c_str[20];                           
-			sprintf(c_str, "%d", (A.C));                
-			char sigma_str[20];                       
-			sprintf(sigma_str, "%d", (A.sigma));        
-			char *dot = strrchr((entry)->d_name, '.');
-			if (dot != NULL) {                        
-					*dot = '\0';                          
-			}       
+			char c_str[STR_LEN];                           
+			char sigma_str[STR_LEN];
+			FORMAT_AND_STRIP(A, entry, c_str, sigma_str)
 
-			// Dump to this external file
-			char *pathToReportedData = malloc(100);
-			BUILD_PATH(entry, "reported/", ".out", c_str, sigma_str, pathToReportedData);
-			FILE *reportedData = fopen(pathToReportedData, "w");
-			dumpSCSMatrixToFile(&A, reportedData);
-			fclose(reportedData);
-
-			// Check against this external file
-			char *pathToExpectedData = malloc(100);
+			// This is the external file to check against
+			char *pathToExpectedData = malloc(STR_LEN);
 			BUILD_PATH(entry, "expected/", ".in", c_str, sigma_str, pathToExpectedData);
 
-			// Validate against expected data
-			if(diff_files(pathToExpectedData, pathToReportedData)) return 1;
+			// Validate against expected data, if it exists
+			if(fopen(pathToExpectedData, "r")){
 
+				MmMatrix m;
+				matrixRead( &m, pathToMatrix );
+
+				// Set single rank defaults for MmMatrix
+				m.startRow = 0;
+				m.stopRow = m.nr;
+				m.totalNr = m.nr;
+				m.totalNnz = m.nnz;
+			
+				matrixConvertMMtoSCS(&m, &A, rank, size);
+
+				// Dump to this external file
+				char *pathToReportedData = malloc(STR_LEN);
+				BUILD_PATH(entry, "reported/", ".out", c_str, sigma_str, pathToReportedData);
+				FILE *reportedData = fopen(pathToReportedData, "w");
+				dumpSCSMatrixToFile(&A, reportedData);
+				fclose(reportedData);
+			
+				// If the expect and reported data differ in some way
+				if(diff_files(pathToExpectedData, pathToReportedData)){
+					free(pathToReportedData);
+					free(pathToExpectedData);
+					free(pathToMatrix);
+
+					closedir(dir);
+					return 1;
+				} 
+			}
+
+			free(pathToExpectedData);
 			free(pathToMatrix);
 		}
 	}
 
-	// Close the directory
+	free(pathToMatrices);
 	closedir(dir);
 
 	return 0;

@@ -56,6 +56,7 @@ void dumpSCSMatrixToFile(Matrix* m, FILE* file){
   fprintf(file, "m->sigma = %d\n", m->sigma);   
   fprintf(file, "m->nChunks = %d\n", m->nChunks); 
   fprintf(file, "m->nrPadded = %d\n", m->nrPadded);
+  fprintf(file, "m->nElems = %d\n", m->nElems);
 
   // Dump permutation arrays
   fprintf(file, "oldToNewPerm: ");
@@ -470,8 +471,8 @@ void matrixConvertMMtoSCS(MmMatrix* mm, Matrix* m, int rank, int size)
     }
 
     // Collect chunk data to arrays
-    m->chunkLens[i] = maxLength;
-    m->chunkPtr[i] = currentChunkPtr;
+    m->chunkLens[i] = (CG_UINT)maxLength;
+    m->chunkPtr[i] = (CG_UINT)currentChunkPtr;
     currentChunkPtr += m->chunkLens[i] * m->C;
   }
 
@@ -479,13 +480,13 @@ void matrixConvertMMtoSCS(MmMatrix* mm, Matrix* m, int rank, int size)
   m->nElems = m->chunkPtr[m->nChunks - 1] + \
     m->chunkLens[m->nChunks - 1] * m->C;
 
-  m->chunkPtr[m->nChunks] = m->nElems;
+  m->chunkPtr[m->nChunks] = (CG_UINT)m->nElems;
 
   // Construct permutation vector
   m->oldToNewPerm = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(CG_UINT));
   for(int i = 0; i < m->nrPadded; ++i){
     CG_UINT oldRow = elemsPerRow[i].index;
-    if(oldRow < m->nr) m->oldToNewPerm[oldRow] = i;
+    if(oldRow < m->nr) m->oldToNewPerm[oldRow] = (CG_UINT)i;
   }
 
   // Construct inverse permutation vector
@@ -498,12 +499,20 @@ void matrixConvertMMtoSCS(MmMatrix* mm, Matrix* m, int rank, int size)
         " is out of bounds (>%d).\n", i, m->oldToNewPerm[i], m->nr);
     }
 #endif
-    m->newToOldPerm[m->oldToNewPerm[i]] = i;
+    m->newToOldPerm[m->oldToNewPerm[i]] = (CG_UINT)i;
   }
 
   // Now that chunk data is collected, fill with matrix data
   m->colInd = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(CG_UINT));
   m->val = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(CG_FLOAT));
+
+  // Initialize defaults (essential for padded elements)
+  for(int i = 0; i < m->nElems; ++i){
+    m->val[i] = (CG_FLOAT)0.0;
+    m->colInd[i] = (CG_UINT)0;
+    // TODO: may need to offset when used with MPI
+    // m->colInd[i] = padded_val; 
+  }
 
   // (Temporary array) Keep track of how many elements we've seen in each row
   int* rowLocalElemCount = (int*)allocate(ARRAY_ALIGNMENT, m->nrPadded * sizeof(int));
@@ -520,7 +529,7 @@ void matrixConvertMMtoSCS(MmMatrix* mm, Matrix* m, int rank, int size)
     int chunkStart = m->chunkPtr[chunkIdx];
     int chunkRow = row % m->C;
     int idx = chunkStart + rowLocalElemCount[row] * m->C + chunkRow;
-    m->colInd[idx] = e.col;
+    m->colInd[idx] = (CG_UINT)e.col;
 #ifdef VERBOSE
     // Sanity check for common error
     if(m->colInd[idx] >= m->nc){
@@ -528,7 +537,7 @@ void matrixConvertMMtoSCS(MmMatrix* mm, Matrix* m, int rank, int size)
         " is out of bounds (>%d).\n", idx, m->colInd[idx], m->nc);
     }
 #endif
-    m->val[idx] = e.val;
+    m->val[idx] = (CG_FLOAT)e.val;
     ++rowLocalElemCount[row];
   }
 

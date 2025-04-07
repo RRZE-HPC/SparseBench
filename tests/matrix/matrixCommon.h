@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
-int diff_files(const char *file1, const char *file2) {
-	FILE *f1 = fopen(file1, "r");
-	FILE *f2 = fopen(file2, "r");
+int diff_files(const char *expectedData, const char *reportedData) {
+	FILE *f1 = fopen(expectedData, "r");
+	FILE *f2 = fopen(reportedData, "r");
 
 	if (f1 == NULL || f2 == NULL) {
 			perror("Error opening file");
@@ -20,8 +20,8 @@ int diff_files(const char *file1, const char *file2) {
 	while (fgets(line1, sizeof(line1), f1) != NULL && fgets(line2, sizeof(line2), f2) != NULL) {
 			if (strcmp(line1, line2) != 0) {  // If the lines are different
 					printf("Files differ at line %d:\n", line_number);
-					printf("File 1 (%s): %s", file1, line1);
-					printf("File 2 (%s): %s", file2, line2);
+					printf("File 1 (%s): %s", expectedData, line1);
+					printf("File 2 (%s): %s", reportedData, line2);
 					fclose(f1);
 					fclose(f2);
 					return 1;  // Return 1 as soon as a difference is found
@@ -33,15 +33,15 @@ int diff_files(const char *file1, const char *file2) {
 	if (fgets(line1, sizeof(line1), f1) != NULL || fgets(line2, sizeof(line2), f2) != NULL) {
 			printf("Files differ at line %d:\n", line_number);
 			if (fgets(line1, sizeof(line1), f1) != NULL) {
-					printf("File 1 (%s): %s", file1, line1);
+					printf("File 1 (%s): %s", expectedData, line1);
 			} else {
-					printf("File 1 (%s): (no more lines)\n", file1);
+					printf("File 1 (%s): (no more lines)\n", expectedData);
 			}
 
 			if (fgets(line2, sizeof(line2), f2) != NULL) {
-					printf("File 2 (%s): %s", file2, line2);
+					printf("File 2 (%s): %s", reportedData, line2);
 			} else {
-					printf("File 2 (%s): (no more lines)\n", file2);
+					printf("File 2 (%s): (no more lines)\n", reportedData);
 			}
 
 			fclose(f1);

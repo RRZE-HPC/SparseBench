@@ -40,9 +40,10 @@ int matrixTests(int argc, char** argv){
 	// const char *dataDir = argv[1];
 
 	Test tests[] = {
-		{ "convertSell-1-1", test_convertSCS }
-		// { "convertSell-1-2", test_convertSCS }
-		// Add more here
+		{ "convertSell-1-1", test_convertSCS },
+		{ "convertSell-2-1", test_convertSCS },
+		{ "convertSell-4-1", test_convertSCS }
+		// Add more here...
 	};
 
 	int num_tests = sizeof(tests) / sizeof(tests[0]);
@@ -57,8 +58,10 @@ int matrixTests(int argc, char** argv){
 		}
 	}
 
-	// Manually assign configurations
+	// Manually assign one configuration per test
 	SET_ARGS(0, 1, 1);
+	SET_ARGS(1, 2, 1);
+	SET_ARGS(2, 4, 1);
 
 	printf("Running %d tests:\n", num_tests);
 	for (int i = 0; i < num_tests; ++i) {

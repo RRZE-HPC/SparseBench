@@ -79,8 +79,8 @@ void initSolver(Solver* s, Comm* c, Parameter* p, char* matrixFormat)
     }
     else if(IS_EQUAL(matrixFormat, "SCS")){
       // DL: For testing
-      s->A.C = 1;
-      s->A.sigma = 1;
+      s->A.C = (CG_UINT)1;
+      s->A.sigma = (CG_UINT)1;
       matrixConvertMMtoSCS(&mLocal, &s->A, c->rank, c->size);
     }
     s->A.matrixFormat = matrixFormat;
