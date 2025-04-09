@@ -44,6 +44,13 @@ static inline int compareDescSCS(const void* a, const void* b) {
   return 0;  // Stable if equal
 }
 
+void dumpVectorToFile(CG_FLOAT* vec, int size, FILE* file){
+  fprintf(file, "vec = ");
+  for(int i = 0; i < size; ++i){
+    fprintf(file, "%f, ", vec[i]);
+  }
+}
+
 void dumpSCSMatrixToFile(Matrix* m, FILE* file){
   fprintf(file, "m->startRow = %d\n", m->startRow);
   fprintf(file, "m->stopRow = %d\n", m->stopRow);
@@ -354,7 +361,7 @@ void matrixRead(MmMatrix* m, char* filename)
 // sort by row requires a stable sort. As glibc qsort is mergesort this
 // hopefully works.
 #ifdef __linux__
-  qsort(m->entries, m->count, sizeof(Entry), compareColumn);
+  qsort(m->entries, m->count, sizeof(Entry), compareRow);
 #else
   // BSD has a dedicated mergesort available in its libc
   mergesort(m->entries, m->count, sizeof(Entry), compareRow);

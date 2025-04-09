@@ -1,5 +1,4 @@
-
-#include "convertSCS.h"
+#include "spmvSCS.h"
 #include "../common.h"
 
 #include <stdio.h>
@@ -7,7 +6,7 @@
 #include <dirent.h>
 #include <string.h>
 
-int matrixTests(int argc, char** argv){
+int solverTests(int argc, char** argv){
 	// Hard-code data directory
 	char* dataDir = malloc(6);
 	if (dataDir) strcpy(dataDir, "data/");
@@ -23,9 +22,10 @@ int matrixTests(int argc, char** argv){
 	// const char *dataDir = argv[1];
 
 	Test tests[] = {
-		{ "convertSell-1-1", test_convertSCS },	// Test 1
-		{ "convertSell-2-1", test_convertSCS },	// Test 2
-		{ "convertSell-4-1", test_convertSCS }	// Test 3
+		{ "SpMV CRS", test_spmvSCS }, 			// Test 1
+		{ "SpMV Sell-1-1", test_spmvSCS }, 	// Test 2
+		{ "SpMV Sell-2-1", test_spmvSCS }, 	// Test 3
+		{ "SpMV Sell-4-1", test_spmvSCS } 	// Test 4
 		// Add more here...
 	};
 
@@ -42,11 +42,12 @@ int matrixTests(int argc, char** argv){
 	}
 
 	// Manually assign one configuration per test
-	SET_ARGS(0, 1, 1);	// Test 1
-	SET_ARGS(1, 2, 1);	// Test 2
-	SET_ARGS(2, 4, 1);	// Test 3
+	SET_ARGS(0, 0, 0);	// Test 1
+	SET_ARGS(1, 1, 1);	// Test 2
+	SET_ARGS(2, 2, 1);	// Test 3
+	SET_ARGS(3, 4, 1);	// Test 4
 
-	printf("Running %d Matrix tests:\n", num_tests);
+	printf("Running %d Solver tests:\n", num_tests);
 	for (int i = 0; i < num_tests; ++i) {
 			printf("[%-2d/%-2d] %-20s ... \n", i+1, num_tests, tests[i].name);
 			fflush(stdout);
@@ -59,7 +60,7 @@ int matrixTests(int argc, char** argv){
 			}
 	}
 
-	printf("\nSummary: %d/%d Matrix tests passed.\n", passed, num_tests);
+	printf("\nSummary: %d/%d Solver tests passed.\n", passed, num_tests);
 
 	free(dataDir);
 	free(args);

@@ -66,6 +66,7 @@ typedef struct {
 extern void dumpMMMatrix(MmMatrix* m);
 extern void dumpSCSMatrix(Matrix* m);
 extern void dumpSCSMatrixToFile(Matrix* m, FILE* file);
+extern void dumpVectorToFile(CG_FLOAT* y, int size, FILE* file);
 extern void matrixRead(MmMatrix* m, char* filename);
 extern void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size);
 extern void matrixConvertMMtoSCS(MmMatrix* mm, Matrix* m, int rank, int size);

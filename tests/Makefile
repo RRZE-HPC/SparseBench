@@ -8,40 +8,48 @@ BUILD_DIR=../build
 TC_DIR=${BUILD_DIR}/$(TOOLCHAIN)
 
 # List of test modules
-MODULE1=matrix
+MOD1=matrix
+MOD2=solver
 
-# SparseBench object files to link
-LINKS=${TC_DIR}/allocate.o ${TC_DIR}/mmio.o ${TC_DIR}/matrix.o
+# Link against all SparseBench object files
+LINKS := $(filter-out ${TC_DIR}/main.o, $(wildcard ${TC_DIR}/*.o))
 
 # Target executable
 TARGET=runTests
 
 # Collect objects from all test modules
-TEST_OBJECTS=${MODULE1}/convertSCS.o ${MODULE1}/matrixTests.o
+MOD1_OBJECTS=${MOD1}/convertSCS.o ${MOD1}/matrixTests.o
+MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/solverTests.o
+OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
 # Always leave debugging flag on
-CFLAGS=-g
+CFLAGS=-g -qopenmp
 
 .PHONY: all clean
 
-# All target - create the runTests executable
 all: $(TARGET)
 
+clean:
+	rm -f $(TARGET) $(OBJECTS) runTests.o
+
 # Link the object files to create the executable
-$(TARGET): runTests.o $(TEST_OBJECTS) ${LINKS}
-	$(CC) $(CFLAGS) -o $@ runTests.o $(TEST_OBJECTS) ${LINKS}
+$(TARGET): runTests.o $(OBJECTS) ${LINKS}
+	$(CC) $(CFLAGS) -o $@ runTests.o $(OBJECTS) ${LINKS}
 
 # Compile runTests.c into an object file
 runTests.o: runTests.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# MODULE1 tests
-$(MODULE1)/matrixTests.o: $(MODULE1)/matrixTests.c 
+# Module 1 tests: matrix
+$(MOD1)/matrixTests.o: $(MOD1)/matrixTests.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MODULE1)/convertSCS.o: $(MODULE1)/convertSCS.c
+$(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-# Clean target to remove generated files
-clean:
-	rm -f $(TARGET) $(TEST_OBJECTS) runTests.o
+# Module 2 tests: solver
+$(MOD2)/solverTests.o: $(MOD2)/solverTests.c 
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c
+	$(CC) $(CFLAGS) -c -o $@ $<
