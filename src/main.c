@@ -40,15 +40,20 @@ int main(int argc, char** argv)
   commPrintBanner(&comm);
 
   // DL: For testing. Options are CRS or SCS
-  char* matrixFormat = (char*)malloc(4*sizeof(char)); strcpy(matrixFormat, "CRS");
+  char* matrixFormat = (char*)malloc(4*sizeof(char)); strcpy(matrixFormat, "SCS");
   VALIDATE_MATRIX_FORMAT(matrixFormat);
+  s.A.C = (CG_UINT)1;
+  s.A.sigma = (CG_UINT)1;
+  // ^ Ugly, but easiest way for now.
 
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
   initSolver(&s, &comm, &param, matrixFormat);
   profilerInit();
   commPartition(&comm, &s.A);
+#ifdef VERBOSE
   commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
+#endif
   // commMatrixDump(&comm, &s.A);
   // commFinalize(&comm);
   // return EXIT_SUCCESS;
