@@ -180,6 +180,13 @@ void commPrintBanner(Comm* c)
     if (commIsMaster(c)) {
       printf(BANNER "\n");
       printf("MPI parallel using %d ranks\n", c->size);
+#ifdef _OPENMP
+#pragma omp parallel
+      {
+#pragma omp single
+        printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
+      }
+#endif
     }
     commBarrier();
     for (int i = 0; i < size; i++) {
@@ -189,14 +196,11 @@ void commPrintBanner(Comm* c)
             host,
             master_pid);
       }
+
+#ifdef VERBOSE_AFFINITY
 #ifdef _OPENMP
 #pragma omp parallel
       {
-#pragma omp single
-        printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
-#pragma omp barrier
-
-#ifdef VERBOSE_AFFINITY
 #pragma omp critical
         {
           printf("Rank %d Thread %d running on Node %s core %d with pid %d "
@@ -413,7 +417,9 @@ void commPartition(Comm* c, Matrix* A)
     }
   }
 
+#ifdef VERBOSE
   printf("Rank %d: %d externals\n", c->rank, externalCount);
+#endif
 
   /***********************************************************************
    *    Step 2:  Build dist Graph topology and init neigbors
@@ -494,11 +500,13 @@ void commPartition(Comm* c, Matrix* A)
         &c->outdegree,
         &weighted);
 
+#ifdef VERBOSE
     printf("Rank %d: In %d Out %d Weighted %d\n",
         rank,
         c->indegree,
         c->outdegree,
         weighted);
+#endif
 
     c->sources      = (int*)malloc(c->indegree * sizeof(int));
     c->recvCounts   = (int*)malloc(c->indegree * sizeof(int));
@@ -717,9 +725,11 @@ void commInit(Comm* c, int argc, char** argv)
   c->rank = 0;
   c->size = 1;
 #endif
+#ifdef VERBOSE
   char filename[30];
   sprintf(filename, "out-%d.txt", c->rank);
   c->logFile = fopen(filename, "w");
+#endif
 }
 
 void commFinalize(Comm* c)
@@ -736,5 +746,7 @@ void commFinalize(Comm* c)
   MPI_Finalize();
 #endif
 
+#ifdef VERBOSE
   fclose(c->logFile);
+#endif
 }
