@@ -233,7 +233,7 @@ void matrixRead(MmMatrix* m, char* filename)
 // sort by row requires a stable sort. As glibc qsort is mergesort this
 // hopefully works.
 #ifdef __linux__
-  qsort(m->entries, m->count, sizeof(Entry), compareColumn);
+  qsort(m->entries, m->count, sizeof(Entry), compareRow);
 #else
   // BSD has a dedicated mergesort available in its libc
   mergesort(m->entries, m->count, sizeof(Entry), compareRow);
