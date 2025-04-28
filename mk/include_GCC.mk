@@ -2,7 +2,7 @@ ifeq ($(strip $(ENABLE_MPI)),true)
 CC = mpicc
 DEFINES = -D_MPI
 else
-CC = clang
+CC = gcc
 endif
 
 LD = $(CC)
@@ -16,4 +16,4 @@ CFLAGS   = -Ofast -ffreestanding -std=c99 $(OPENMP)
 LFLAGS   = $(OPENMP)
 DEFINES  += -D_GNU_SOURCE
 INCLUDES =
-LIBS     =
+LIBS     = -lm
