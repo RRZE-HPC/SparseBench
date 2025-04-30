@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "allocate.h"
 #include "comm.h"
@@ -15,6 +16,7 @@
 #include "solver.h"
 #include "timing.h"
 #include "util.h"
+#include "debugger.h"
 
 int main(int argc, char** argv)
 {
@@ -37,12 +39,21 @@ int main(int argc, char** argv)
   readParameter(&param, argv[1]);
   commPrintBanner(&comm);
 
+  // DL: For testing. Options are CRS or SCS
+  char* matrixFormat = (char*)malloc(4*sizeof(char)); strcpy(matrixFormat, "SCS");
+  VALIDATE_MATRIX_FORMAT(matrixFormat);
+  s.A.C = (CG_UINT)1;
+  s.A.sigma = (CG_UINT)1;
+  // ^ Ugly, but easiest way for now.
+
   CG_FLOAT eps = (CG_FLOAT)param.eps;
   int itermax  = param.itermax;
-  initSolver(&s, &comm, &param);
+  initSolver(&s, &comm, &param, matrixFormat);
   profilerInit();
   commPartition(&comm, &s.A);
+#ifdef VERBOSE
   commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
+#endif
   // commMatrixDump(&comm, &s.A);
   // commFinalize(&comm);
   // return EXIT_SUCCESS;
@@ -50,8 +61,17 @@ int main(int argc, char** argv)
   CG_UINT nrow = s.A.nr;
   CG_UINT ncol = s.A.nc;
   CG_FLOAT* r  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT* p  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, ncol * sizeof(CG_FLOAT));
-  CG_FLOAT* Ap = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  CG_FLOAT* p;
+  CG_FLOAT* Ap;
+  if(IS_EQUAL(matrixFormat, "CRS")){
+    p  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, ncol * sizeof(CG_FLOAT));
+    Ap = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  }
+  else if(IS_EQUAL(matrixFormat, "SCS")){
+    p = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, s.A.nrPadded * sizeof(CG_FLOAT));
+    Ap = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, s.A.nrPadded * sizeof(CG_FLOAT));
+  }
+
   CG_FLOAT normr  = 0.0;
   CG_FLOAT rtrans = 0.0, oldrtrans = 0.0;
 
@@ -111,5 +131,9 @@ int main(int argc, char** argv)
   solverCheckResidual(&s, &comm);
   profilerFinalize();
   commFinalize(&comm);
+
+  // DL: For testing
+  free(matrixFormat);
+
   return EXIT_SUCCESS;
 }

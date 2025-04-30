@@ -16,7 +16,7 @@ typedef struct {
   CG_FLOAT* xexact;
 } Solver;
 
-extern void initSolver(Solver* s, Comm* c, Parameter*);
+extern void initSolver(Solver* s, Comm* c, Parameter*, char* matrxFormat);
 extern void solverCheckResidual(Solver* s, Comm* c);
 extern void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y);
 
