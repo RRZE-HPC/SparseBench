@@ -4,9 +4,8 @@
  * license that can be found in the LICENSE file. */
 #ifndef __MATRIXBINFILE_H_
 #define __MATRIXBINFILE_H_
-#include "Comm.h"
-#include "Matrix.h"
-#include "util.h"
+#include "comm.h"
+#include "matrix.h"
 
 // Matrix binary file format:
 // All ints are unsigned 32bit ints. All floats are float16 or float32.

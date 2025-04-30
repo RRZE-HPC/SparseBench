@@ -4,7 +4,7 @@
 # license that can be found in the LICENSE file.
 
 #CONFIGURE BUILD SYSTEM
-TARGET	   = cgBench-$(TOOLCHAIN)
+TARGET	   = sparseBench-$(TOOLCHAIN)
 BUILD_DIR  = ./build/$(TOOLCHAIN)
 SRC_DIR    = ./src
 MAKE_DIR   = ./mk
