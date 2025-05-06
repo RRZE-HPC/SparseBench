@@ -36,7 +36,7 @@ static int sizeOfRank(int rank, int size, int N) {
   return N / size + ((N % size > rank) ? 1 : 0);
 }
 
-static void buildIndexMapping(Comm *c, Matrix *A, Bstree *externals,
+static void buildIndexMapping(Comm *c, GMatrix *A, Bstree *externals,
                               int *externalIndex, int *externalsReordered,
                               int *externalRank) {
   int externalCount = c->externalCount;
@@ -83,19 +83,19 @@ static void buildIndexMapping(Comm *c, Matrix *A, Bstree *externals,
 
   // map column ids in the matrix to the new local index
   CG_UINT *rowPtr = A->rowPtr;
-  CG_UINT *colInd = A->colInd;
+  Entry *entries = A->entries;
   CG_UINT numRows = A->nr;
   CG_UINT startRow = A->startRow;
   CG_UINT stopRow = A->stopRow;
 
   for (int i = 0; i < numRows; i++) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
-      CG_UINT curIndex = colInd[j];
+      CG_UINT curIndex = entries[j].col;
 
       if (startRow <= curIndex && curIndex <= stopRow) {
-        colInd[j] -= startRow;
+        entries[j].col -= startRow;
       } else {
-        colInd[j] = externalLocalIndex[bstFind(externals, curIndex)];
+        entries[j].col = externalLocalIndex[bstFind(externals, curIndex)];
       }
     }
   }
@@ -222,9 +222,9 @@ void commPrintBanner(Comm *c) {
   }
 }
 
-static void scanMM(MmMatrix *m, int startRow, int stopRow, int *entryCount,
+static void scanMM(MMMatrix *m, int startRow, int stopRow, int *entryCount,
                    int *entryOffset) {
-  Entry *e = m->entries;
+  MMEntry *e = m->entries;
   int in = 0;
 
   for (size_t i = 0; i < m->count; i++) {
@@ -243,7 +243,7 @@ static void scanMM(MmMatrix *m, int startRow, int stopRow, int *entryCount,
   }
 }
 
-void commDistributeMatrix(Comm *c, MmMatrix *m, MmMatrix *mLocal) {
+void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
 #ifdef _MPI
   int rank = c->rank;
   int size = c->size;
@@ -258,7 +258,7 @@ void commDistributeMatrix(Comm *c, MmMatrix *m, MmMatrix *mLocal) {
   int totalNr = totalCounts[0], totalNnz = totalCounts[1];
   MPI_Aint displ[2];
   {
-    Entry *dummy = m->entries;
+    MMEntry *dummy = m->entries;
     MPI_Aint base_address;
     MPI_Get_address(dummy, &base_address);
     MPI_Get_address(&(dummy->row), &displ[0]);
@@ -299,7 +299,7 @@ void commDistributeMatrix(Comm *c, MmMatrix *m, MmMatrix *mLocal) {
   mLocal->count = count;
   mLocal->totalNr = totalNr;
   mLocal->totalNnz = totalNnz;
-  mLocal->entries = (Entry *)allocate(ARRAY_ALIGNMENT, count * sizeof(Entry));
+  mLocal->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, count * sizeof(Entry));
 
   MPI_Scatterv(m->entries, sendcounts, senddispls, entryType, mLocal->entries,
                count, entryType, 0, MPI_COMM_WORLD);
@@ -320,7 +320,7 @@ void commDistributeMatrix(Comm *c, MmMatrix *m, MmMatrix *mLocal) {
 #endif /* ifdef _MPI */
 }
 
-void commPartition(Comm *c, Matrix *A) {
+void commPartition(Comm *c, GMatrix *A) {
 #ifdef _MPI
   int rank = c->rank;
   int size = c->size;
@@ -330,7 +330,7 @@ void commPartition(Comm *c, Matrix *A) {
   CG_UINT numRowsTotal = A->totalNr;
   CG_UINT numRows = A->nr;
   CG_UINT *rowPtr = A->rowPtr;
-  CG_UINT *colInd = A->colInd;
+  Entry *entries = A->entries;
 
 #ifdef VERBOSE
   fprintf(c->logFile, "Rank %d of %d owns %d rows: %d to %d\n", rank, size,
@@ -355,7 +355,7 @@ void commPartition(Comm *c, Matrix *A) {
 #endif
   for (int i = 0; i < numRows; i++) {
     for (CG_UINT j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
-      CG_UINT curIndex = A->colInd[j];
+      CG_UINT curIndex = entries[j].col;
 
       // convert local column references to local numbering
       if (curIndex < startRow || curIndex > stopRow) {
@@ -497,10 +497,10 @@ void commPartition(Comm *c, Matrix *A) {
 #endif
 }
 
-void commExchange(Comm *c, Matrix *A, CG_FLOAT *x) {
+void commExchange(Comm *c, CG_UINT numRows, CG_FLOAT *x) {
 #ifdef _MPI
   CG_FLOAT *sendBuffer = c->sendBuffer;
-  CG_FLOAT *externals = x + A->nr;
+  CG_FLOAT *externals = x + numRows;
   int *elementsToSend = c->elementsToSend;
 
 // Copy values for all ranks into send buffer
@@ -566,30 +566,12 @@ void commPrintConfig(Comm *c, int nr, int startRow, int stopRow) {
 #endif
 }
 
-void commMMMatrixDump(Comm *c, MmMatrix *m) {
-  int rank = c->rank;
-  int size = c->size;
-  CG_UINT numRows = m->nr;
-
-  for (int i = 0; i < size; i++) {
-    if (i == rank) {
-      printf("RANK %d with %lu entries %d nonzeros and %d rows\n", rank,
-             m->count, m->nnz, numRows);
-      dumpMMMatrix(m);
-    }
-#ifdef _MPI
-    MPI_Barrier(MPI_COMM_WORLD);
-#endif
-  }
-}
-
-void commMatrixDump(Comm *c, Matrix *m) {
+void commMatrixDump(Comm *c, GMatrix *m) {
   int rank = c->rank;
   int size = c->size;
   CG_UINT numRows = m->nr;
   CG_UINT *rowPtr = m->rowPtr;
-  CG_UINT *colInd = m->colInd;
-  CG_FLOAT *val = m->val;
+  Entry *entries = m->entries;
 
   if (commIsMaster(c)) {
     printf("Matrix: %d total non zeroes, total number of rows %d\n",
@@ -605,7 +587,7 @@ void commMatrixDump(Comm *c, Matrix *m) {
 
         for (int rowEntry = rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
              rowEntry++) {
-          printf("[%d]:%.2f ", colInd[rowEntry], val[rowEntry]);
+          printf("[%d]:%.2f ", entries[rowEntry].col, entries[rowEntry].val);
         }
 
         printf("\n");

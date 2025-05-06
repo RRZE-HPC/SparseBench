@@ -9,14 +9,8 @@
 #include "parameter.h"
 #include "util.h"
 
-typedef struct {
-  Matrix A;
-  CG_FLOAT* x;
-  CG_FLOAT* b;
-  CG_FLOAT* xexact;
-} Solver;
-
 extern void initSolver(Solver* s, Comm* c, Parameter*, char* matrxFormat);
+extern int solveCG(Parameter* param, Matrix* m);
 extern void solverCheckResidual(Solver* s, Comm* c);
 extern void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y);
 

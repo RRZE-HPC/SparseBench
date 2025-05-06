@@ -54,12 +54,11 @@ typedef struct {
 
 extern void commInit(Comm* c, int argc, char** argv);
 extern void commFinalize(Comm* c);
-extern void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal);
-extern void commPartition(Comm* c, Matrix* m);
+extern void commDistributeMatrix(Comm* c, MMMatrix* m, MMMatrix* mLocal);
+extern void commPartition(Comm* c, GMatrix* m);
 extern void commPrintConfig(Comm* c, int nr, int startRow, int stopRow);
-extern void commMMMatrixDump(Comm* c, MmMatrix* m);
-extern void commMatrixDump(Comm* c, Matrix* m);
-extern void commExchange(Comm* c, Matrix* A, double* x);
+extern void commMatrixDump(Comm* c, GMatrix* m);
+extern void commExchange(Comm* c, CG_UINT numRows, double* x);
 extern void commReduction(double* v, int op);
 extern void commPrintBanner(Comm* c);
 
