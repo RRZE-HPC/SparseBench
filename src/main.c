@@ -95,12 +95,11 @@ int main(int argc, char **argv) {
   profilerInit(factorFlops, factorWords);
   commPartition(&comm, &m);
 #ifdef VERBOSE
-  commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
+  commPrintConfig(&comm, m.nr, m.startRow, m.stopRow);
 #endif
 
   Matrix sm;
   convertMatrix(&sm, &m);
-
   int k = solveCG(&comm, &param, &sm);
   profilerPrint(&comm, k);
   // solverCheckResidual(&s, &comm);

@@ -149,6 +149,19 @@ static void buildElementsToSend(Comm *c, int startRow, int *externalRank,
   for (int i = 0; i < c->totalSendCount; i++) {
     elementsToSend[i] -= startRow;
   }
+
+#ifdef VERBOSE
+  for (int i = 0; i < c->size; i++) {
+    fprintf(c->logFile, "Rank %d: number of elements %d\n", c->rank,
+            c->totalSendCount);
+    for (int j = 0; j < c->totalSendCount; j++) {
+      if (i == c->rank) {
+        fprintf(c->logFile, "\t[%d]: %d\n", j, elementsToSend[j]);
+      }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+#endif
 }
 #endif
 
@@ -347,11 +360,8 @@ void commPartition(Comm *c, GMatrix *A) {
   /***********************************************************************
    *    Step 1: Identify externals and create lookup maps
    ************************************************************************/
-
   Bstree *externals;
   externals = bstNew();
-  // int* externals = (int*)allocate(ARRAY_ALIGNMENT, numRowsTotal *
-  // sizeof(int));
   int externalCount = 0; // local number of external indices
 
   int *externalIndex =
@@ -520,6 +530,17 @@ void commExchange(Comm *c, CG_UINT numRows, CG_FLOAT *x) {
                          externals, c->recvCounts, c->rdispls, MPI_FLOAT_TYPE,
                          c->communicator);
 
+#ifdef VERBOSE
+  // for (int i = 0; i < c->size; i++) {
+  //   if (i == c->rank) {
+  //     fprintf(c->logFile, "Rank %d of %d\n", c->rank, c->size);
+  //     for (int j = 0; j < c->externalCount; j++) {
+  //       fprintf(c->logFile, "\texternal[%d] %f\n", j, externals[j]);
+  //     }
+  //   }
+  //   MPI_Barrier(MPI_COMM_WORLD);
+  // }
+#endif
 #endif
 }
 
@@ -573,7 +594,54 @@ void commPrintConfig(Comm *c, int nr, int startRow, int stopRow) {
 #endif
 }
 
-void commMatrixDump(Comm *c, GMatrix *m) {
+void commMatrixDump(Comm *c, Matrix *m) {
+  int rank = c->rank;
+  int size = c->size;
+  CG_UINT numRows = m->nr;
+  CG_UINT *rowPtr = m->rowPtr;
+  CG_UINT *colInd = m->colInd;
+  CG_FLOAT *val = m->val;
+
+  if (commIsMaster(c)) {
+    printf("Matrix: %d total non zeroes, total number of rows %d\n",
+           m->totalNnz, m->totalNr);
+  }
+
+  for (int i = 0; i < size; i++) {
+    if (i == rank) {
+      printf("Rank %d: number of rows %d\n", rank, numRows);
+
+      for (int rowID = 0; rowID < numRows; rowID++) {
+        printf("Row [%d]: ", rowID);
+
+        for (int rowEntry = rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
+             rowEntry++) {
+          printf("[%d]:%.2f ", colInd[rowEntry], val[rowEntry]);
+        }
+
+        printf("\n");
+      }
+      fflush(stdout);
+    }
+#ifdef _MPI
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+  }
+}
+
+void commVectorDump(Comm *c, CG_FLOAT *v, CG_UINT size, char *name) {
+  for (int i = 0; i < c->size; i++) {
+    if (i == c->rank) {
+      fprintf(c->logFile, "Vector %s Rank %d of %d\n", name, c->rank, c->size);
+      for (int j = 0; j < size; j++) {
+        fprintf(c->logFile, "\telement[%d] %f\n", j, v[j]);
+      }
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+}
+
+void commGMatrixDump(Comm *c, GMatrix *m) {
   int rank = c->rank;
   int size = c->size;
   CG_UINT numRows = m->nr;

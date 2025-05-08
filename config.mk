@@ -2,7 +2,7 @@
 TOOLCHAIN ?= CLANG
 # Supported CRS, SCS, CCRS
 MTX_FMT ?= CRS
-ENABLE_MPI ?= false
+ENABLE_MPI ?= true
 ENABLE_OPENMP ?= false
 FLOAT_TYPE ?= DP # SP for float, DP for double
 UINT_TYPE ?= U # U for unsigned int, ULL for unsigned long long int

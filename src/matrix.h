@@ -56,7 +56,6 @@ extern void dumpGMatrix(GMatrix* m);
 extern void matrixGenerate(
     GMatrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil);
 
-extern void dumpMatrix(Matrix* m);
 extern void convertMatrix(Matrix* m, GMatrix* im);
 
 #endif // __MATRIX_H_

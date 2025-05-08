@@ -15,7 +15,7 @@ void convertMatrix(Matrix *sm, GMatrix *m) {
   sm->totalNr = m->totalNr;
   sm->totalNnz = m->totalNnz;
   sm->nr = m->nr;
-  sm->nc = m->nr;
+  sm->nc = m->nc;
   sm->nnz = m->nnz;
 
   sm->rowPtr =
