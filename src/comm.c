@@ -299,7 +299,8 @@ void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
   mLocal->count = count;
   mLocal->totalNr = totalNr;
   mLocal->totalNnz = totalNnz;
-  mLocal->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, count * sizeof(Entry));
+  mLocal->entries =
+      (MMEntry *)allocate(ARRAY_ALIGNMENT, count * sizeof(MMEntry));
 
   MPI_Scatterv(m->entries, sendcounts, senddispls, entryType, mLocal->entries,
                count, entryType, 0, MPI_COMM_WORLD);

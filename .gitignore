@@ -1,6 +1,6 @@
 /build
 .clangd
-cgBench-*
+/sparseBench-*
 
 # Prerequisites
 *.d

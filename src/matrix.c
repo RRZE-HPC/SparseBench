@@ -46,12 +46,11 @@ void matrixGenerate(GMatrix *m, Parameter *p, int rank, int size,
            (double)local_nnz);
   }
 
-  m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(CG_FLOAT));
+  m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(Entry));
   m->rowPtr =
       (CG_UINT *)allocate(ARRAY_ALIGNMENT, (local_nrow + 1) * sizeof(CG_UINT));
 
   CG_UINT *currowptr = m->rowPtr;
-
   CG_UINT nnzglobal = 0;
   int nx = p->nx, ny = p->ny, nz = p->nz;
   CG_UINT cursor = 0;
@@ -62,7 +61,6 @@ void matrixGenerate(GMatrix *m, Parameter *p, int rank, int size,
     for (int iy = 0; iy < ny; iy++) {
       for (int ix = 0; ix < nx; ix++) {
 
-        int curlocalrow = iz * nx * ny + iy * nx + ix;
         int currow = start_row + iz * nx * ny + iy * nx + ix;
         int nnzrow = 0;
 
@@ -172,9 +170,9 @@ void MMMatrixRead(MMMatrix *m, char *filename) {
   printf("Read matrix %s with %d non zeroes and %d rows\n", filename, nz, M);
 
   if (sym_flag) {
-    m->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, nz * 2 * sizeof(Entry));
+    m->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, nz * 2 * sizeof(MMEntry));
   } else {
-    m->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, nz * sizeof(Entry));
+    m->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, nz * sizeof(MMEntry));
   }
 
   size_t cursor = 0;
@@ -233,7 +231,7 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m) {
   m->nc = mm->nr;
   m->nnz = mm->nnz;
 
-  m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(CG_FLOAT));
+  m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
   m->rowPtr =
       (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
 
