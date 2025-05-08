@@ -5,13 +5,11 @@
 #ifndef __SOLVER_H_
 #define __SOLVER_H_
 #include "comm.h"
-#include "matrix.h"
 #include "parameter.h"
 #include "util.h"
 
-extern void initSolver(Solver* s, Comm* c, Parameter*, char* matrxFormat);
-extern int solveCG(Parameter* param, Matrix* m);
-extern void solverCheckResidual(Solver* s, Comm* c);
+extern int solveCG(Comm* comm, Parameter* param, Matrix* m);
+// extern void solverCheckResidual(Solver* s, Comm* c);
 extern void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y);
 
 extern void waxpby(const CG_UINT n,

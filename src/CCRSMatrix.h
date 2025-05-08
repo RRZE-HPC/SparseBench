@@ -2,17 +2,21 @@
  * All rights reserved. This file is part of CG-Bench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
-#ifndef __CRSMATRIX_H_
-#define __CRSMATRIX_H_
+#ifndef __CCRSMATRIX_H_
+#define __CCRSMATRIX_H_
 #include "util.h"
+
+typedef struct {
+  CG_UINT col;
+  CG_FLOAT val;
+} mEntry;
 
 typedef struct {
   CG_UINT nr, nc, nnz;       // number of rows, columns and non zeros
   CG_UINT totalNr, totalNnz; // number of total rows and non zeros
   CG_UINT startRow, stopRow; // range of rows owned by current rank
   CG_UINT* rowPtr;           // row Pointer
-  CG_UINT* colInd;           // colum Indices
-  CG_FLOAT* val;             // matrix entries
+  mEntry* entries;
 } Matrix;
 
-#endif // __CRSMATRIX_H_
+#endif // __CCRSMATRIX_H_

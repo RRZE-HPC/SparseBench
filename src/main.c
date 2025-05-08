@@ -2,6 +2,7 @@
  * All rights reserved. This file is part of CG-Bench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,9 +31,7 @@ static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
 }
 
 int main(int argc, char **argv) {
-  double timeStart, timeStop, ts;
   Parameter param;
-  Solver s;
   Comm comm;
 
   commInit(&comm, argc, argv);
@@ -51,21 +50,28 @@ int main(int argc, char **argv) {
 
   GMatrix m;
   initMatrix(&comm, &param, &m);
-  profilerInit();
+  size_t factorFlops[NUMREGIONS];
+  size_t factorWords[NUMREGIONS];
+  factorFlops[DDOT] = m.nr;
+  factorWords[DDOT] = sizeof(CG_FLOAT) * m.nr;
+  factorFlops[WAXPBY] = m.nr;
+  factorWords[WAXPBY] = sizeof(CG_FLOAT) * m.nr;
+  factorFlops[SPMVM] = m.nnz;
+  factorWords[SPMVM] = sizeof(CG_FLOAT) * m.nnz + sizeof(CG_UINT) * m.nnz;
+  profilerInit(factorFlops, factorWords);
   commPartition(&comm, &m);
 #ifdef VERBOSE
   commPrintConfig(&comm, s.A.nr, s.A.startRow, s.A.stopRow);
 #endif
 
   Matrix sm;
-  matrixConvert(&sm, &m);
+  convertMatrix(&sm, &m);
 
-  int k = solveCG(&param, &tm) {
+  int k = solveCG(&comm, &param, &sm);
+  profilerPrint(&comm, k);
+  // solverCheckResidual(&s, &comm);
+  profilerFinalize();
+  commFinalize(&comm);
 
-    profilerPrint(&comm, &s, k);
-    solverCheckResidual(&s, &comm);
-    profilerFinalize();
-    commFinalize(&comm);
-
-    return EXIT_SUCCESS;
-  }
+  return EXIT_SUCCESS;
+}

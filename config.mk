@@ -1,7 +1,9 @@
 # Supported: GCC, CLANG, ICC
-TOOLCHAIN ?= ICC
-ENABLE_MPI ?= true
-ENABLE_OPENMP ?= true
+TOOLCHAIN ?= CLANG
+# Supported CRS, SCS, CCRS
+MTX_FMT ?= CRS
+ENABLE_MPI ?= false
+ENABLE_OPENMP ?= false
 PRECISION ?= 2 # 1 for float, 2 for double
 
 #Feature options

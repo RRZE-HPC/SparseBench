@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#include "matrix.h"
 #include "util.h"
 
 typedef struct {
@@ -27,7 +26,9 @@ typedef struct {
   CG_UINT* newToOldPerm; // inverse permutations for rows (and cols)
 } Matrix;
 
-extern void dumpMatrix(Matrix* m);
-extern void matrixConvertfromSCS(Matrix* m, GMatrix* im, int rank, int size);
+typedef struct {
+  int index;
+  int count;
+} SellCSigmaPair;
 
 #endif // __SCSMATRIX_H_
