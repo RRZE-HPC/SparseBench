@@ -2,6 +2,7 @@
  * All rights reserved. This file is part of CG-Bench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
+#include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,16 +38,50 @@ int main(int argc, char **argv) {
   commInit(&comm, argc, argv);
   initParameter(&param);
 
-  if (argc != 2) {
-    if (commIsMaster(&comm)) {
-      printf("Usage: %s <configFile>\n", argv[0]);
+  char *cvalue = NULL;
+  int index;
+  int c;
+
+  opterr = 0;
+
+  while ((c = getopt(argc, argv, "f:x:y:z:i:e:")) != -1)
+    switch (c) {
+    case 'f':
+      readParameter(&param, optarg);
+      break;
+    case 'x':
+      param.nx = atoi(optarg);
+      break;
+    case 'y':
+      param.ny = atoi(optarg);
+      break;
+    case 'z':
+      param.nz = atoi(optarg);
+      break;
+    case 'i':
+      param.itermax = atoi(optarg);
+      break;
+    case 'e':
+      param.eps = atof(optarg);
+      break;
+    case '?':
+      if (optopt == 'c')
+        fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+      else if (isprint(optopt))
+        fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+      else
+        fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+      return 1;
+    default:
+      abort();
     }
-    commFinalize(&comm);
-    exit(EXIT_SUCCESS);
+
+  for (index = optind; index < argc; index++) {
+    printf("Non-option argument %s\n", argv[index]);
   }
 
-  readParameter(&param, argv[1]);
   commPrintBanner(&comm);
+  printf("Using %s matrix format\n\n", FMT);
 
   GMatrix m;
   initMatrix(&comm, &param, &m);

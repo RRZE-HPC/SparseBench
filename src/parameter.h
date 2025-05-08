@@ -15,4 +15,15 @@ typedef struct {
 void initParameter(Parameter*);
 void readParameter(Parameter*, const char*);
 void printParameter(Parameter*);
+
+#ifdef CRS
+#define FMT "CRS"
+#endif
+#ifdef SCS
+#define FMT "SCS"
+#endif
+#ifdef CCRS
+#define FMT "CCRS"
+#endif
+
 #endif
