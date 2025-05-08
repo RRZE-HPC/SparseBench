@@ -81,7 +81,6 @@ int main(int argc, char **argv) {
   }
 
   commPrintBanner(&comm);
-  printf("Using %s matrix format\n\n", FMT);
 
   GMatrix m;
   initMatrix(&comm, &param, &m);

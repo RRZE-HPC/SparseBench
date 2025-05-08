@@ -163,6 +163,9 @@ void commPrintBanner(Comm *c) {
   if (c->size > 1) {
     if (commIsMaster(c)) {
       printf(BANNER "\n");
+      printf(
+          "Using %s matrix format, %s precision floats and integer type %s\n\n",
+          FMT, PRECISION_STRING, UINT_STRING);
       printf("MPI parallel using %d ranks\n", c->size);
 #ifdef _OPENMP
 #pragma omp parallel
@@ -199,6 +202,9 @@ void commPrintBanner(Comm *c) {
     commBarrier();
   } else {
     printf(BANNER "\n");
+    printf(
+        "Using %s matrix format, %s precision floats and integer type %s\n\n",
+        FMT, PRECISION_STRING, UINT_STRING);
     printf("Running with only one process!\n");
 #ifdef _OPENMP
 #pragma omp parallel

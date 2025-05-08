@@ -32,8 +32,13 @@
 #define MAXLINE 4096
 #endif
 
-// #define CG_UINT unsigned long long int
-#define CG_UINT unsigned int
+#if UINT_TYPE == 1
+#define CG_UINT     unsigned int
+#define UINT_STRING "unsigned int"
+#else
+#define CG_UINT     unsigned long long int
+#define UINT_STRING "unsigned long long int"
+#endif
 
 #if PRECISION == 1
 #define CG_FLOAT         float
