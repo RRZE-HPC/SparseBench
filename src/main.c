@@ -153,7 +153,9 @@ int main(int argc, char **argv) {
 #endif
 
   Matrix sm;
+  printf("BEFORE\n");
   convertMatrix(&sm, &m);
+  printf("AFTER\n");
   timeStop = getTimeStamp();
   if (commIsMaster(&comm)) {
     printf("Setup took %.2fs\n", timeStop - timeStart);

@@ -603,6 +603,8 @@ void commPrintConfig(Comm *c, int nr, int startRow, int stopRow) {
 void commMatrixDump(Comm *c, Matrix *m) {
   int rank = c->rank;
   int size = c->size;
+
+#ifdef CRS
   CG_UINT numRows = m->nr;
   CG_UINT *rowPtr = m->rowPtr;
   CG_UINT *colInd = m->colInd;
@@ -633,6 +635,56 @@ void commMatrixDump(Comm *c, Matrix *m) {
     MPI_Barrier(MPI_COMM_WORLD);
 #endif
   }
+#endif /* ifdef CRS */
+#ifdef SCS
+  printf("m->startRow = %d\n", m->startRow);
+  printf("m->stopRow = %d\n", m->stopRow);
+  printf("m->totalNr = %d\n", m->totalNr);
+  printf("m->totalNnz = %d\n", m->totalNnz);
+  printf("m->nr = %d\n", m->nr);
+  printf("m->nc = %d\n", m->nc);
+  printf("m->nnz = %d\n", m->nnz);
+  printf("m->C = %d\n", m->C);
+  printf("m->sigma = %d\n", m->sigma);
+  printf("m->nChunks = %d\n", m->nChunks);
+  printf("m->nrPadded = %d\n", m->nrPadded);
+
+  // Dump permutation arrays
+  printf("oldToNewPerm: ");
+  for (int i = 0; i < m->nr; ++i) {
+    printf("%d, ", m->oldToNewPerm[i]);
+  }
+  printf("\n");
+  printf("newToOldPerm: ");
+  for (int i = 0; i < m->nr; ++i) {
+    printf("%d, ", m->newToOldPerm[i]);
+  }
+  printf("\n");
+
+  // Dump chunk data
+  printf("chunkLens: ");
+  for (int i = 0; i < m->nChunks; ++i) {
+    printf("%d, ", m->chunkLens[i]);
+  }
+  printf("\n");
+  printf("chunkPtr: ");
+  for (int i = 0; i < m->nChunks + 1; ++i) {
+    printf("%d, ", m->chunkPtr[i]);
+  }
+  printf("\n");
+
+  // Dump matrix data
+  printf("colInd: ");
+  for (int i = 0; i < m->nElems; ++i) {
+    printf("%d, ", m->colInd[i]);
+  }
+  printf("\n");
+  printf("val: ");
+  for (int i = 0; i < m->nElems; ++i) {
+    printf("%f, ", m->val[i]);
+  }
+  printf("\n");
+#endif /* ifdef SCS */
 }
 
 void commVectorDump(Comm *c, CG_FLOAT *v, CG_UINT size, char *name) {

@@ -28,57 +28,6 @@ static inline int compareDescSCS(const void *a, const void *b) {
   return 0; // Stable if equal
 }
 
-void dumpSCSMatrixToFile(Matrix *m, FILE *file) {
-  fprintf(file, "m->startRow = %d\n", m->startRow);
-  fprintf(file, "m->stopRow = %d\n", m->stopRow);
-  fprintf(file, "m->totalNr = %d\n", m->totalNr);
-  fprintf(file, "m->totalNnz = %d\n", m->totalNnz);
-  fprintf(file, "m->nr = %d\n", m->nr);
-  fprintf(file, "m->nc = %d\n", m->nc);
-  fprintf(file, "m->nnz = %d\n", m->nnz);
-  fprintf(file, "m->C = %d\n", m->C);
-  fprintf(file, "m->sigma = %d\n", m->sigma);
-  fprintf(file, "m->nChunks = %d\n", m->nChunks);
-  fprintf(file, "m->nrPadded = %d\n", m->nrPadded);
-  fprintf(file, "m->nElems = %d\n", m->nElems);
-
-  // Dump permutation arrays
-  fprintf(file, "oldToNewPerm: ");
-  for (int i = 0; i < m->nr; ++i) {
-    fprintf(file, "%d, ", m->oldToNewPerm[i]);
-  }
-  fprintf(file, "\n");
-  fprintf(file, "newToOldPerm: ");
-  for (int i = 0; i < m->nr; ++i) {
-    fprintf(file, "%d, ", m->newToOldPerm[i]);
-  }
-  fprintf(file, "\n");
-
-  // Dump chunk data
-  fprintf(file, "chunkLens: ");
-  for (int i = 0; i < m->nChunks; ++i) {
-    fprintf(file, "%d, ", m->chunkLens[i]);
-  }
-  fprintf(file, "\n");
-  fprintf(file, "chunkPtr: ");
-  for (int i = 0; i < m->nChunks + 1; ++i) {
-    fprintf(file, "%d, ", m->chunkPtr[i]);
-  }
-  fprintf(file, "\n");
-
-  // Dump matrix data
-  fprintf(file, "colInd: ");
-  for (int i = 0; i < m->nElems; ++i) {
-    fprintf(file, "%d, ", m->colInd[i]);
-  }
-  fprintf(file, "\n");
-  fprintf(file, "val: ");
-  for (int i = 0; i < m->nElems; ++i) {
-    fprintf(file, "%f, ", m->val[i]);
-  }
-  fprintf(file, "\n");
-}
-
 // This version just goes to stdout
 void dumpSCSMatrix(Matrix *m) {
   printf("m->startRow = %d\n", m->startRow);
