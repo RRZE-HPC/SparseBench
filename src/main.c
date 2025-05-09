@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "allocate.h"
 #include "comm.h"
 #include "matrix.h"
 #include "parameter.h"
@@ -16,12 +17,16 @@
 #include "solver.h"
 #include "timing.h"
 
+typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } types;
+
 #define HELPTEXT                                                               \
   "Usage: sparseBench [options]\n\n"                                           \
   "Options:\n"                                                                 \
   "  -h         Show this help text\n"                                         \
   "  -f <parameter file>   Load options from a parameter file\n"               \
   "  -m <MM matrix>   Load a matrix market file\n"                             \
+  "  -t <bench type>   Benchmark type, can be cg, spmv, or gmres. Default "    \
+  "cg.\n"                                                                      \
   "  -x <int>   Size in x for generated matrix, ignored if MM file is "        \
   "loaded. Default 100.\n"                                                     \
   "  -y <int>   Size in y for generated matrix, ignored if MM file is "        \
@@ -56,12 +61,13 @@ int main(int argc, char **argv) {
 
   char *cvalue = NULL;
   int index;
+  int type = CG;
   bool stop = false;
   int c;
 
   opterr = 0;
 
-  while ((c = getopt(argc, argv, "hf:m:x:y:z:i:e:")) != -1)
+  while ((c = getopt(argc, argv, "ht:f:m:x:y:z:i:e:")) != -1)
     switch (c) {
     case 'h':
       if (commIsMaster(&comm)) {
@@ -74,6 +80,20 @@ int main(int argc, char **argv) {
       break;
     case 'm':
       param.filename = optarg;
+      break;
+    case 't':
+      if (strcmp(optarg, "cg") == 0)
+        type = CG;
+      else if (strcmp(optarg, "spmv") == 0)
+        type = SPMV;
+      else if (strcmp(optarg, "gmres") == 0)
+        type = GMRES;
+      else if (strcmp(optarg, "cheb") == 0)
+        type = CHEBFD;
+      else {
+        printf("Unknown solver type %s\n", optarg);
+        return 1;
+      }
       break;
     case 'x':
       param.nx = atoi(optarg);
@@ -113,7 +133,7 @@ int main(int argc, char **argv) {
 
   commPrintBanner(&comm);
 
-  double timeStart, timeStop;
+  double timeStart, timeStop, ts;
   GMatrix m;
   timeStart = getTimeStamp();
   initMatrix(&comm, &param, &m);
@@ -138,7 +158,42 @@ int main(int argc, char **argv) {
   if (commIsMaster(&comm)) {
     printf("Setup took %.2fs\n", timeStop - timeStart);
   }
-  int k = solveCG(&comm, &param, &sm);
+
+  int k = 0;
+  switch (type) {
+  case CG:
+    if (commIsMaster(&comm)) {
+      printf("Test type: CG\n");
+    }
+    k = solveCG(&comm, &param, &sm);
+    break;
+  case SPMV:
+    if (commIsMaster(&comm)) {
+      printf("Test type: SPMVM\n");
+    }
+    int itermax = param.itermax;
+    CG_FLOAT *x =
+        (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
+    CG_FLOAT *y =
+        (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
+
+    for (int i = 0; i < m.nr; i++) {
+      x[i] = (CG_FLOAT)1.0;
+      y[i] = (CG_FLOAT)1.0;
+    }
+
+    for (k = 1; k < itermax; k++) {
+      PROFILE(SPMVM, spMVM(&sm, x, y));
+    }
+    break;
+  case GMRES:
+    if (commIsMaster(&comm)) {
+      printf("Test type: GMRES\n");
+    }
+
+    break;
+  }
+
   profilerPrint(&comm, k);
   profilerFinalize();
   commFinalize(&comm);
