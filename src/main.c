@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <ctype.h>
@@ -15,6 +15,21 @@
 #include "profiler.h"
 #include "solver.h"
 #include "timing.h"
+
+#define HELPTEXT                                                               \
+  "Usage: sparseBench [options]\n\n"                                           \
+  "Options:\n"                                                                 \
+  "  -h         Show this help text\n"                                         \
+  "  -f <parameter file>   Load options from a parameter file\n"               \
+  "  -m <MM matrix>   Load a matrix market file\n"                             \
+  "  -x <int>   Size in x for generated matrix, ignored if MM file is "        \
+  "loaded. Default 100.\n"                                                     \
+  "  -y <int>   Size in y for generated matrix, ignored if MM file is "        \
+  "loaded. Default 100.\n"                                                     \
+  "  -z <int>   Size in z for generated matrix, ignored if MM file is "        \
+  "loaded. Default 100.\n"                                                     \
+  "  -i <int>   Number of solver iterations. Default 150.\n"                   \
+  "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
 
 static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
   if (strcmp(p->filename, "generate") == 0) {
@@ -41,12 +56,19 @@ int main(int argc, char **argv) {
 
   char *cvalue = NULL;
   int index;
+  bool stop = false;
   int c;
 
   opterr = 0;
 
-  while ((c = getopt(argc, argv, "f:m:x:y:z:i:e:")) != -1)
+  while ((c = getopt(argc, argv, "hf:m:x:y:z:i:e:")) != -1)
     switch (c) {
+    case 'h':
+      if (commIsMaster(&comm)) {
+        printf(HELPTEXT);
+      }
+      stop = true;
+      break;
     case 'f':
       readParameter(&param, optarg);
       break;
@@ -82,6 +104,11 @@ int main(int argc, char **argv) {
 
   for (index = optind; index < argc; index++) {
     printf("Non-option argument %s\n", argv[index]);
+  }
+
+  if (stop) {
+    commFinalize(&comm);
+    return EXIT_SUCCESS;
   }
 
   commPrintBanner(&comm);
