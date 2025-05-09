@@ -52,7 +52,7 @@ distclean:
 	$(info ===>  DIST CLEAN)
 	@rm -rf build
 	@rm -f $(TARGET)
-	@rm -f tags .clangd
+	@rm -f tags .clangd out*
 
 info:
 	$(info $(CFLAGS))

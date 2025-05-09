@@ -262,6 +262,15 @@ static void scanMM(MMMatrix *m, int startRow, int stopRow, int *entryCount,
   }
 }
 
+static void dumpMMMatrix(Comm *c, MMMatrix *mm) {
+  MMEntry *entries = mm->entries;
+
+  for (int i = 0; i < mm->count; i++) {
+    fprintf(c->logFile, "%d %d: %f\n", entries[i].row, entries[i].col,
+            entries[i].val);
+  }
+}
+
 void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
 #ifdef _MPI
   int rank = c->rank;
@@ -303,12 +312,8 @@ void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
       cursor += numRows;
       int stopRow = cursor - 1;
       scanMM(m, startRow, stopRow, &sendcounts[i], &senddispls[i]);
-      // printf("Rank %d count %d displ %d start %d stop %d\n",
-      //     i,
-      //     sendcounts[i],
-      //     senddispls[i],
-      //     startRow,
-      //     stopRow);
+      printf("Rank %d count %d displ %d start %d stop %d\n", i, sendcounts[i],
+             senddispls[i], startRow, stopRow);
     }
   }
 
@@ -328,6 +333,18 @@ void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
   mLocal->stopRow = mLocal->entries[count - 1].row;
   mLocal->nr = mLocal->stopRow - mLocal->startRow + 1;
   mLocal->nnz = count;
+  printf("Rank %d count %zu start %d stop %d\n", rank, mLocal->count,
+         mLocal->startRow, mLocal->stopRow);
+
+#ifdef VERBOSE
+  for (int i = 0; i < c->size; i++) {
+    if (i == c->rank) {
+      fprintf(c->logFile, "Rank %d of %d\n", c->rank, c->size);
+      dumpMMMatrix(c, mLocal);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+#endif
 
   MPI_Type_free(&entryType);
 #else
@@ -530,17 +547,6 @@ void commExchange(Comm *c, CG_UINT numRows, CG_FLOAT *x) {
                          externals, c->recvCounts, c->rdispls, MPI_FLOAT_TYPE,
                          c->communicator);
 
-#ifdef VERBOSE
-  // for (int i = 0; i < c->size; i++) {
-  //   if (i == c->rank) {
-  //     fprintf(c->logFile, "Rank %d of %d\n", c->rank, c->size);
-  //     for (int j = 0; j < c->externalCount; j++) {
-  //       fprintf(c->logFile, "\texternal[%d] %f\n", j, externals[j]);
-  //     }
-  //   }
-  //   MPI_Barrier(MPI_COMM_WORLD);
-  // }
-#endif
 #endif
 }
 
@@ -637,7 +643,9 @@ void commVectorDump(Comm *c, CG_FLOAT *v, CG_UINT size, char *name) {
         fprintf(c->logFile, "\telement[%d] %f\n", j, v[j]);
       }
     }
+#ifdef _MPI
     MPI_Barrier(MPI_COMM_WORLD);
+#endif
   }
 }
 

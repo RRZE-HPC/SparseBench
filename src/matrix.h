@@ -48,7 +48,6 @@ typedef struct {
   MMEntry* entries;
 } MMMatrix;
 
-extern void dumpMMMatrix(MMMatrix* m);
 extern void MMMatrixRead(MMMatrix* m, char* filename);
 extern void matrixConvertfromMM(MMMatrix* mm, GMatrix* m);
 

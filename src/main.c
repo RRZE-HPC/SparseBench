@@ -27,7 +27,7 @@ static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
     }
 
     commDistributeMatrix(c, &mm, &mmLocal);
-    matrixConvertfromMM(&mm, m);
+    matrixConvertfromMM(&mmLocal, m);
   }
 }
 
@@ -44,10 +44,13 @@ int main(int argc, char **argv) {
 
   opterr = 0;
 
-  while ((c = getopt(argc, argv, "f:x:y:z:i:e:")) != -1)
+  while ((c = getopt(argc, argv, "f:m:x:y:z:i:e:")) != -1)
     switch (c) {
     case 'f':
       readParameter(&param, optarg);
+      break;
+    case 'm':
+      param.filename = optarg;
       break;
     case 'x':
       param.nx = atoi(optarg);

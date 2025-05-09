@@ -9,6 +9,7 @@
 #include "allocate.h"
 #include "matrix.h"
 #include "mmio.h"
+#include "util.h"
 
 static inline int compareColumn(const void *a, const void *b) {
   const MMEntry *a_ = (const MMEntry *)a;
@@ -211,14 +212,14 @@ void MMMatrixRead(MMMatrix *m, char *filename) {
   m->count = cursor;
 
   // sort by column
-  qsort(m->entries, m->count, sizeof(Entry), compareColumn);
+  qsort(m->entries, m->count, sizeof(MMEntry), compareColumn);
 // sort by row requires a stable sort. As glibc qsort is mergesort this
 // hopefully works.
 #ifdef __linux__
-  qsort(m->entries, m->count, sizeof(Entry), compareRow);
+  qsort(m->entries, m->count, sizeof(MMEntry), compareRow);
 #else
   // BSD has a dedicated mergesort available in its libc
-  mergesort(m->entries, m->count, sizeof(Entry), compareRow);
+  mergesort(m->entries, m->count, sizeof(MMEntry), compareRow);
 #endif
 }
 
@@ -230,7 +231,6 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m) {
   m->nr = mm->nr;
   m->nc = mm->nr;
   m->nnz = mm->nnz;
-
   m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
   m->rowPtr =
       (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
@@ -242,15 +242,17 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m) {
   }
 
   MMEntry *entries = mm->entries;
-  int startRow = m->startRow;
+  int startRow = mm->startRow;
 
   for (int i = 0; i < mm->count; i++) {
+    // printf("GET HERE %d -> %d\n", i, entries[i].row);
+    // fflush(stdout);
     valsPerRow[entries[i].row - startRow]++;
   }
 
   m->rowPtr[0] = 0;
 
-  // convert to CRS format
+  // convert to CCRS format
   for (int rowID = 0; rowID < m->nr; rowID++) {
     m->rowPtr[rowID + 1] = m->rowPtr[rowID] + valsPerRow[rowID];
 
