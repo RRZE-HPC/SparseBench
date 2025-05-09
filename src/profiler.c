@@ -35,6 +35,8 @@ void profilerInit(size_t *facFlops, size_t *facWords) {
     _regions[i].flops *= facFlops[i];
     _regions[i].words *= facWords[i];
   }
+
+  _regions[SPMVM].words = facWords[SPMVM];
 }
 
 void profilerPrint(Comm *c, int iterations) {

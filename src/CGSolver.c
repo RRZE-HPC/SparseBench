@@ -69,8 +69,12 @@ int solveCG(Comm *comm, Parameter *param, Matrix *A) {
   CG_FLOAT *Ap = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
   CG_FLOAT *x = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
   CG_FLOAT *b = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *xexact =
-      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  CG_FLOAT *xexact = NULL;
+
+  if (strcmp(param->filename, "generate") == 0 ||
+      strcmp(param->filename, "generate7P") == 0) {
+    xexact = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  }
   initVectors(A, x, b, xexact);
 
   CG_FLOAT normr = 0.0;
@@ -127,6 +131,8 @@ int solveCG(Comm *comm, Parameter *param, Matrix *A) {
     printf("Solution performed %d iterations and took %.2fs\n", k,
            timeStop - timeStart);
   }
+
+  solverCheckResidual(comm, x, xexact, A->nr);
 
   return k;
 }

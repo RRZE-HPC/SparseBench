@@ -14,6 +14,7 @@
 #include "parameter.h"
 #include "profiler.h"
 #include "solver.h"
+#include "timing.h"
 
 static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
   if (strcmp(p->filename, "generate") == 0) {
@@ -85,16 +86,19 @@ int main(int argc, char **argv) {
 
   commPrintBanner(&comm);
 
+  double timeStart, timeStop;
   GMatrix m;
+  timeStart = getTimeStamp();
   initMatrix(&comm, &param, &m);
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
-  factorFlops[DDOT] = m.nr;
-  factorWords[DDOT] = sizeof(CG_FLOAT) * m.nr;
-  factorFlops[WAXPBY] = m.nr;
-  factorWords[WAXPBY] = sizeof(CG_FLOAT) * m.nr;
-  factorFlops[SPMVM] = m.nnz;
-  factorWords[SPMVM] = sizeof(CG_FLOAT) * m.nnz + sizeof(CG_UINT) * m.nnz;
+  factorFlops[DDOT] = m.totalNr;
+  factorWords[DDOT] = sizeof(CG_FLOAT) * m.totalNr;
+  factorFlops[WAXPBY] = m.totalNr;
+  factorWords[WAXPBY] = sizeof(CG_FLOAT) * m.totalNr;
+  factorFlops[SPMVM] = m.totalNnz;
+  factorWords[SPMVM] =
+      sizeof(CG_FLOAT) * m.totalNnz + sizeof(CG_UINT) * m.totalNnz;
   profilerInit(factorFlops, factorWords);
   commPartition(&comm, &m);
 #ifdef VERBOSE
@@ -103,9 +107,12 @@ int main(int argc, char **argv) {
 
   Matrix sm;
   convertMatrix(&sm, &m);
+  timeStop = getTimeStamp();
+  if (commIsMaster(&comm)) {
+    printf("Setup took %.2fs\n", timeStop - timeStart);
+  }
   int k = solveCG(&comm, &param, &sm);
   profilerPrint(&comm, k);
-  // solverCheckResidual(&s, &comm);
   profilerFinalize();
   commFinalize(&comm);
 
