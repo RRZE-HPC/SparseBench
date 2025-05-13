@@ -17,7 +17,7 @@ extern void waxpby(const CG_UINT n,
     const CG_FLOAT* restrict x,
     const CG_FLOAT beta,
     const CG_FLOAT* restrict y,
-    double* restrict w);
+    CG_FLOAT* restrict w);
 
 extern void ddot(const CG_UINT n,
     const CG_FLOAT* restrict e,

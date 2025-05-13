@@ -51,7 +51,6 @@ typedef struct {
 extern void MMMatrixRead(MMMatrix* m, char* filename);
 extern void matrixConvertfromMM(MMMatrix* mm, GMatrix* m);
 
-extern void dumpGMatrix(GMatrix* m);
 extern void matrixGenerate(
     GMatrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil);
 

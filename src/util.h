@@ -50,4 +50,6 @@
 #define PRECISION_STRING "double"
 #endif
 
+extern char* changeFileEnding(char* filename, char* newEnding);
+
 #endif

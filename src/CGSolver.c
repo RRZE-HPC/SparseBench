@@ -119,7 +119,7 @@ int solveCG(Comm *comm, Parameter *param, Matrix *A) {
 
     PROFILE(COMM, commExchange(comm, A->nr, p));
     PROFILE(SPMVM, spMVM(A, p, Ap));
-    double alpha = 0.0;
+    CG_FLOAT alpha = 0.0;
     PROFILE(DDOT, ddot(nrow, p, Ap, &alpha));
     alpha = rtrans / alpha;
     PROFILE(WAXPBY, waxpby(nrow, 1.0, x, alpha, p, x));

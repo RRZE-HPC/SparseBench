@@ -12,10 +12,12 @@
 #include "allocate.h"
 #include "comm.h"
 #include "matrix.h"
+#include "matrixBinfile.h"
 #include "parameter.h"
 #include "profiler.h"
 #include "solver.h"
 #include "timing.h"
+#include "util.h"
 
 typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } types;
 
@@ -23,6 +25,7 @@ typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } types;
   "Usage: sparseBench [options]\n\n"                                           \
   "Options:\n"                                                                 \
   "  -h         Show this help text\n"                                         \
+  "  -c <file name>   Convert MM matrix to binary matrix file.\n"              \
   "  -f <parameter file>   Load options from a parameter file\n"               \
   "  -m <MM matrix>   Load a matrix market file\n"                             \
   "  -t <bench type>   Benchmark type, can be cg, spmv, or gmres. Default "    \
@@ -36,19 +39,42 @@ typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } types;
   "  -i <int>   Number of solver iterations. Default 150.\n"                   \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
 
+static void writeBinMatrix(Comm *c, char *filename) {
+  MMMatrix mm, mmLocal;
+  GMatrix m;
+  if (commIsMaster(c)) {
+    MMMatrixRead(&mm, filename);
+  }
+  commDistributeMatrix(c, &mm, &mmLocal);
+  matrixConvertfromMM(&mmLocal, &m);
+  matrixBinWrite(&m, c, changeFileEnding(filename, ".bmx"));
+}
+
 static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
   if (strcmp(p->filename, "generate") == 0) {
     matrixGenerate(m, p, c->rank, c->size, false);
   } else if (strcmp(p->filename, "generate7P") == 0) {
     matrixGenerate(m, p, c->rank, c->size, true);
   } else {
-    MMMatrix mm, mmLocal;
-    if (commIsMaster(c)) {
-      MMMatrixRead(&mm, p->filename);
-    }
+    char *dot = strrchr(p->filename, '.');
+    if (strcmp(dot, ".mtx") == 0) {
+      MMMatrix mm, mmLocal;
 
-    commDistributeMatrix(c, &mm, &mmLocal);
-    matrixConvertfromMM(&mmLocal, m);
+      if (commIsMaster(c)) {
+        printf("Read MTX matrix\n");
+        MMMatrixRead(&mm, p->filename);
+      }
+
+      commDistributeMatrix(c, &mm, &mmLocal);
+      matrixConvertfromMM(&mmLocal, m);
+    } else if (strcmp(dot, ".bmx") == 0) {
+      if (commIsMaster(c)) {
+        printf("Read BMX matrix\n");
+      }
+      matrixBinRead(m, c, p->filename);
+    } else {
+      printf("Unknown matrix file format!\n");
+    }
   }
 }
 
@@ -67,7 +93,7 @@ int main(int argc, char **argv) {
 
   opterr = 0;
 
-  while ((c = getopt(argc, argv, "ht:f:m:x:y:z:i:e:")) != -1)
+  while ((c = getopt(argc, argv, "hc:t:f:m:x:y:z:i:e:")) != -1)
     switch (c) {
     case 'h':
       if (commIsMaster(&comm)) {
@@ -75,6 +101,10 @@ int main(int argc, char **argv) {
       }
       stop = true;
       break;
+    case 'c':
+      writeBinMatrix(&comm, optarg);
+      commFinalize(&comm);
+      return EXIT_SUCCESS;
     case 'f':
       readParameter(&param, optarg);
       break;
@@ -127,8 +157,7 @@ int main(int argc, char **argv) {
   }
 
   if (stop) {
-    commFinalize(&comm);
-    return EXIT_SUCCESS;
+    commAbort("Wrong command line arguments");
   }
 
   commPrintBanner(&comm);
@@ -137,6 +166,9 @@ int main(int argc, char **argv) {
   GMatrix m;
   timeStart = getTimeStamp();
   initMatrix(&comm, &param, &m);
+  // commGMatrixDump(&comm, &m);
+  commAbort("DEBUG");
+
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
   factorFlops[DDOT] = m.totalNr;

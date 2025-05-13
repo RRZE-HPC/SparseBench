@@ -7,13 +7,18 @@
 #include "comm.h"
 #include "matrix.h"
 
+typedef struct {
+  unsigned int col;
+  float val;
+} FEntry;
+
 // Matrix binary file format:
-// All ints are unsigned 32bit ints. All floats are float16 or float32.
+// All ints are unsigned 32bit ints. All floats are float32.
 // <number of rows> <number of non zeroes>
 // array of size <number of rows>[<row offset>]
 // array of size <number of non zeroes>[<<col id>,<value>>]
 
-extern void matrixBinWrite(Matrix* m, Comm* c, char* filename);
-extern void matrixBinRead(Matrix* m, Comm* c, char* filename);
+extern void matrixBinWrite(GMatrix* m, Comm* c, char* filename);
+extern void matrixBinRead(GMatrix* m, Comm* c, char* filename);
 
 #endif // __MATRIXBINFILE_H_

@@ -60,8 +60,8 @@ extern void commPrintConfig(Comm* c, int nr, int startRow, int stopRow);
 extern void commGMatrixDump(Comm* c, GMatrix* m);
 extern void commMatrixDump(Comm* c, Matrix* m);
 extern void commVectorDump(Comm* c, CG_FLOAT* v, CG_UINT size, char* name);
-extern void commExchange(Comm* c, CG_UINT numRows, double* x);
-extern void commReduction(double* v, int op);
+extern void commExchange(Comm* c, CG_UINT numRows, CG_FLOAT* x);
+extern void commReduction(CG_FLOAT* v, int op);
 extern void commPrintBanner(Comm* c);
 
 static inline int commIsMaster(Comm* c) { return c->rank == 0; }
@@ -69,9 +69,13 @@ static inline void commAbort(char* msg)
 {
   printf("ERROR: %s\n", msg);
 #if defined(_MPI)
-  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  // MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  MPI_Finalize();
 #endif
-  exit(EXIT_FAILURE);
+#ifdef VERBOSE
+  fclose(c->logFile);
+#endif
+  exit(EXIT_SUCCESS);
 }
 static inline void commBarrier(void)
 {
