@@ -9,17 +9,19 @@
 #include "parameter.h"
 #define MAXLINE 4096
 
-void initParameter(Parameter *param) {
+void initParameter(Parameter* param)
+{
   param->filename = "generate";
-  param->nx = 100;
-  param->ny = 100;
-  param->nz = 100;
-  param->itermax = 150;
-  param->eps = 0.0;
+  param->nx       = 100;
+  param->ny       = 100;
+  param->nz       = 100;
+  param->itermax  = 150;
+  param->eps      = 0.0;
 }
 
-void readParameter(Parameter *param, const char *filename) {
-  FILE *fp = fopen(filename, "r");
+void readParameter(Parameter* param, const char* filename)
+{
+  FILE* fp = fopen(filename, "r");
   char line[MAXLINE];
   int i;
 
@@ -35,16 +37,16 @@ void readParameter(Parameter *param, const char *filename) {
       ;
     line[i] = '\0';
 
-    char *tok = strtok(line, " ");
-    char *val = strtok(NULL, " ");
+    char* tok = strtok(line, " ");
+    char* val = strtok(NULL, " ");
 
 #define PARSE_PARAM(p, f)                                                      \
   if (strncmp(tok, #p, sizeof(#p) / sizeof(#p[0]) - 1) == 0) {                 \
     param->p = f(val);                                                         \
   }
 #define PARSE_STRING(p) PARSE_PARAM(p, strdup)
-#define PARSE_INT(p) PARSE_PARAM(p, atoi)
-#define PARSE_REAL(p) PARSE_PARAM(p, atof)
+#define PARSE_INT(p)    PARSE_PARAM(p, atoi)
+#define PARSE_REAL(p)   PARSE_PARAM(p, atof)
 
     if (tok != NULL && val != NULL) {
       PARSE_STRING(filename);
@@ -59,10 +61,10 @@ void readParameter(Parameter *param, const char *filename) {
   fclose(fp);
 }
 
-void printParameter(Parameter *param) {
+void printParameter(Parameter* param)
+{
   printf("Parameters\n");
-  printf("Geometry data:\n");
-  printf("\tPoints (x, y, z): %d, %d, %d\n", param->nx, param->ny, param->nz);
+  // printf("\tN rows: %d, Non zeroes: %d,\n", param->nx, param->ny, param->nz);
   printf("Iterative solver parameters:\n");
   printf("\tMax iterations: %d\n", param->itermax);
   printf("\tepsilon (stopping tolerance) : %f\n", param->eps);

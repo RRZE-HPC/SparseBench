@@ -72,9 +72,6 @@ static inline void commAbort(char* msg)
   // MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   MPI_Finalize();
 #endif
-#ifdef VERBOSE
-  fclose(c->logFile);
-#endif
   exit(EXIT_SUCCESS);
 }
 static inline void commBarrier(void)

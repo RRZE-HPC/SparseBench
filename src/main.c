@@ -39,7 +39,8 @@ typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } types;
   "  -i <int>   Number of solver iterations. Default 150.\n"                   \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
 
-static void writeBinMatrix(Comm *c, char *filename) {
+static void writeBinMatrix(Comm* c, char* filename)
+{
   MMMatrix mm, mmLocal;
   GMatrix m;
   if (commIsMaster(c)) {
@@ -50,13 +51,14 @@ static void writeBinMatrix(Comm *c, char *filename) {
   matrixBinWrite(&m, c, changeFileEnding(filename, ".bmx"));
 }
 
-static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
+static void initMatrix(Comm* c, Parameter* p, GMatrix* m)
+{
   if (strcmp(p->filename, "generate") == 0) {
     matrixGenerate(m, p, c->rank, c->size, false);
   } else if (strcmp(p->filename, "generate7P") == 0) {
     matrixGenerate(m, p, c->rank, c->size, true);
   } else {
-    char *dot = strrchr(p->filename, '.');
+    char* dot = strrchr(p->filename, '.');
     if (strcmp(dot, ".mtx") == 0) {
       MMMatrix mm, mmLocal;
 
@@ -78,16 +80,17 @@ static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv)
+{
   Parameter param;
   Comm comm;
 
   commInit(&comm, argc, argv);
   initParameter(&param);
 
-  char *cvalue = NULL;
+  char* cvalue = NULL;
   int index;
-  int type = CG;
+  int type  = CG;
   bool stop = false;
   int c;
 
@@ -103,8 +106,7 @@ int main(int argc, char **argv) {
       break;
     case 'c':
       writeBinMatrix(&comm, optarg);
-      commFinalize(&comm);
-      return EXIT_SUCCESS;
+      commAbort("Finish write matrix");
     case 'f':
       readParameter(&param, optarg);
       break;
@@ -112,8 +114,7 @@ int main(int argc, char **argv) {
       param.filename = optarg;
       break;
     case 't':
-      if (strcmp(optarg, "cg") == 0)
-        type = CG;
+      if (strcmp(optarg, "cg") == 0) type = CG;
       else if (strcmp(optarg, "spmv") == 0)
         type = SPMV;
       else if (strcmp(optarg, "gmres") == 0)
@@ -166,18 +167,16 @@ int main(int argc, char **argv) {
   GMatrix m;
   timeStart = getTimeStamp();
   initMatrix(&comm, &param, &m);
-  // commGMatrixDump(&comm, &m);
-  commAbort("DEBUG");
 
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
-  factorFlops[DDOT] = m.totalNr;
-  factorWords[DDOT] = sizeof(CG_FLOAT) * m.totalNr;
+  factorFlops[DDOT]   = m.totalNr;
+  factorWords[DDOT]   = sizeof(CG_FLOAT) * m.totalNr;
   factorFlops[WAXPBY] = m.totalNr;
   factorWords[WAXPBY] = sizeof(CG_FLOAT) * m.totalNr;
-  factorFlops[SPMVM] = m.totalNnz;
-  factorWords[SPMVM] =
-      sizeof(CG_FLOAT) * m.totalNnz + sizeof(CG_UINT) * m.totalNnz;
+  factorFlops[SPMVM]  = m.totalNnz;
+  factorWords[SPMVM]  = sizeof(CG_FLOAT) * m.totalNnz +
+                       sizeof(CG_UINT) * m.totalNnz;
   profilerInit(factorFlops, factorWords);
   commPartition(&comm, &m);
 #ifdef VERBOSE
@@ -185,9 +184,7 @@ int main(int argc, char **argv) {
 #endif
 
   Matrix sm;
-  printf("BEFORE\n");
   convertMatrix(&sm, &m);
-  printf("AFTER\n");
   timeStop = getTimeStamp();
   if (commIsMaster(&comm)) {
     printf("Setup took %.2fs\n", timeStop - timeStart);
@@ -206,10 +203,8 @@ int main(int argc, char **argv) {
       printf("Test type: SPMVM\n");
     }
     int itermax = param.itermax;
-    CG_FLOAT *x =
-        (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
-    CG_FLOAT *y =
-        (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
+    CG_FLOAT* x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
+    CG_FLOAT* y = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
 
     for (int i = 0; i < m.nr; i++) {
       x[i] = (CG_FLOAT)1.0;

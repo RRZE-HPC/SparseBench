@@ -7,16 +7,19 @@
 #include "mpi.h"
 
 #include "allocate.h"
+#include "mpio.h"
 #include "util.h"
 #include <stdio.h>
 
 #define HEADERSIZE 24
 
-static int sizeOfRank(int rank, int size, int N) {
+static int sizeOfRank(int rank, int size, int N)
+{
   return N / size + ((N % size > rank) ? 1 : 0);
 }
 
-static void createEntrytype(MPI_Datatype *entryType) {
+static void createEntrytype(MPI_Datatype* entryType)
+{
   MPI_Aint displ[2];
   FEntry dummy;
   MPI_Aint base_address;
@@ -26,17 +29,21 @@ static void createEntrytype(MPI_Datatype *entryType) {
   displ[0] = MPI_Aint_diff(displ[0], base_address);
   displ[1] = MPI_Aint_diff(displ[1], base_address);
 
-  int lengths[2] = {1, 1};
-  MPI_Datatype types[2] = {MPI_UNSIGNED, MPI_FLOAT};
+  int lengths[2]        = { 1, 1 };
+  MPI_Datatype types[2] = { MPI_UNSIGNED, MPI_FLOAT };
   MPI_Type_create_struct(2, lengths, displ, types, entryType);
   MPI_Type_commit(entryType);
 }
 
-void matrixBinWrite(GMatrix *m, Comm *c, char *filename) {
+void matrixBinWrite(GMatrix* m, Comm* c, char* filename)
+{
   MPI_File fh;
 
-  MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE,
-                MPI_INFO_NULL, &fh);
+  MPI_File_open(MPI_COMM_WORLD,
+      filename,
+      MPI_MODE_WRONLY | MPI_MODE_CREATE,
+      MPI_INFO_NULL,
+      &fh);
 
   if (commIsMaster(c)) {
     printf("Writing matrix to %s\n", filename);
@@ -53,16 +60,21 @@ void matrixBinWrite(GMatrix *m, Comm *c, char *filename) {
   MPI_File_sync(fh);
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_File_get_size(fh, &disp);
-  MPI_File_set_view(fh, disp, MPI_UNSIGNED, MPI_UNSIGNED, "native",
-                    MPI_INFO_NULL);
+  MPI_File_set_view(fh,
+      disp,
+      MPI_UNSIGNED,
+      MPI_UNSIGNED,
+      "native",
+      MPI_INFO_NULL);
   if (commIsMaster(c)) {
-    printf("Writing matrix (nr=%u, nnz=%u) at offset %lld to %s\n", m->totalNr,
-           m->totalNnz, disp, filename);
     // FIXME: convert to unsigned int in case CG_UINT is different
     MPI_File_write(fh, &m->totalNr, 1, MPI_UNSIGNED, MPI_STATUS_IGNORE);
     MPI_File_write(fh, &m->totalNnz, 1, MPI_UNSIGNED, MPI_STATUS_IGNORE);
-    MPI_File_write(fh, m->rowPtr, m->totalNr + 1, MPI_UNSIGNED,
-                   MPI_STATUS_IGNORE);
+    MPI_File_write(fh,
+        m->rowPtr,
+        m->totalNr + 1,
+        MPI_UNSIGNED,
+        MPI_STATUS_IGNORE);
   }
   MPI_Datatype entryType;
   createEntrytype(&entryType);
@@ -78,7 +90,8 @@ void matrixBinWrite(GMatrix *m, Comm *c, char *filename) {
   MPI_File_close(&fh);
 }
 
-void matrixBinRead(GMatrix *m, Comm *c, char *filename) {
+void matrixBinRead(GMatrix* m, Comm* c, char* filename)
+{
   MPI_File fh;
   MPI_Status status;
   MPI_Offset offset, disp;
@@ -96,25 +109,33 @@ void matrixBinRead(GMatrix *m, Comm *c, char *filename) {
   if (commIsMaster(c)) {
     MPI_File_read(fh, header, HEADERSIZE, MPI_CHAR, &status);
     MPI_Get_count(&status, MPI_CHAR, &count);
-    printf("Read %d elements from file\n", count);
-    printf("File header %s\n", header);
+    if (count != HEADERSIZE) {
+      printf("ERROR reading header!\n");
+    }
   }
   MPI_File_get_position(fh, &offset);
   MPI_File_get_byte_offset(fh, offset, &disp);
-  MPI_File_set_view(fh, disp, MPI_UNSIGNED, MPI_UNSIGNED, "native",
-                    MPI_INFO_NULL);
+  MPI_File_set_view(fh,
+      disp,
+      MPI_UNSIGNED,
+      MPI_UNSIGNED,
+      "native",
+      MPI_INFO_NULL);
   unsigned int totalNr, totalNnz;
   MPI_File_read(fh, &totalNr, 1, MPI_UNSIGNED, &status);
   MPI_Get_count(&status, MPI_UNSIGNED, &count);
+  if (count != 1) {
+    printf("ERROR reading unsigned!\n");
+  }
   printf("Read %d elements from file at offset %lld\n", count, disp);
   MPI_File_read(fh, &totalNnz, 1, MPI_UNSIGNED, &status);
   MPI_Get_count(&status, MPI_UNSIGNED, &count);
-  printf("Read %d elements from file\n", count);
+  if (count != 1) {
+    printf("ERROR reading unsigned!\n");
+  }
 
-  m->totalNr = (CG_UINT)totalNr;
+  m->totalNr  = (CG_UINT)totalNr;
   m->totalNnz = (CG_UINT)totalNnz;
-  printf("Matrix: %u total non zeroes, total number of rows %u\n", m->totalNnz,
-         m->totalNr);
 
   int rank = c->rank;
   int size = c->size;
@@ -122,30 +143,42 @@ void matrixBinRead(GMatrix *m, Comm *c, char *filename) {
 
   int cursor = 0;
   for (int i = 0; i < rank + 1; i++) {
-    numRows = sizeOfRank(i, size, totalNr);
+    numRows  = sizeOfRank(i, size, totalNr);
     startRow = cursor;
     cursor += numRows;
     stopRow = cursor - 1;
   }
 
-  m->nr = numRows;
+  m->nr       = numRows;
   m->startRow = startRow;
-  m->stopRow = stopRow;
-  m->rowPtr =
-      (CG_UINT *)allocate(ARRAY_ALIGNMENT, (numRows + 1) * sizeof(CG_UINT));
+  m->stopRow  = stopRow;
+  m->rowPtr   = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
+      (numRows + 1) * sizeof(CG_UINT));
+  MPI_Aint extent;
 
   MPI_File_get_position(fh, &offset);
   MPI_File_get_byte_offset(fh, offset, &disp);
-  MPI_File_set_view(fh, disp + (startRow * sizeof(unsigned int)), MPI_UNSIGNED,
-                    MPI_UNSIGNED, "native", MPI_INFO_NULL);
-  MPI_File_read(fh, m->rowPtr, numRows + 1, MPI_UNSIGNED, MPI_STATUS_IGNORE);
+  MPI_File_get_type_extent(fh, MPI_UNSIGNED, &extent);
+  offset = disp;
+  disp += (startRow * extent);
+  MPI_File_set_view(fh,
+      disp,
+      MPI_UNSIGNED,
+      MPI_UNSIGNED,
+      "native",
+      MPI_INFO_NULL);
+  MPI_File_read(fh, m->rowPtr, numRows + 1, MPI_UNSIGNED, &status);
+  MPI_Get_count(&status, MPI_UNSIGNED, &count);
+  printf("rowptr Read %d elements from file\n", count);
   int nnz = 0;
   for (int i = 0; i < numRows; i++) {
     nnz += m->rowPtr[i + 1] - m->rowPtr[i];
   }
 
-  m->nnz = nnz;
-  m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
+  printf("NNZ = %d\n", nnz);
+
+  m->nnz          = nnz;
+  FEntry* entries = (FEntry*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(FEntry));
 
   int allnnz[size];
   MPI_Allgather(&nnz, 1, MPI_INT, allnnz, 1, MPI_INT, MPI_COMM_WORLD);
@@ -157,13 +190,24 @@ void matrixBinRead(GMatrix *m, Comm *c, char *filename) {
 
   MPI_Datatype entryType;
   createEntrytype(&entryType);
-  disp += (totalNr * sizeof(unsigned int));
-  MPI_Aint extent;
+  disp = offset + ((totalNr + 1) * extent);
+  printf("Start at %lld\n", disp);
   MPI_File_get_type_extent(fh, entryType, &extent);
-  MPI_File_set_view(fh, disp + entryOffset * extent, entryType, entryType,
-                    "native", MPI_INFO_NULL);
+  disp += entryOffset * extent;
+  printf("Disp %lld\n", disp);
+  MPI_File_set_view(fh, disp, entryType, entryType, "native", MPI_INFO_NULL);
 
-  MPI_File_read(fh, m->entries, nnz, entryType, MPI_STATUS_IGNORE);
+  MPI_File_read(fh, entries, nnz, entryType, &status);
+  MPI_Get_count(&status, entryType, &count);
+  printf("entries Read %d elements from file\n", count);
   MPI_Type_free(&entryType);
   MPI_File_close(&fh);
+
+  m->entries = (Entry*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
+  for (int i = 0; i < m->nnz; i++) {
+    m->entries[i].col = (CG_UINT)entries[i].col;
+    m->entries[i].val = (CG_FLOAT)entries[i].val;
+  }
+
+  free(entries);
 }
