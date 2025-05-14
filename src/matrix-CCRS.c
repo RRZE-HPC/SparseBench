@@ -9,12 +9,13 @@
 #include "CCRSMatrix.h"
 #include "matrix.h"
 
-void convertMatrix(Matrix *sm, GMatrix *m) { sm = (Matrix *)m; }
+void convertMatrix(Matrix* sm, GMatrix* m) { sm = (Matrix*)m; }
 
-void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y) {
+void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y)
+{
   CG_UINT numRows = m->nr;
-  CG_UINT *rowPtr = m->rowPtr;
-  mEntry *entries = m->entries;
+  CG_UINT* rowPtr = m->rowPtr;
+  mEntry* entries = m->entries;
 
 #pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int i = 0; i < numRows; i++) {

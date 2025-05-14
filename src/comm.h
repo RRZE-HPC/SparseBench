@@ -63,17 +63,9 @@ extern void commVectorDump(Comm* c, CG_FLOAT* v, CG_UINT size, char* name);
 extern void commExchange(Comm* c, CG_UINT numRows, CG_FLOAT* x);
 extern void commReduction(CG_FLOAT* v, int op);
 extern void commPrintBanner(Comm* c);
+extern void commAbort(Comm* c, char* msg);
 
 static inline int commIsMaster(Comm* c) { return c->rank == 0; }
-static inline void commAbort(char* msg)
-{
-  printf("ERROR: %s\n", msg);
-#if defined(_MPI)
-  // MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  MPI_Finalize();
-#endif
-  exit(EXIT_SUCCESS);
-}
 static inline void commBarrier(void)
 {
 #if defined(_MPI)

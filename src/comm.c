@@ -32,23 +32,28 @@
 #include "comm.h"
 
 #ifdef _MPI
-static int sizeOfRank(int rank, int size, int N) {
+static int sizeOfRank(int rank, int size, int N)
+{
   return N / size + ((N % size > rank) ? 1 : 0);
 }
 
-static void buildIndexMapping(Comm *c, GMatrix *A, Bstree *externals,
-                              int *externalIndex, int *externalsReordered,
-                              int *externalRank) {
+static void buildIndexMapping(Comm* c,
+    GMatrix* A,
+    Bstree* externals,
+    int* externalIndex,
+    int* externalsReordered,
+    int* externalRank)
+{
   int externalCount = c->externalCount;
   /*Go through the external elements. For each newly encountered external
   assign it the next index in the local sequence. Then look for other
   external elements who are updated by the same rank and assign them the next
   set of index numbers in the local sequence (ie. elements updated by the same
   rank have consecutive indices).*/
-  int *externalLocalIndex =
-      (int *)allocate(ARRAY_ALIGNMENT, externalCount * sizeof(int));
-  int *newExternalRank =
-      (int *)allocate(ARRAY_ALIGNMENT, externalCount * sizeof(int));
+  int* externalLocalIndex = (int*)allocate(ARRAY_ALIGNMENT,
+      externalCount * sizeof(int));
+  int* newExternalRank    = (int*)allocate(ARRAY_ALIGNMENT,
+      externalCount * sizeof(int));
 
   int count = A->nr;
 
@@ -60,12 +65,12 @@ static void buildIndexMapping(Comm *c, GMatrix *A, Bstree *externals,
 
   for (int i = 0; i < externalCount; i++) {
     if (externalLocalIndex[i] == -1) {
-      externalLocalIndex[i] = count++;
+      externalLocalIndex[i]    = count++;
       newExternalRank[index++] = externalRank[i];
 
       for (int j = i + 1; j < externalCount; j++) {
         if (externalRank[j] == externalRank[i]) {
-          externalLocalIndex[j] = count++;
+          externalLocalIndex[j]    = count++;
           newExternalRank[index++] = externalRank[j];
         }
       }
@@ -82,11 +87,11 @@ static void buildIndexMapping(Comm *c, GMatrix *A, Bstree *externals,
   }
 
   // map column ids in the matrix to the new local index
-  CG_UINT *rowPtr = A->rowPtr;
-  Entry *entries = A->entries;
-  CG_UINT numRows = A->nr;
+  CG_UINT* rowPtr  = A->rowPtr;
+  Entry* entries   = A->entries;
+  CG_UINT numRows  = A->nr;
   CG_UINT startRow = A->startRow;
-  CG_UINT stopRow = A->stopRow;
+  CG_UINT stopRow  = A->stopRow;
 
   for (int i = 0; i < numRows; i++) {
     for (int j = rowPtr[i]; j < rowPtr[i + 1]; j++) {
@@ -108,27 +113,33 @@ static void buildIndexMapping(Comm *c, GMatrix *A, Bstree *externals,
   free(newExternalRank);
 }
 
-static void buildElementsToSend(Comm *c, int startRow, int *externalRank,
-                                int *externalReordered) {
+static void buildElementsToSend(
+    Comm* c, int startRow, int* externalRank, int* externalReordered)
+{
   c->totalSendCount = 0;
   for (int i = 0; i < c->outdegree; i++) {
     c->totalSendCount += c->sendCounts[i];
   }
 
-  c->sendBuffer = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT,
-                                       c->totalSendCount * sizeof(CG_FLOAT));
+  c->sendBuffer  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT,
+      c->totalSendCount * sizeof(CG_FLOAT));
   int MPI_MY_TAG = 100;
   MPI_Request request[c->outdegree];
-  c->elementsToSend =
-      (int *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(int));
-  int *elementsToSend = c->elementsToSend;
+  c->elementsToSend   = (int*)allocate(ARRAY_ALIGNMENT,
+      c->totalSendCount * sizeof(int));
+  int* elementsToSend = c->elementsToSend;
 
   int j = 0;
 
   for (int i = 0; i < c->outdegree; i++) {
     c->sdispls[i] = j;
-    MPI_Irecv(elementsToSend + j, c->sendCounts[i], MPI_INT, c->destinations[i],
-              MPI_MY_TAG, MPI_COMM_WORLD, request + i);
+    MPI_Irecv(elementsToSend + j,
+        c->sendCounts[i],
+        MPI_INT,
+        c->destinations[i],
+        MPI_MY_TAG,
+        MPI_COMM_WORLD,
+        request + i);
 
     j += c->sendCounts[i];
   }
@@ -137,8 +148,12 @@ static void buildElementsToSend(Comm *c, int startRow, int *externalRank,
 
   for (int i = 0; i < c->indegree; i++) {
     c->rdispls[i] = j;
-    MPI_Send(externalReordered + j, c->recvCounts[i], MPI_INT, c->sources[i],
-             MPI_MY_TAG, MPI_COMM_WORLD);
+    MPI_Send(externalReordered + j,
+        c->recvCounts[i],
+        MPI_INT,
+        c->sources[i],
+        MPI_MY_TAG,
+        MPI_COMM_WORLD);
 
     j += c->recvCounts[i];
   }
@@ -152,8 +167,10 @@ static void buildElementsToSend(Comm *c, int startRow, int *externalRank,
 
 #ifdef VERBOSE
   for (int i = 0; i < c->size; i++) {
-    fprintf(c->logFile, "Rank %d: number of elements %d\n", c->rank,
-            c->totalSendCount);
+    fprintf(c->logFile,
+        "Rank %d: number of elements %d\n",
+        c->rank,
+        c->totalSendCount);
     for (int j = 0; j < c->totalSendCount; j++) {
       if (i == c->rank) {
         fprintf(c->logFile, "\t[%d]: %d\n", j, elementsToSend[j]);
@@ -165,7 +182,8 @@ static void buildElementsToSend(Comm *c, int startRow, int *externalRank,
 }
 #endif
 
-void commPrintBanner(Comm *c) {
+void commPrintBanner(Comm* c)
+{
   int rank = c->rank;
   int size = c->size;
 
@@ -178,7 +196,9 @@ void commPrintBanner(Comm *c) {
       printf(BANNER "\n");
       printf(
           "Using %s matrix format, %s precision floats and integer type %s\n\n",
-          FMT, PRECISION_STRING, UINT_STRING);
+          FMT,
+          PRECISION_STRING,
+          UINT_STRING);
       printf("MPI parallel using %d ranks\n", c->size);
 #ifdef _OPENMP
 #pragma omp parallel
@@ -191,8 +211,10 @@ void commPrintBanner(Comm *c) {
     commBarrier();
     for (int i = 0; i < size; i++) {
       if (i == rank) {
-        printf("Process with rank %d running on Node %s with pid %d\n", rank,
-               host, master_pid);
+        printf("Process with rank %d running on Node %s with pid %d\n",
+            rank,
+            host,
+            master_pid);
       }
 
 #ifdef VERBOSE_AFFINITY
@@ -204,8 +226,12 @@ void commPrintBanner(Comm *c) {
           printf("Rank %d Thread %d running on Node %s core %d with pid %d "
                  "and tid "
                  "%d\n",
-                 rank, omp_get_thread_num(), host, sched_getcpu(), master_pid,
-                 gettid());
+              rank,
+              omp_get_thread_num(),
+              host,
+              sched_getcpu(),
+              master_pid,
+              gettid());
           affinity_getmask();
         }
 #endif
@@ -217,7 +243,9 @@ void commPrintBanner(Comm *c) {
     printf(BANNER "\n");
     printf(
         "Using %s matrix format, %s precision floats and integer type %s\n\n",
-        FMT, PRECISION_STRING, UINT_STRING);
+        FMT,
+        PRECISION_STRING,
+        UINT_STRING);
     printf("Running with only one process!\n");
 #ifdef _OPENMP
 #pragma omp parallel
@@ -231,8 +259,12 @@ void commPrintBanner(Comm *c) {
         printf("Rank %d Thread %d running on Node %s core %d with pid %d "
                "and tid "
                "%d\n",
-               rank, omp_get_thread_num(), host, sched_getcpu(), master_pid,
-               gettid());
+            rank,
+            omp_get_thread_num(),
+            host,
+            sched_getcpu(),
+            master_pid,
+            gettid());
         affinity_getmask();
       }
 #endif
@@ -241,15 +273,16 @@ void commPrintBanner(Comm *c) {
   }
 }
 
-static void scanMM(MMMatrix *m, int startRow, int stopRow, int *entryCount,
-                   int *entryOffset) {
-  MMEntry *e = m->entries;
-  int in = 0;
+static void scanMM(
+    MMMatrix* m, int startRow, int stopRow, int* entryCount, int* entryOffset)
+{
+  MMEntry* e = m->entries;
+  int in     = 0;
 
   for (size_t i = 0; i < m->count; i++) {
     if (e[i].row == startRow && in == 0) {
       *entryOffset = i;
-      in = 1;
+      in           = 1;
     }
     if (e[i].row == (stopRow + 1)) {
       *entryCount = (i - *entryOffset);
@@ -262,16 +295,21 @@ static void scanMM(MMMatrix *m, int startRow, int stopRow, int *entryCount,
   }
 }
 
-static void dumpMMMatrix(Comm *c, MMMatrix *mm) {
-  MMEntry *entries = mm->entries;
+static void dumpMMMatrix(Comm* c, MMMatrix* mm)
+{
+  MMEntry* entries = mm->entries;
 
   for (int i = 0; i < mm->count; i++) {
-    fprintf(c->logFile, "%d %d: %f\n", entries[i].row, entries[i].col,
-            entries[i].val);
+    fprintf(c->logFile,
+        "%d %d: %f\n",
+        entries[i].row,
+        entries[i].col,
+        entries[i].val);
   }
 }
 
-void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
+void commDistributeMatrix(Comm* c, MMMatrix* m, MMMatrix* mLocal)
+{
 #ifdef _MPI
   int rank = c->rank;
   int size = c->size;
@@ -284,21 +322,23 @@ void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
 
   MPI_Bcast(&totalCounts, 2, MPI_INT, 0, MPI_COMM_WORLD);
   int totalNr = totalCounts[0], totalNnz = totalCounts[1];
-  MPI_Aint displ[2];
+  MPI_Aint displ[3];
   {
-    MMEntry *dummy = m->entries;
+    MMEntry dummy;
     MPI_Aint base_address;
-    MPI_Get_address(dummy, &base_address);
-    MPI_Get_address(&(dummy->row), &displ[0]);
-    MPI_Get_address(&(dummy->val), &displ[1]);
+    MPI_Get_address(&dummy, &base_address);
+    MPI_Get_address(&dummy.row, &displ[0]);
+    MPI_Get_address(&dummy.col, &displ[1]);
+    MPI_Get_address(&dummy.val, &displ[2]);
     displ[0] = MPI_Aint_diff(displ[0], base_address);
     displ[1] = MPI_Aint_diff(displ[1], base_address);
+    displ[2] = MPI_Aint_diff(displ[2], base_address);
   }
 
   MPI_Datatype entryType;
-  int blocklengths[2] = {2, 1};
-  MPI_Datatype types[2] = {MPI_INT, MPI_DOUBLE};
-  MPI_Type_create_struct(2, blocklengths, displ, types, &entryType);
+  int blocklengths[3]   = { 1, 1, 1 };
+  MPI_Datatype types[3] = { MPI_INT, MPI_INT, MPI_DOUBLE };
+  MPI_Type_create_struct(3, blocklengths, displ, types, &entryType);
   MPI_Type_commit(&entryType);
 
   int sendcounts[size];
@@ -307,82 +347,104 @@ void commDistributeMatrix(Comm *c, MMMatrix *m, MMMatrix *mLocal) {
   if (commIsMaster(c)) {
     int cursor = 0;
     for (int i = 0; i < size; i++) {
-      int numRows = sizeOfRank(i, size, totalNr);
+      int numRows  = sizeOfRank(i, size, totalNr);
       int startRow = cursor;
       cursor += numRows;
       int stopRow = cursor - 1;
       scanMM(m, startRow, stopRow, &sendcounts[i], &senddispls[i]);
-      printf("Rank %d count %d displ %d start %d stop %d\n", i, sendcounts[i],
-             senddispls[i], startRow, stopRow);
+      printf("Rank %d count %d displ %d start %d stop %d\n",
+          i,
+          sendcounts[i],
+          senddispls[i],
+          startRow,
+          stopRow);
     }
   }
 
   int count;
   MPI_Scatter(sendcounts, 1, MPI_INT, &count, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  mLocal->count = count;
-  mLocal->totalNr = totalNr;
+  mLocal->count    = count;
+  mLocal->totalNr  = totalNr;
   mLocal->totalNnz = totalNnz;
-  mLocal->entries =
-      (MMEntry *)allocate(ARRAY_ALIGNMENT, count * sizeof(MMEntry));
+  mLocal->entries  = (MMEntry*)allocate(ARRAY_ALIGNMENT,
+      count * sizeof(MMEntry));
 
-  MPI_Scatterv(m->entries, sendcounts, senddispls, entryType, mLocal->entries,
-               count, entryType, 0, MPI_COMM_WORLD);
+  MPI_Scatterv(m->entries,
+      sendcounts,
+      senddispls,
+      entryType,
+      mLocal->entries,
+      count,
+      entryType,
+      0,
+      MPI_COMM_WORLD);
 
   mLocal->startRow = mLocal->entries[0].row;
-  mLocal->stopRow = mLocal->entries[count - 1].row;
-  mLocal->nr = mLocal->stopRow - mLocal->startRow + 1;
-  mLocal->nnz = count;
-  printf("Rank %d count %zu start %d stop %d\n", rank, mLocal->count,
-         mLocal->startRow, mLocal->stopRow);
+  mLocal->stopRow  = mLocal->entries[count - 1].row;
+  mLocal->nr       = mLocal->stopRow - mLocal->startRow + 1;
+  mLocal->nnz      = count;
+  printf("Rank %d count %zu start %d stop %d\n",
+      rank,
+      mLocal->count,
+      mLocal->startRow,
+      mLocal->stopRow);
 
 #ifdef VERBOSE
-  for (int i = 0; i < c->size; i++) {
-    if (i == c->rank) {
-      fprintf(c->logFile, "Rank %d of %d\n", c->rank, c->size);
-      dumpMMMatrix(c, mLocal);
-    }
-    MPI_Barrier(MPI_COMM_WORLD);
-  }
+  // for (int i = 0; i < c->size; i++) {
+  //   if (i == c->rank) {
+  //     fprintf(c->logFile, "Rank %d of %d\n", c->rank, c->size);
+  //     dumpMMMatrix(c, mLocal);
+  //   }
+  //   MPI_Barrier(MPI_COMM_WORLD);
+  // }
 #endif
 
   MPI_Type_free(&entryType);
 #else
   mLocal->startRow = 0;
-  mLocal->stopRow = m->nr - 1;
-  mLocal->count = m->count;
-  mLocal->nr = m->nr;
-  mLocal->nnz = m->nnz;
-  mLocal->entries = m->entries;
+  mLocal->stopRow  = m->nr - 1;
+  mLocal->count    = m->count;
+  mLocal->nr       = m->nr;
+  mLocal->nnz      = m->nnz;
+  mLocal->entries  = m->entries;
 #endif /* ifdef _MPI */
 }
 
-void commPartition(Comm *c, GMatrix *A) {
+void commPartition(Comm* c, GMatrix* A)
+{
 #ifdef _MPI
   int rank = c->rank;
   int size = c->size;
 
-  CG_UINT startRow = A->startRow;
-  CG_UINT stopRow = A->stopRow;
+  CG_UINT startRow     = A->startRow;
+  CG_UINT stopRow      = A->stopRow;
   CG_UINT numRowsTotal = A->totalNr;
-  CG_UINT numRows = A->nr;
-  CG_UINT *rowPtr = A->rowPtr;
-  Entry *entries = A->entries;
+  CG_UINT numRows      = A->nr;
+  CG_UINT* rowPtr      = A->rowPtr;
+  Entry* entries       = A->entries;
 
 #ifdef VERBOSE
-  fprintf(c->logFile, "Rank %d of %d owns %d rows: %d to %d\n", rank, size,
-          numRows, startRow, stopRow);
+  fprintf(c->logFile,
+      "Rank %d of %d: num columns %d owns %d rows: %d to %d of total %d\n",
+      rank,
+      size,
+      A->nc,
+      numRows,
+      startRow,
+      stopRow,
+      numRowsTotal);
 #endif
 
   /***********************************************************************
    *    Step 1: Identify externals and create lookup maps
    ************************************************************************/
-  Bstree *externals;
-  externals = bstNew();
+  Bstree* externals;
+  externals         = bstNew();
   int externalCount = 0; // local number of external indices
 
-  int *externalIndex =
-      (int *)allocate(ARRAY_ALIGNMENT, MAX_EXTERNAL * sizeof(int));
+  int* externalIndex = (int*)allocate(ARRAY_ALIGNMENT,
+      MAX_EXTERNAL * sizeof(int));
 
 #ifdef VERBOSE
   fprintf(c->logFile, "STEP 1 \n");
@@ -417,9 +479,9 @@ void commPartition(Comm *c, GMatrix *A) {
   /***********************************************************************
    *    Step 2:  Build dist Graph topology and init neigbors
    ************************************************************************/
-  int *externalRank =
-      (int *)allocate(ARRAY_ALIGNMENT, externalCount * sizeof(int));
-  int *recvNeighbors = (int *)allocate(ARRAY_ALIGNMENT, size * sizeof(int));
+  int* externalRank  = (int*)allocate(ARRAY_ALIGNMENT,
+      externalCount * sizeof(int));
+  int* recvNeighbors = (int*)allocate(ARRAY_ALIGNMENT, size * sizeof(int));
 
   c->externalCount = externalCount;
 
@@ -431,8 +493,13 @@ void commPartition(Comm *c, GMatrix *A) {
     int globalIndexOffsets[size];
     int sourceCount = 0;
 
-    MPI_Allgather(&startRow, 1, MPI_INT, globalIndexOffsets, 1, MPI_INT,
-                  MPI_COMM_WORLD);
+    MPI_Allgather(&startRow,
+        1,
+        MPI_INT,
+        globalIndexOffsets,
+        1,
+        MPI_INT,
+        MPI_COMM_WORLD);
 
     // Go through list of externals and find the processor that owns it
     for (int i = 0; i < externalCount; i++) {
@@ -460,63 +527,89 @@ void commPartition(Comm *c, GMatrix *A) {
 
     for (int i = 0; i < size; i++) {
       if (recvNeighbors[i] > 0) {
-        sources[cursor] = i;
+        sources[cursor]   = i;
         weights[cursor++] = recvNeighbors[i];
       }
     }
 
     for (int i = 0; i < sourceCount; i++) {
-      degrees[i] = 1;
+      degrees[i]      = 1;
       destinations[i] = rank;
     }
 
-    MPI_Dist_graph_create(MPI_COMM_WORLD, sourceCount, sources, degrees,
-                          destinations, weights, MPI_INFO_NULL, 0,
-                          &c->communicator);
+    MPI_Dist_graph_create(MPI_COMM_WORLD,
+        sourceCount,
+        sources,
+        degrees,
+        destinations,
+        weights,
+        MPI_INFO_NULL,
+        0,
+        &c->communicator);
   }
 
   {
     int weighted;
-    MPI_Dist_graph_neighbors_count(c->communicator, &c->indegree, &c->outdegree,
-                                   &weighted);
+    MPI_Dist_graph_neighbors_count(c->communicator,
+        &c->indegree,
+        &c->outdegree,
+        &weighted);
 
 #ifdef VERBOSE
-    printf("Rank %d: In %d Out %d Weighted %d\n", rank, c->indegree,
-           c->outdegree, weighted);
+    printf("Rank %d: In %d Out %d Weighted %d\n",
+        rank,
+        c->indegree,
+        c->outdegree,
+        weighted);
 #endif
 
-    c->sources = (int *)malloc(c->indegree * sizeof(int));
-    c->recvCounts = (int *)malloc(c->indegree * sizeof(int));
-    c->rdispls = (int *)malloc(c->indegree * sizeof(int));
-    c->destinations = (int *)malloc(c->outdegree * sizeof(int));
-    c->sendCounts = (int *)malloc(c->outdegree * sizeof(int));
-    c->sdispls = (int *)malloc(c->outdegree * sizeof(int));
+    c->sources      = (int*)malloc(c->indegree * sizeof(int));
+    c->recvCounts   = (int*)malloc(c->indegree * sizeof(int));
+    c->rdispls      = (int*)malloc(c->indegree * sizeof(int));
+    c->destinations = (int*)malloc(c->outdegree * sizeof(int));
+    c->sendCounts   = (int*)malloc(c->outdegree * sizeof(int));
+    c->sdispls      = (int*)malloc(c->outdegree * sizeof(int));
 
-    MPI_Dist_graph_neighbors(c->communicator, c->indegree, c->sources,
-                             c->recvCounts, c->outdegree, c->destinations,
-                             c->sendCounts);
+    MPI_Dist_graph_neighbors(c->communicator,
+        c->indegree,
+        c->sources,
+        c->recvCounts,
+        c->outdegree,
+        c->destinations,
+        c->sendCounts);
   }
 
   /***********************************************************************
    *    Step 3:  Build and apply index mapping
    ************************************************************************/
-  int *externalsReordered =
-      (int *)allocate(ARRAY_ALIGNMENT, externalCount * sizeof(int));
+  int* externalsReordered = (int*)allocate(ARRAY_ALIGNMENT,
+      externalCount * sizeof(int));
 
-  buildIndexMapping(c, A, externals, externalIndex, externalsReordered,
-                    externalRank);
+  buildIndexMapping(c,
+      A,
+      externals,
+      externalIndex,
+      externalsReordered,
+      externalRank);
 
   free(externalIndex);
   bstFree(externals);
 
 #ifdef VERBOSE
   fprintf(c->logFile, "STEP 3 \n");
-  fprintf(c->logFile, "Rank %d of %d: %d externals\n", rank, size,
-          externalCount);
+  fprintf(c->logFile,
+      "Rank %d of %d: %d externals\n",
+      rank,
+      size,
+      externalCount);
 
   for (int i = 0; i < externalCount; i++) {
-    fprintf(c->logFile, "Rank %d of %d: external[%d] owned by %d\n", rank, size,
-            i, externalRank[i]);
+    fprintf(c->logFile,
+        "Rank %d of %d: external[%d] owned by %d\n",
+        rank,
+        size,
+        i,
+        externalRank[i]);
   }
 #endif
 
@@ -531,11 +624,12 @@ void commPartition(Comm *c, GMatrix *A) {
 #endif
 }
 
-void commExchange(Comm *c, CG_UINT numRows, CG_FLOAT *x) {
+void commExchange(Comm* c, CG_UINT numRows, CG_FLOAT* x)
+{
 #ifdef _MPI
-  CG_FLOAT *sendBuffer = c->sendBuffer;
-  CG_FLOAT *externals = x + numRows;
-  int *elementsToSend = c->elementsToSend;
+  CG_FLOAT* sendBuffer = c->sendBuffer;
+  CG_FLOAT* externals  = x + numRows;
+  int* elementsToSend  = c->elementsToSend;
 
 // Copy values for all ranks into send buffer
 #pragma omp parallel for
@@ -543,14 +637,21 @@ void commExchange(Comm *c, CG_UINT numRows, CG_FLOAT *x) {
     sendBuffer[i] = x[elementsToSend[i]];
   }
 
-  MPI_Neighbor_alltoallv(sendBuffer, c->sendCounts, c->sdispls, MPI_FLOAT_TYPE,
-                         externals, c->recvCounts, c->rdispls, MPI_FLOAT_TYPE,
-                         c->communicator);
+  MPI_Neighbor_alltoallv(sendBuffer,
+      c->sendCounts,
+      c->sdispls,
+      MPI_FLOAT_TYPE,
+      externals,
+      c->recvCounts,
+      c->rdispls,
+      MPI_FLOAT_TYPE,
+      c->communicator);
 
 #endif
 }
 
-void commReduction(CG_FLOAT *v, int op) {
+void commReduction(CG_FLOAT* v, int op)
+{
 #ifdef _MPI
   if (op == MAX) {
     MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_FLOAT_TYPE, MPI_MAX, MPI_COMM_WORLD);
@@ -560,7 +661,8 @@ void commReduction(CG_FLOAT *v, int op) {
 #endif
 }
 
-void commPrintConfig(Comm *c, int nr, int startRow, int stopRow) {
+void commPrintConfig(Comm* c, int nr, int startRow, int stopRow)
+{
 #ifdef _MPI
   fflush(stdout);
   MPI_Barrier(MPI_COMM_WORLD);
@@ -570,18 +672,28 @@ void commPrintConfig(Comm *c, int nr, int startRow, int stopRow) {
 
   for (int i = 0; i < c->size; i++) {
     if (i == c->rank) {
-      printf("Rank %d has %d rows (%d to %d) with %d externals\n", c->rank, nr,
-             startRow, stopRow, c->externalCount);
+      printf("Rank %d has %d rows (%d to %d) with %d externals\n",
+          c->rank,
+          nr,
+          startRow,
+          stopRow,
+          c->externalCount);
 
       for (int k = 0; k < c->size; k++) {
         if (k == c->rank) {
           for (int i = 0; i < c->indegree; i++) {
-            printf("Rank %d: Source[%d] %d Recv count %d\n", c->rank, i,
-                   c->sources[i], c->recvCounts[i]);
+            printf("Rank %d: Source[%d] %d Recv count %d\n",
+                c->rank,
+                i,
+                c->sources[i],
+                c->recvCounts[i]);
           }
           for (int i = 0; i < c->outdegree; i++) {
-            printf("Rank %d: Dest[%d] %d Send count %d\n", c->rank, i,
-                   c->destinations[i], c->sendCounts[i]);
+            printf("Rank %d: Dest[%d] %d Send count %d\n",
+                c->rank,
+                i,
+                c->destinations[i],
+                c->sendCounts[i]);
           }
           fflush(stdout);
         }
@@ -600,19 +712,21 @@ void commPrintConfig(Comm *c, int nr, int startRow, int stopRow) {
 #endif
 }
 
-void commMatrixDump(Comm *c, Matrix *m) {
+void commMatrixDump(Comm* c, Matrix* m)
+{
   int rank = c->rank;
   int size = c->size;
 
 #ifdef CRS
   CG_UINT numRows = m->nr;
-  CG_UINT *rowPtr = m->rowPtr;
-  CG_UINT *colInd = m->colInd;
-  CG_FLOAT *val = m->val;
+  CG_UINT* rowPtr = m->rowPtr;
+  CG_UINT* colInd = m->colInd;
+  CG_FLOAT* val   = m->val;
 
   if (commIsMaster(c)) {
     printf("Matrix: %d total non zeroes, total number of rows %d\n",
-           m->totalNnz, m->totalNr);
+        m->totalNnz,
+        m->totalNr);
   }
 
   for (int i = 0; i < size; i++) {
@@ -623,7 +737,7 @@ void commMatrixDump(Comm *c, Matrix *m) {
         printf("Row [%d]: ", rowID);
 
         for (int rowEntry = rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
-             rowEntry++) {
+            rowEntry++) {
           printf("[%d]:%.2f ", colInd[rowEntry], val[rowEntry]);
         }
 
@@ -687,7 +801,8 @@ void commMatrixDump(Comm *c, Matrix *m) {
 #endif /* ifdef SCS */
 }
 
-void commVectorDump(Comm *c, CG_FLOAT *v, CG_UINT size, char *name) {
+void commVectorDump(Comm* c, CG_FLOAT* v, CG_UINT size, char* name)
+{
   for (int i = 0; i < c->size; i++) {
     if (i == c->rank) {
       fprintf(c->logFile, "Vector %s Rank %d of %d\n", name, c->rank, c->size);
@@ -701,31 +816,39 @@ void commVectorDump(Comm *c, CG_FLOAT *v, CG_UINT size, char *name) {
   }
 }
 
-void commGMatrixDump(Comm *c, GMatrix *m) {
-  int rank = c->rank;
-  int size = c->size;
+void commGMatrixDump(Comm* c, GMatrix* m)
+{
+  int rank        = c->rank;
+  int size        = c->size;
   CG_UINT numRows = m->nr;
-  CG_UINT *rowPtr = m->rowPtr;
-  Entry *entries = m->entries;
+  CG_UINT* rowPtr = m->rowPtr;
+  Entry* entries  = m->entries;
 
-  if (commIsMaster(c)) {
-    printf("Matrix: %d total non zeroes, total number of rows %d\n",
-           m->totalNnz, m->totalNr);
-  }
+  fprintf(c->logFile,
+      "Matrix: %d total non zeroes, total number of rows %d\n",
+      m->totalNnz,
+      m->totalNr);
+  fprintf(c->logFile,
+      "Matrix: %d local non zeroes, local number of rows %d\n",
+      m->nnz,
+      m->nr);
 
   for (int i = 0; i < size; i++) {
     if (i == rank) {
-      printf("Rank %d: number of rows %d\n", rank, numRows);
+      fprintf(c->logFile, "Rank %d: number of rows %d\n", rank, numRows);
 
       for (int rowID = 0; rowID < numRows; rowID++) {
-        printf("Row [%d]: ", rowID);
+        fprintf(c->logFile, "Row [%d]: ", rowID);
 
         for (int rowEntry = rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
-             rowEntry++) {
-          printf("[%d]:%.2f ", entries[rowEntry].col, entries[rowEntry].val);
+            rowEntry++) {
+          fprintf(c->logFile,
+              "[%d]:%.2f ",
+              entries[rowEntry].col,
+              entries[rowEntry].val);
         }
 
-        printf("\n");
+        fprintf(c->logFile, "\n");
       }
       fflush(stdout);
     }
@@ -735,7 +858,8 @@ void commGMatrixDump(Comm *c, GMatrix *m) {
   }
 }
 
-void commInit(Comm *c, int argc, char **argv) {
+void commInit(Comm* c, int argc, char** argv)
+{
 #ifdef _MPI
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &(c->rank));
@@ -751,7 +875,21 @@ void commInit(Comm *c, int argc, char **argv) {
 #endif
 }
 
-void commFinalize(Comm *c) {
+void commAbort(Comm* c, char* msg)
+{
+  printf("ERROR: %s\n", msg);
+#if defined(_MPI)
+  // MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  MPI_Finalize();
+#endif
+#ifdef VERBOSE
+  fclose(c->logFile);
+#endif
+  exit(EXIT_SUCCESS);
+}
+
+void commFinalize(Comm* c)
+{
 #ifdef _MPI
   free(c->sources);
   free(c->recvCounts);

@@ -8,7 +8,8 @@
 
 #include "util.h"
 
-char *changeFileEnding(char *filename, char *newEnding) {
+char* changeFileEnding(char* filename, char* newEnding)
+{
 
   char *dot, *newname;
   int len;
@@ -22,13 +23,9 @@ char *changeFileEnding(char *filename, char *newEnding) {
     len = strlen(filename);
   }
 
-  /* Allocate a buffer big enough to hold the result.
-   * 6 extra characters: 5 for ".mtx", 1 for null byte */
   newname = malloc(len + 6);
-  /* Build the new name */
   strncpy(newname, filename, len);
   strcpy(newname + len, newEnding);
 
-  printf("Change filename from %s to %s\n", filename, newname);
   return newname;
 }

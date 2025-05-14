@@ -2,14 +2,13 @@
  * All rights reserved. This file is part of CG-Bench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
+#include <stdio.h>
 
 #include "matrixBinfile.h"
 #include "mpi.h"
 
 #include "allocate.h"
-#include "mpio.h"
 #include "util.h"
-#include <stdio.h>
 
 #define HEADERSIZE 24
 
@@ -38,6 +37,11 @@ static void createEntrytype(MPI_Datatype* entryType)
 void matrixBinWrite(GMatrix* m, Comm* c, char* filename)
 {
   MPI_File fh;
+
+  if (c->size > 1) {
+    fprintf(stderr, "ERROR: Matrix writing only supported for single rank\n");
+    return;
+  }
 
   MPI_File_open(MPI_COMM_WORLD,
       filename,
@@ -103,16 +107,16 @@ void matrixBinRead(GMatrix* m, Comm* c, char* filename)
     printf("Reading matrix from %s\n", filename);
   }
 
+  // read file header
   char header[HEADERSIZE];
   MPI_File_set_view(fh, 0, MPI_CHAR, MPI_CHAR, "native", MPI_INFO_NULL);
-
-  if (commIsMaster(c)) {
-    MPI_File_read(fh, header, HEADERSIZE, MPI_CHAR, &status);
-    MPI_Get_count(&status, MPI_CHAR, &count);
-    if (count != HEADERSIZE) {
-      printf("ERROR reading header!\n");
-    }
+  MPI_File_read(fh, header, HEADERSIZE, MPI_CHAR, &status);
+  MPI_Get_count(&status, MPI_CHAR, &count);
+  if (count != HEADERSIZE) {
+    printf("ERROR reading header!\n");
   }
+
+  // read total matrix size
   MPI_File_get_position(fh, &offset);
   MPI_File_get_byte_offset(fh, offset, &disp);
   MPI_File_set_view(fh,
@@ -127,7 +131,6 @@ void matrixBinRead(GMatrix* m, Comm* c, char* filename)
   if (count != 1) {
     printf("ERROR reading unsigned!\n");
   }
-  printf("Read %d elements from file at offset %lld\n", count, disp);
   MPI_File_read(fh, &totalNnz, 1, MPI_UNSIGNED, &status);
   MPI_Get_count(&status, MPI_UNSIGNED, &count);
   if (count != 1) {
@@ -136,7 +139,9 @@ void matrixBinRead(GMatrix* m, Comm* c, char* filename)
 
   m->totalNr  = (CG_UINT)totalNr;
   m->totalNnz = (CG_UINT)totalNnz;
+  printf("Rank %d: totalNr %u totalNnz %u\n", c->rank, m->totalNr, m->totalNnz);
 
+  // partition matrix row wise
   int rank = c->rank;
   int size = c->size;
   int numRows, startRow, stopRow;
@@ -149,61 +154,69 @@ void matrixBinRead(GMatrix* m, Comm* c, char* filename)
     stopRow = cursor - 1;
   }
 
+  printf("Rank %d: numRows %d startRow %d stopRow %d\n",
+      c->rank,
+      numRows,
+      startRow,
+      stopRow);
+
   m->nr       = numRows;
+  m->nc       = numRows;
   m->startRow = startRow;
   m->stopRow  = stopRow;
-  m->rowPtr   = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
+
+  // read row pointers
+  m->rowPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
       (numRows + 1) * sizeof(CG_UINT));
-  MPI_Aint extent;
 
   MPI_File_get_position(fh, &offset);
-  MPI_File_get_byte_offset(fh, offset, &disp);
-  MPI_File_get_type_extent(fh, MPI_UNSIGNED, &extent);
-  offset = disp;
-  disp += (startRow * extent);
-  MPI_File_set_view(fh,
-      disp,
-      MPI_UNSIGNED,
-      MPI_UNSIGNED,
-      "native",
-      MPI_INFO_NULL);
+  MPI_File_seek(fh, startRow, MPI_SEEK_CUR);
   MPI_File_read(fh, m->rowPtr, numRows + 1, MPI_UNSIGNED, &status);
   MPI_Get_count(&status, MPI_UNSIGNED, &count);
-  printf("rowptr Read %d elements from file\n", count);
+  if (count != numRows + 1) {
+    printf("ERROR reading rowptr!\n");
+  }
+
+  // localize row pointer and determine local nnz
   int nnz = 0;
   for (int i = 0; i < numRows; i++) {
     nnz += m->rowPtr[i + 1] - m->rowPtr[i];
   }
 
-  printf("NNZ = %d\n", nnz);
+  m->nnz = (CG_UINT)nnz;
 
-  m->nnz          = nnz;
-  FEntry* entries = (FEntry*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(FEntry));
-
+  // determine entry offset
   int allnnz[size];
   MPI_Allgather(&nnz, 1, MPI_INT, allnnz, 1, MPI_INT, MPI_COMM_WORLD);
-  int entryOffset = 0;
+  MPI_Offset entryOffset = 0;
 
   for (int i = 0; i < rank; i++) {
     entryOffset += allnnz[i];
   }
 
+  for (int i = 0; i <= numRows; i++) {
+    m->rowPtr[i] -= entryOffset;
+  }
+
+  MPI_File_seek(fh, offset + m->totalNr + 1, MPI_SEEK_SET);
+  MPI_File_get_position(fh, &offset);
+  MPI_File_get_byte_offset(fh, offset, &disp);
+
+  FEntry* entries = (FEntry*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(FEntry));
   MPI_Datatype entryType;
   createEntrytype(&entryType);
-  disp = offset + ((totalNr + 1) * extent);
-  printf("Start at %lld\n", disp);
-  MPI_File_get_type_extent(fh, entryType, &extent);
-  disp += entryOffset * extent;
-  printf("Disp %lld\n", disp);
   MPI_File_set_view(fh, disp, entryType, entryType, "native", MPI_INFO_NULL);
-
-  MPI_File_read(fh, entries, nnz, entryType, &status);
+  MPI_File_seek(fh, entryOffset, MPI_SEEK_SET);
+  MPI_File_read(fh, entries, m->nnz, entryType, &status);
   MPI_Get_count(&status, entryType, &count);
-  printf("entries Read %d elements from file\n", count);
+  if (count != m->nnz) {
+    printf("ERROR reading rowptr!\n");
+  }
   MPI_Type_free(&entryType);
   MPI_File_close(&fh);
 
   m->entries = (Entry*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
+
   for (int i = 0; i < m->nnz; i++) {
     m->entries[i].col = (CG_UINT)entries[i].col;
     m->entries[i].val = (CG_FLOAT)entries[i].val;

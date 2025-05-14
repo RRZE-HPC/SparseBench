@@ -106,7 +106,7 @@ int main(int argc, char** argv)
       break;
     case 'c':
       writeBinMatrix(&comm, optarg);
-      commAbort("Finish write matrix");
+      commAbort(&comm, "Finish write matrix");
     case 'f':
       readParameter(&param, optarg);
       break;
@@ -158,7 +158,7 @@ int main(int argc, char** argv)
   }
 
   if (stop) {
-    commAbort("Wrong command line arguments");
+    commAbort(&comm, "Wrong command line arguments");
   }
 
   commPrintBanner(&comm);
@@ -167,17 +167,6 @@ int main(int argc, char** argv)
   GMatrix m;
   timeStart = getTimeStamp();
   initMatrix(&comm, &param, &m);
-
-  size_t factorFlops[NUMREGIONS];
-  size_t factorWords[NUMREGIONS];
-  factorFlops[DDOT]   = m.totalNr;
-  factorWords[DDOT]   = sizeof(CG_FLOAT) * m.totalNr;
-  factorFlops[WAXPBY] = m.totalNr;
-  factorWords[WAXPBY] = sizeof(CG_FLOAT) * m.totalNr;
-  factorFlops[SPMVM]  = m.totalNnz;
-  factorWords[SPMVM]  = sizeof(CG_FLOAT) * m.totalNnz +
-                       sizeof(CG_UINT) * m.totalNnz;
-  profilerInit(factorFlops, factorWords);
   commPartition(&comm, &m);
 #ifdef VERBOSE
   commPrintConfig(&comm, m.nr, m.startRow, m.stopRow);
@@ -189,6 +178,17 @@ int main(int argc, char** argv)
   if (commIsMaster(&comm)) {
     printf("Setup took %.2fs\n", timeStop - timeStart);
   }
+
+  size_t factorFlops[NUMREGIONS];
+  size_t factorWords[NUMREGIONS];
+  factorFlops[DDOT]   = m.totalNr;
+  factorWords[DDOT]   = sizeof(CG_FLOAT) * m.totalNr;
+  factorFlops[WAXPBY] = m.totalNr;
+  factorWords[WAXPBY] = sizeof(CG_FLOAT) * m.totalNr;
+  factorFlops[SPMVM]  = m.totalNnz;
+  factorWords[SPMVM]  = sizeof(CG_FLOAT) * m.totalNnz +
+                       sizeof(CG_UINT) * m.totalNnz;
+  profilerInit(factorFlops, factorWords);
 
   int k = 0;
   switch (type) {

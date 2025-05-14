@@ -33,11 +33,13 @@
 #endif
 
 #if UINT_TYPE == 1
-#define CG_UINT     unsigned int
-#define UINT_STRING "unsigned int"
+#define CG_UINT      unsigned int
+#define MPI_INT_TYPE MPI_UNSIGNED
+#define UINT_STRING  "unsigned int"
 #else
-#define CG_UINT     unsigned long long int
-#define UINT_STRING "unsigned long long int"
+#define CG_UINT      unsigned long long int
+#define MPI_INT_TYPE MPI_UNSIGNED_LONG_LONG
+#define UINT_STRING  "unsigned long long int"
 #endif
 
 #if PRECISION == 1
