@@ -879,7 +879,7 @@ void commInit(Comm* c, int argc, char** argv)
 
 void commAbort(Comm* c, char* msg)
 {
-  printf("ERROR: %s\n", msg);
+  printf("Abort: %s\n", msg);
 #if defined(_MPI)
   // MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
   MPI_Finalize();

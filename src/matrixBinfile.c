@@ -86,10 +86,20 @@ void matrixBinWrite(GMatrix* m, Comm* c, char* filename)
   MPI_Barrier(MPI_COMM_WORLD);
   MPI_File_get_size(fh, &disp);
   MPI_File_set_view(fh, disp, entryType, entryType, "native", MPI_INFO_NULL);
-  if (commIsMaster(c)) {
-    MPI_File_write(fh, m->entries, m->totalNnz, entryType, MPI_STATUS_IGNORE);
+
+  FEntry* entries = (FEntry*)allocate(ARRAY_ALIGNMENT,
+      m->totalNnz * sizeof(FEntry));
+
+  for (int i = 0; i < m->nnz; i++) {
+    entries[i].col = (unsigned int)m->entries[i].col;
+    entries[i].val = (float)m->entries[i].val;
   }
 
+  if (commIsMaster(c)) {
+    MPI_File_write(fh, entries, m->totalNnz, entryType, MPI_STATUS_IGNORE);
+  }
+
+  free(entries);
   MPI_Type_free(&entryType);
   MPI_File_close(&fh);
 }
