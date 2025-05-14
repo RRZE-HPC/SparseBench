@@ -661,7 +661,8 @@ void commReduction(CG_FLOAT* v, int op)
 #endif
 }
 
-void commPrintConfig(Comm* c, int nr, int startRow, int stopRow)
+void commPrintConfig(
+    Comm* c, CG_UINT nr, CG_UINT nnz, CG_UINT startRow, CG_UINT stopRow)
 {
 #ifdef _MPI
   fflush(stdout);
@@ -672,11 +673,12 @@ void commPrintConfig(Comm* c, int nr, int startRow, int stopRow)
 
   for (int i = 0; i < c->size; i++) {
     if (i == c->rank) {
-      printf("Rank %d has %d rows (%d to %d) with %d externals\n",
+      printf("Rank %d has %u rows (%u to %u) and %u nnz with %d externals\n",
           c->rank,
           nr,
           startRow,
           stopRow,
+          nnz,
           c->externalCount);
 
       for (int k = 0; k < c->size; k++) {

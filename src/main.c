@@ -102,7 +102,7 @@ int main(int argc, char** argv)
       if (commIsMaster(&comm)) {
         printf(HELPTEXT);
       }
-      stop = true;
+      commAbort(&comm, "Finish write matrix");
       break;
     case 'c':
       writeBinMatrix(&comm, optarg);
@@ -168,12 +168,11 @@ int main(int argc, char** argv)
   timeStart = getTimeStamp();
   initMatrix(&comm, &param, &m);
   commPartition(&comm, &m);
-#ifdef VERBOSE
-  commPrintConfig(&comm, m.nr, m.startRow, m.stopRow);
-#endif
+  // commPrintConfig(&comm, m.nr, m.nnz, m.startRow, m.stopRow);
 
   Matrix sm;
   convertMatrix(&sm, &m);
+  commBarrier();
   timeStop = getTimeStamp();
   if (commIsMaster(&comm)) {
     printf("Setup took %.2fs\n", timeStop - timeStart);

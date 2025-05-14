@@ -251,8 +251,6 @@ void matrixConvertfromMM(MMMatrix* mm, GMatrix* m)
   int startRow     = mm->startRow;
 
   for (int i = 0; i < mm->count; i++) {
-    // printf("GET HERE %d -> %d\n", i, entries[i].row);
-    // fflush(stdout);
     valsPerRow[entries[i].row - startRow]++;
   }
 

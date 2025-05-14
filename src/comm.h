@@ -13,21 +13,14 @@
 
 #include "matrix.h"
 
-#define MAX_EXTERNAL 100000
+#define MAX_EXTERNAL 6000000
 
 #define BANNER                                                                 \
-  "                                                                          " \
-  "        \n"                                                                 \
-  "  _|_|_|    _|_|_|              _|_|_|                                  "   \
-  "_|        \n"                                                               \
-  "_|        _|                    _|    _|    _|_|    _|_|_|      _|_|_|  "   \
-  "_|_|_|    \n"                                                               \
-  "_|        _|  _|_|  _|_|_|_|_|  _|_|_|    _|_|_|_|  _|    _|  _|        "   \
-  "_|    _|  \n"                                                               \
-  "_|        _|    _|              _|    _|  _|        _|    _|  _|        "   \
-  "_|    _|  \n"                                                               \
-  "  _|_|_|    _|_|_|              _|_|_|      _|_|_|  _|    _|    _|_|_|  "   \
-  "_|    _|  \n"
+  "/ _\\_ __   __ _ _ __ ___  ___  / __\\ ___ _ __   ___| |__  \n"             \
+  "\\ \\| '_ \\ / _` | '__/ __|/ _ \\/__\\/// _ \\ '_ \\ / __| '_ \\ \n"       \
+  "_\\ \\ |_) | (_| | |  \\__ \\  __/ \\/  \\  __/ | | | (__| | | |\n"         \
+  "\\__/ .__/ \\__,_|_|  |___/\\___\\_____/\\___|_| |_|\\___|_| |_|\n"         \
+  "   |_|                                                    \n"
 
 enum op { MAX = 0, SUM };
 
@@ -56,7 +49,8 @@ extern void commInit(Comm* c, int argc, char** argv);
 extern void commFinalize(Comm* c);
 extern void commDistributeMatrix(Comm* c, MMMatrix* m, MMMatrix* mLocal);
 extern void commPartition(Comm* c, GMatrix* m);
-extern void commPrintConfig(Comm* c, int nr, int startRow, int stopRow);
+extern void commPrintConfig(
+    Comm* c, CG_UINT nr, CG_UINT nnz, CG_UINT startRow, CG_UINT stopRow);
 extern void commGMatrixDump(Comm* c, GMatrix* m);
 extern void commMatrixDump(Comm* c, Matrix* m);
 extern void commVectorDump(Comm* c, CG_FLOAT* v, CG_UINT size, char* name);
