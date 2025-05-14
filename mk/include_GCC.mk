@@ -17,3 +17,4 @@ CFLAGS   = -O3  -ffast-math -std=c23 $(OPENMP)
 LFLAGS   = $(OPENMP)
 DEFINES  += -D_GNU_SOURCE # -DVERBOSE
 INCLUDES =
+LIBS     = -lm
