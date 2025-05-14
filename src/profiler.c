@@ -5,8 +5,8 @@
 #include "profiler.h"
 #include "comm.h"
 #include "likwid-marker.h"
-#include "solver.h"
 #include "util.h"
+#include <stddef.h>
 
 typedef struct {
   char* label;
@@ -21,7 +21,7 @@ static workType _regions[NUMREGIONS] = { { "waxpby:  ", 3, 6 },
   { "ddot:    ", 2, 4 },
   { "comm:    ", 0, 0 } };
 
-void profilerInit(void)
+void profilerInit(size_t* facFlops, size_t* facWords)
 {
   LIKWID_MARKER_INIT;
   _Pragma("omp parallel")
@@ -34,18 +34,15 @@ void profilerInit(void)
 
   for (int i = 0; i < NUMREGIONS; i++) {
     _t[i] = 0.0;
+    _regions[i].flops *= facFlops[i];
+    _regions[i].words *= facWords[i];
   }
+
+  _regions[SPMVM].words = facWords[SPMVM];
 }
 
-void profilerPrint(Comm* c, Solver* s, int iterations)
+void profilerPrint(Comm* c, int iterations)
 {
-  _regions[DDOT].flops *= s->A.nr;
-  _regions[DDOT].words *= sizeof(CG_FLOAT) * s->A.nr;
-  _regions[WAXPBY].flops *= s->A.nr;
-  _regions[WAXPBY].words *= sizeof(CG_FLOAT) * s->A.nr;
-  _regions[SPMVM].flops *= s->A.nnz;
-  _regions[SPMVM].words = sizeof(CG_FLOAT) * s->A.nnz +
-                          sizeof(CG_UINT) * s->A.nnz;
 
   if (c->size > 1) {
 #ifdef _MPI
@@ -62,9 +59,11 @@ void profilerPrint(Comm* c, Solver* s, int iterations)
     }
 
     int commWords = 0;
-    for (int i = 0; i < c->neighborCount; i++) {
-      commWords += c->recvCount[i];
-      commWords += c->sendCount[i];
+    for (int i = 0; i < c->outdegree; i++) {
+      commWords += c->sendCounts[i];
+    }
+    for (int i = 0; i < c->indegree; i++) {
+      commWords += c->recvCounts[i];
     }
 
     _regions[COMM].words = sizeof(CG_FLOAT) * commWords;

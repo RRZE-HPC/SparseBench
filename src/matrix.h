@@ -6,36 +6,54 @@
 #define __MATRIX_H_
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 
 #include "parameter.h"
 #include "util.h"
+
+#ifdef CRS
+#include "CRSMatrix.h"
+#endif
+#ifdef SCS
+#include "SCSMatrix.h"
+#endif
+#ifdef CCRS
+#include "CCRSMatrix.h"
+#endif
+
+typedef struct {
+  CG_UINT col;
+  CG_FLOAT val;
+} Entry;
+
+typedef struct {
+  CG_UINT nr, nc, nnz;       // number of rows, columns and non zeros
+  CG_UINT totalNr, totalNnz; // number of total rows and non zeros
+  CG_UINT startRow, stopRow; // range of rows owned by current rank
+  CG_UINT* rowPtr;           // row Pointer
+  Entry* entries;
+} GMatrix;
 
 typedef struct {
   int row;
   int col;
   double val;
-} Entry;
+} MMEntry;
 
 typedef struct {
   size_t count;
   int nr, nnz;
   int totalNr, totalNnz; // number of total rows and non zeros
   int startRow, stopRow; // range of rows owned by current rank
-  Entry* entries;
-} MmMatrix;
+  MMEntry* entries;
+} MMMatrix;
 
-typedef struct {
-  CG_UINT nr, nc, nnz;       // number of rows, columns and non zeros
-  CG_UINT totalNr, totalNnz; // number of total rows and non zeros
-  CG_UINT startRow, stopRow; // range of rows owned by current rank
-  CG_UINT *colInd, *rowPtr;  // colum Indices, row Pointer
-  CG_FLOAT* val;             // matrix entries
-} Matrix;
+extern void MMMatrixRead(MMMatrix* m, char* filename);
+extern void matrixConvertfromMM(MMMatrix* mm, GMatrix* m);
 
-extern void dumpMMMatrix(MmMatrix* m);
-extern void matrixRead(MmMatrix* m, char* filename);
-extern void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size);
 extern void matrixGenerate(
-    Matrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil);
+    GMatrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil);
+
+extern void convertMatrix(Matrix* m, GMatrix* im);
 
 #endif // __MATRIX_H_

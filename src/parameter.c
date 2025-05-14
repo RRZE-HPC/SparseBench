@@ -14,9 +14,9 @@ void initParameter(Parameter* param)
   param->filename = "generate";
   param->nx       = 100;
   param->ny       = 100;
-  param->nz       = 1000;
-  param->itermax  = 1000;
-  param->eps      = 0.0001;
+  param->nz       = 100;
+  param->itermax  = 150;
+  param->eps      = 0.0;
 }
 
 void readParameter(Parameter* param, const char* filename)
@@ -64,8 +64,7 @@ void readParameter(Parameter* param, const char* filename)
 void printParameter(Parameter* param)
 {
   printf("Parameters\n");
-  printf("Geometry data:\n");
-  printf("\tPoints (x, y, z): %d, %d, %d\n", param->nx, param->ny, param->nz);
+  // printf("\tN rows: %d, Non zeroes: %d,\n", param->nx, param->ny, param->nz);
   printf("Iterative solver parameters:\n");
   printf("\tMax iterations: %d\n", param->itermax);
   printf("\tepsilon (stopping tolerance) : %f\n", param->eps);

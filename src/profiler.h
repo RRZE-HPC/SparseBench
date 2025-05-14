@@ -5,8 +5,7 @@
 #ifndef __PROFILER_H_
 #define __PROFILER_H_
 #include "comm.h"
-#include "solver.h"
-#include "timing.h"
+#include <stddef.h>
 
 #ifdef LIKWID_PERFMON
 #define PROFILE(tag, call)                                                     \
@@ -25,7 +24,7 @@
 typedef enum { WAXPBY = 0, SPMVM, DDOT, COMM, NUMREGIONS } regions;
 
 extern double _t[NUMREGIONS];
-extern void profilerInit();
-extern void profilerPrint(Comm* c, Solver* s, int iterations);
+extern void profilerInit(size_t* facFlops, size_t* facWords);
+extern void profilerPrint(Comm* c, int iterations);
 extern void profilerFinalize(void);
 #endif // __PROFILER_H

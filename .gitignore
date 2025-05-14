@@ -1,6 +1,6 @@
 /build
 .clangd
-cgBench-*
+/sparseBench-*
 
 # Prerequisites
 *.d
@@ -54,3 +54,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Test Data
+tests/runTests
+tests/*.o
+tests/matrix/*.o
+tests/data/reported/*

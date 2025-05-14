@@ -1,6 +1,6 @@
-# CG-Bench
+# SparseBench
 
-A hybrid MPI+OpenMP parallel CG solver benchmark.
+A hybrid MPI+OpenMP parallel sparse solver benchmark collection.
 
 ## Build
 

@@ -5,19 +5,11 @@
 #ifndef __SOLVER_H_
 #define __SOLVER_H_
 #include "comm.h"
-#include "matrix.h"
 #include "parameter.h"
 #include "util.h"
 
-typedef struct {
-  Matrix A;
-  CG_FLOAT* x;
-  CG_FLOAT* b;
-  CG_FLOAT* xexact;
-} Solver;
-
-extern void initSolver(Solver* s, Comm* c, Parameter*);
-extern void solverCheckResidual(Solver* s, Comm* c);
+extern int solveCG(Comm* comm, Parameter* param, Matrix* m);
+// extern void solverCheckResidual(Solver* s, Comm* c);
 extern void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y);
 
 extern void waxpby(const CG_UINT n,
@@ -25,7 +17,7 @@ extern void waxpby(const CG_UINT n,
     const CG_FLOAT* restrict x,
     const CG_FLOAT beta,
     const CG_FLOAT* restrict y,
-    double* restrict w);
+    CG_FLOAT* restrict w);
 
 extern void ddot(const CG_UINT n,
     const CG_FLOAT* restrict e,

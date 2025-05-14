@@ -13,23 +13,14 @@
 
 #include "matrix.h"
 
-#define MAX_EXTERNAL       100000
-#define MAX_NUM_MESSAGES   500
-#define MAX_NUM_NEIGHBOURS MAX_NUM_MESSAGES
+#define MAX_EXTERNAL 6000000
 
 #define BANNER                                                                 \
-  "                                                                          " \
-  "        \n"                                                                 \
-  "  _|_|_|    _|_|_|              _|_|_|                                  "   \
-  "_|        \n"                                                               \
-  "_|        _|                    _|    _|    _|_|    _|_|_|      _|_|_|  "   \
-  "_|_|_|    \n"                                                               \
-  "_|        _|  _|_|  _|_|_|_|_|  _|_|_|    _|_|_|_|  _|    _|  _|        "   \
-  "_|    _|  \n"                                                               \
-  "_|        _|    _|              _|    _|  _|        _|    _|  _|        "   \
-  "_|    _|  \n"                                                               \
-  "  _|_|_|    _|_|_|              _|_|_|      _|_|_|  _|    _|    _|_|_|  "   \
-  "_|    _|  \n"
+  "/ _\\_ __   __ _ _ __ ___  ___  / __\\ ___ _ __   ___| |__  \n"             \
+  "\\ \\| '_ \\ / _` | '__/ __|/ _ \\/__\\/// _ \\ '_ \\ / __| '_ \\ \n"       \
+  "_\\ \\ |_) | (_| | |  \\__ \\  __/ \\/  \\  __/ | | | (__| | | |\n"         \
+  "\\__/ .__/ \\__,_|_|  |___/\\___\\_____/\\___|_| |_|\\___|_| |_|\n"         \
+  "   |_|                                                    \n"
 
 enum op { MAX = 0, SUM };
 
@@ -38,37 +29,37 @@ typedef struct {
   int size;
   FILE* logFile;
 #if defined(_MPI)
-  int neighborCount;
   int externalCount;
   int totalSendCount;
   int* elementsToSend;
-  int neighbors[MAX_NUM_NEIGHBOURS];
-  int recvCount[MAX_NUM_NEIGHBOURS];
-  int sendCount[MAX_NUM_NEIGHBOURS];
+  int indegree;
+  int outdegree;
+  int* sources;
+  int* recvCounts;
+  int* rdispls;
+  int* destinations;
+  int* sendCounts;
+  int* sdispls;
   CG_FLOAT* sendBuffer;
+  MPI_Comm communicator;
 #endif
 } Comm;
 
 extern void commInit(Comm* c, int argc, char** argv);
 extern void commFinalize(Comm* c);
-extern void commDistributeMatrix(Comm* c, MmMatrix* m, MmMatrix* mLocal);
-extern void commPartition(Comm* c, Matrix* m);
-extern void commPrintConfig(Comm* c, int nr, int startRow, int stopRow);
-extern void commMMMatrixDump(Comm* c, MmMatrix* m);
+extern void commDistributeMatrix(Comm* c, MMMatrix* m, MMMatrix* mLocal);
+extern void commPartition(Comm* c, GMatrix* m);
+extern void commPrintConfig(
+    Comm* c, CG_UINT nr, CG_UINT nnz, CG_UINT startRow, CG_UINT stopRow);
+extern void commGMatrixDump(Comm* c, GMatrix* m);
 extern void commMatrixDump(Comm* c, Matrix* m);
-extern void commExchange(Comm* c, Matrix* A, double* x);
-extern void commReduction(double* v, int op);
+extern void commVectorDump(Comm* c, CG_FLOAT* v, CG_UINT size, char* name);
+extern void commExchange(Comm* c, CG_UINT numRows, CG_FLOAT* x);
+extern void commReduction(CG_FLOAT* v, int op);
 extern void commPrintBanner(Comm* c);
+extern void commAbort(Comm* c, char* msg);
 
 static inline int commIsMaster(Comm* c) { return c->rank == 0; }
-static inline void commAbort(char* msg)
-{
-  printf("ERROR: %s\n", msg);
-#if defined(_MPI)
-  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-#endif
-  exit(EXIT_FAILURE);
-}
 static inline void commBarrier(void)
 {
 #if defined(_MPI)

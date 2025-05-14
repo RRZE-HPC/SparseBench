@@ -9,34 +9,26 @@
 #include "allocate.h"
 #include "matrix.h"
 #include "mmio.h"
+#include "util.h"
 
 static inline int compareColumn(const void* a, const void* b)
 {
-  const Entry* a_ = (const Entry*)a;
-  const Entry* b_ = (const Entry*)b;
+  const MMEntry* a_ = (const MMEntry*)a;
+  const MMEntry* b_ = (const MMEntry*)b;
 
   return (a_->col > b_->col) - (a_->col < b_->col);
 }
 
 static inline int compareRow(const void* a, const void* b)
 {
-  const Entry* a_ = (const Entry*)a;
-  const Entry* b_ = (const Entry*)b;
+  const MMEntry* a_ = (const MMEntry*)a;
+  const MMEntry* b_ = (const MMEntry*)b;
 
   return (a_->row > b_->row) - (a_->row < b_->row);
 }
 
-void dumpMMMatrix(MmMatrix* mm)
-{
-  Entry* entries = mm->entries;
-
-  for (int i = 0; i < mm->count; i++) {
-    printf("%d %d: %f\n", entries[i].row, entries[i].col, entries[i].val);
-  }
-}
-
 void matrixGenerate(
-    Matrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil)
+    GMatrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil)
 {
 
   CG_UINT local_nrow = p->nx * p->ny * p->nz;
@@ -59,16 +51,12 @@ void matrixGenerate(
         (double)local_nnz);
   }
 
-  m->val = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(CG_FLOAT));
-  m->colInd = (CG_UINT*)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(CG_UINT));
-  m->rowPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
+  m->entries = (Entry*)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(Entry));
+  m->rowPtr  = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
       (local_nrow + 1) * sizeof(CG_UINT));
 
-  CG_FLOAT* curvalptr = m->val;
-  CG_UINT* curindptr  = m->colInd;
-  CG_UINT* currowptr  = m->rowPtr;
-
-  CG_UINT nnzglobal = 0;
+  CG_UINT* currowptr = m->rowPtr;
+  CG_UINT nnzglobal  = 0;
   int nx = p->nx, ny = p->ny, nz = p->nz;
   CG_UINT cursor = 0;
 
@@ -78,9 +66,8 @@ void matrixGenerate(
     for (int iy = 0; iy < ny; iy++) {
       for (int ix = 0; ix < nx; ix++) {
 
-        int curlocalrow = iz * nx * ny + iy * nx + ix;
-        int currow      = start_row + iz * nx * ny + iy * nx + ix;
-        int nnzrow      = 0;
+        int currow = start_row + iz * nx * ny + iy * nx + ix;
+        int nnzrow = 0;
 
         for (int sz = -1; sz <= 1; sz++) {
           for (int sy = -1; sy <= 1; sy++) {
@@ -98,11 +85,12 @@ void matrixGenerate(
                 // 7-pt stencil
                 if (!use_7pt_stencil || (sz * sz + sy * sy + sx * sx <= 1)) {
                   if (curcol == currow) {
-                    *curvalptr++ = 27.0;
+                    m->entries[cursor].val = 27.0;
                   } else {
-                    *curvalptr++ = -1.0;
+                    m->entries[cursor].val = -1.0;
                   }
-                  *curindptr++ = curcol;
+                  m->entries[cursor].col = curcol;
+                  cursor++;
                   nnzrow++;
                 }
               }
@@ -132,14 +120,14 @@ void matrixGenerate(
   m->nnz      = local_nnz;
 }
 
-void matrixRead(MmMatrix* m, char* filename)
+void MMMatrixRead(MMMatrix* m, char* filename)
 {
   MM_typecode matcode;
   FILE* f = NULL;
   int M, N, nz;
 
   if ((f = fopen(filename, "r")) == NULL) {
-    printf("Unable to open file");
+    printf("Unable to open file.\n");
     exit(EXIT_FAILURE);
   }
 
@@ -188,15 +176,15 @@ void matrixRead(MmMatrix* m, char* filename)
   printf("Read matrix %s with %d non zeroes and %d rows\n", filename, nz, M);
 
   if (sym_flag) {
-    m->entries = (Entry*)allocate(ARRAY_ALIGNMENT, nz * 2 * sizeof(Entry));
+    m->entries = (MMEntry*)allocate(ARRAY_ALIGNMENT, nz * 2 * sizeof(MMEntry));
   } else {
-    m->entries = (Entry*)allocate(ARRAY_ALIGNMENT, nz * sizeof(Entry));
+    m->entries = (MMEntry*)allocate(ARRAY_ALIGNMENT, nz * sizeof(MMEntry));
   }
 
   size_t cursor = 0;
   int row, col;
   double v;
-  Entry* entries = m->entries;
+  MMEntry* entries = m->entries;
 
   for (size_t i = 0; i < nz; i++) {
 
@@ -229,20 +217,18 @@ void matrixRead(MmMatrix* m, char* filename)
   m->count = cursor;
 
   // sort by column
-  qsort(m->entries, m->count, sizeof(Entry), compareColumn);
-// dumpMMMatrix(m);
+  qsort(m->entries, m->count, sizeof(MMEntry), compareColumn);
 // sort by row requires a stable sort. As glibc qsort is mergesort this
 // hopefully works.
 #ifdef __linux__
-  qsort(m->entries, m->count, sizeof(Entry), compareColumn);
+  qsort(m->entries, m->count, sizeof(MMEntry), compareRow);
 #else
   // BSD has a dedicated mergesort available in its libc
-  mergesort(m->entries, m->count, sizeof(Entry), compareRow);
+  mergesort(m->entries, m->count, sizeof(MMEntry), compareRow);
 #endif
-  // dumpMMMatrix(m);
 }
 
-void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
+void matrixConvertfromMM(MMMatrix* mm, GMatrix* m)
 {
   m->startRow = mm->startRow;
   m->stopRow  = mm->stopRow;
@@ -251,11 +237,9 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
   m->nr       = mm->nr;
   m->nc       = mm->nr;
   m->nnz      = mm->nnz;
-
-  m->rowPtr = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
+  m->entries  = (Entry*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
+  m->rowPtr   = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
       (m->nr + 1) * sizeof(CG_UINT));
-  m->colInd = (CG_UINT*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(CG_UINT));
-  m->val    = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(CG_FLOAT));
 
   int* valsPerRow = (int*)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(int));
 
@@ -263,9 +247,8 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
     valsPerRow[i] = 0;
   }
 
-  Entry* entries = mm->entries;
-  int startRow   = m->startRow;
-  // printf("count %lu startRow %d\n", mm->count, startRow);
+  MMEntry* entries = mm->entries;
+  int startRow     = mm->startRow;
 
   for (int i = 0; i < mm->count; i++) {
     valsPerRow[entries[i].row - startRow]++;
@@ -273,18 +256,14 @@ void matrixConvertMMtoCRS(MmMatrix* mm, Matrix* m, int rank, int size)
 
   m->rowPtr[0] = 0;
 
-  // convert to CRS format
+  // convert to CCRS format
   for (int rowID = 0; rowID < m->nr; rowID++) {
-    // printf("rowID %d valPerRow %d\n", rowID, valsPerRow[rowID]);
-
     m->rowPtr[rowID + 1] = m->rowPtr[rowID] + valsPerRow[rowID];
-    // printf("row ptr from %d to %d\n", m->rowPtr[rowID], m->rowPtr[rowID +
-    // 1]);
 
     // loop over all elements in Row
     for (int id = m->rowPtr[rowID]; id < m->rowPtr[rowID + 1]; id++) {
-      m->val[id]    = (CG_FLOAT)entries[id].val;
-      m->colInd[id] = (CG_UINT)entries[id].col;
+      m->entries[id].val = (CG_FLOAT)entries[id].val;
+      m->entries[id].col = (CG_UINT)entries[id].col;
     }
   }
 }

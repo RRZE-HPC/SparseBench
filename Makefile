@@ -4,8 +4,8 @@
 # license that can be found in the LICENSE file.
 
 #CONFIGURE BUILD SYSTEM
-TARGET	   = cgBench-$(TOOLCHAIN)
-BUILD_DIR  = ./build/$(TOOLCHAIN)
+TARGET	   = sparseBench-$(MTX_FMT)-$(TOOLCHAIN)
+BUILD_DIR  = ./build/$(MTX_FMT)-$(TOOLCHAIN)
 SRC_DIR    = ./src
 MAKE_DIR   = ./mk
 Q         ?= @
@@ -17,8 +17,8 @@ INCLUDES  += -I$(SRC_DIR)/includes -I$(BUILD_DIR)
 
 VPATH     = $(SRC_DIR)
 ASM       = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.s,$(wildcard $(SRC_DIR)/*.c))
-OBJ       = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c))
-SRC       =  $(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/*.c)
+OBJ       = $(filter-out $(BUILD_DIR)/matrix-%, $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c)))
+SRC       = $(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/*.c)
 CPPFLAGS := $(CPPFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES)
 c := ,
 clist = $(subst $(eval) ,$c,$(strip $1))
@@ -29,9 +29,9 @@ CompileFlags:
   Compiler: clang
 endef
 
-${TARGET}: $(BUILD_DIR) .clangd $(OBJ)
+${TARGET}: $(BUILD_DIR) .clangd $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o
 	$(info ===>  LINKING  $(TARGET))
-	$(Q)${LD} ${LFLAGS} -o $(TARGET) $(OBJ) $(LIBS)
+	$(Q)${LD} ${LFLAGS} -o $(TARGET) $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o $(LIBS)
 
 $(BUILD_DIR)/%.o:  %.c $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
 	$(info ===>  COMPILE  $@)
@@ -52,7 +52,7 @@ distclean:
 	$(info ===>  DIST CLEAN)
 	@rm -rf build
 	@rm -f $(TARGET)
-	@rm -f tags .clangd
+	@rm -f tags .clangd out*
 
 info:
 	$(info $(CFLAGS))
