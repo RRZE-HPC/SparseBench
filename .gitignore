@@ -1,5 +1,6 @@
 /build
 .clangd
+.vscode
 /sparseBench-*
 
 # Prerequisites
