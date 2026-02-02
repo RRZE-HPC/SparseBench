@@ -40,7 +40,8 @@ typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } types;
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
 
 #ifdef _MPI
-static void writeBinMatrix(Comm *c, char *filename) {
+static void writeBinMatrix(Comm* c, char* filename)
+{
   MMMatrix mm, mmLocal;
   GMatrix m;
   if (commIsMaster(c)) {
@@ -52,13 +53,14 @@ static void writeBinMatrix(Comm *c, char *filename) {
 }
 #endif
 
-static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
+static void initMatrix(Comm* c, Parameter* p, GMatrix* m)
+{
   if (strcmp(p->filename, "generate") == 0) {
     matrixGenerate(m, p, c->rank, c->size, false);
   } else if (strcmp(p->filename, "generate7P") == 0) {
     matrixGenerate(m, p, c->rank, c->size, true);
   } else {
-    char *dot = strrchr(p->filename, '.');
+    char* dot = strrchr(p->filename, '.');
     if (strcmp(dot, ".mtx") == 0) {
       MMMatrix mm, mmLocal;
 
@@ -85,16 +87,17 @@ static void initMatrix(Comm *c, Parameter *p, GMatrix *m) {
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv)
+{
   Parameter param;
   Comm comm;
 
   commInit(&comm, argc, argv);
   initParameter(&param);
 
-  char *cvalue = NULL;
+  char* cvalue = NULL;
   int index;
-  int type = CG;
+  int type  = CG;
   bool stop = false;
   int c;
 
@@ -123,8 +126,7 @@ int main(int argc, char **argv) {
       param.filename = optarg;
       break;
     case 't':
-      if (strcmp(optarg, "cg") == 0)
-        type = CG;
+      if (strcmp(optarg, "cg") == 0) type = CG;
       else if (strcmp(optarg, "spmv") == 0)
         type = SPMV;
       else if (strcmp(optarg, "gmres") == 0)
@@ -192,7 +194,7 @@ int main(int argc, char **argv) {
   timeStop = getTimeStamp();
   if (commIsMaster(&comm)) {
     printf("Parallel localization and matrix conversion took %.2fs\n",
-           timeStop - timeStart);
+        timeStop - timeStart);
   }
 
   size_t factorFlops[NUMREGIONS];
@@ -221,10 +223,8 @@ int main(int argc, char **argv) {
       printf("Test type: SPMVM\n");
     }
     int itermax = param.itermax;
-    CG_FLOAT *x =
-        (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
-    CG_FLOAT *y =
-        (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
+    CG_FLOAT* x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
+    CG_FLOAT* y = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
 
     for (int i = 0; i < m.nr; i++) {
       x[i] = (CG_FLOAT)1.0;
@@ -238,8 +238,17 @@ int main(int argc, char **argv) {
   case GMRES:
     if (commIsMaster(&comm)) {
       printf("Test type: GMRES\n");
+      printf("GMRES not implemented yet\n");
     }
+    commAbort(&comm, "GMRES not implemented yet\n");
+    break;
 
+  case CHEBFD:
+    if (commIsMaster(&comm)) {
+      printf("Test type: CHEBFD\n");
+      printf("CHEBFD not implemented yet\n");
+    }
+    commAbort(&comm, "CHEBFD not implemented yet\n");
     break;
   }
 
