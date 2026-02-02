@@ -1,11 +1,13 @@
 # Supported: GCC, CLANG, ICC
-TOOLCHAIN ?= GCC
+TOOLCHAIN ?= ICC
 # Supported CRS, SCS, CCRS
 MTX_FMT ?= SCS
 ENABLE_MPI ?= true
 ENABLE_OPENMP ?= false
 FLOAT_TYPE ?= DP # SP for float, DP for double
 UINT_TYPE ?= U # U for unsigned int, ULL for unsigned long long int
+SELL_CHUNK_VALUE ?= 32
+SELL_SIGMA_VALUE ?= 1
 
 #Feature options
 OPTIONS +=  -DARRAY_ALIGNMENT=64
@@ -33,4 +35,9 @@ ifeq ($(strip $(UINT_TYPE)),U)
     DEFINES += -DUINT_TYPE=1
 else
     DEFINES += -DUINT_TYPE=2
+endif
+
+ifeq ($(strip $(MTX_FMT)),SCS)
+    DEFINES += -DSELL_CHUNK=$(SELL_CHUNK_VALUE)
+    DEFINES += -DSELL_SIGMA=$(SELL_SIGMA_VALUE)
 endif
