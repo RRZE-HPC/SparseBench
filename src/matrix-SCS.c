@@ -37,10 +37,10 @@ void convertMatrix(Matrix* m, GMatrix* im)
   m->nr       = im->nr;
   m->nc       = im->nr;
   m->nnz      = im->nnz;
-  m->C        = (CG_UINT)1; // make this a config option set at compile time
+  m->C        = (CG_UINT)SELL_CHUNK;
   m->nChunks  = (m->nr + m->C - 1) / m->C;
   m->nrPadded = m->nChunks * m->C;
-  m->sigma    = (CG_UINT)1; // make this a config option set at compile time
+  m->sigma    = (CG_UINT)SELL_SIGMA;
 
   // printf("info : ")
 
