@@ -1,5 +1,5 @@
 # Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
-# All rights reserved.
+# All rights reserved. This file is part of SparseBench.
 # Use of this source code is governed by a MIT-style
 # license that can be found in the LICENSE file.
 
@@ -11,6 +11,17 @@ MAKE_DIR   = ./mk
 Q         ?= @
 
 #DO NOT EDIT BELOW
+ifeq (,$(wildcard config.mk))
+$(info )
+$(info ====================================================================)
+$(info config.mk does not exist!)
+$(info Creating config.mk from ./mk/config-default.mk)
+$(info Please adapt config.mk to your needs and run make again.)
+$(info ====================================================================)
+$(info )
+$(shell cp ./mk/config-default.mk config.mk)
+$(error Stopping after creating config.mk - please review and run make again)
+endif
 include config.mk
 include $(MAKE_DIR)/include_$(TOOLCHAIN).mk
 INCLUDES  += -I$(SRC_DIR)/includes -I$(BUILD_DIR)
@@ -51,7 +62,8 @@ clean:
 distclean:
 	$(info ===>  DIST CLEAN)
 	@rm -rf build
-	@rm -f $(TARGET)
+	@rm -f sparseBench-*
+	@rm -f compile_commands.json
 	@rm -f tags .clangd out*
 
 info:

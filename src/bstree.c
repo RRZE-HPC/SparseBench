@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 
@@ -10,38 +10,42 @@
 #include "bstree.h"
 #include "util.h"
 
-Bstree* bstNew(void)
+Bstree *bstNew(void)
 {
-  Bstree* b;
+  Bstree *b;
 
-  b       = (Bstree*)malloc(sizeof(Bstree));
+  b       = (Bstree *)malloc(sizeof(Bstree));
   b->root = NULL;
   return b;
 }
 
-static void recursive_free_bstree(Node* bn)
+static void recursive_free_bstree(Node *bn)
 {
-  if (bn == NULL) return;
-  if (bn->left != NULL) recursive_free_bstree(bn->left);
-  if (bn->right != NULL) recursive_free_bstree(bn->right);
+  if (bn == NULL)
+    return;
+  if (bn->left != NULL)
+    recursive_free_bstree(bn->left);
+  if (bn->right != NULL)
+    recursive_free_bstree(bn->right);
   free(bn);
   return;
 }
 
-void bstFree(Bstree* b)
+void bstFree(Bstree *b)
 {
   recursive_free_bstree(b->root);
   free(b);
   return;
 }
 
-bool bstExists(Bstree* b, CG_UINT key)
+bool bstExists(Bstree *b, CG_UINT key)
 {
-  Node* tmp;
+  Node *tmp;
 
   tmp = b->root;
   while (1) {
-    if (tmp == NULL) return false;
+    if (tmp == NULL)
+      return false;
     if (key < tmp->key) {
       tmp = tmp->left;
     } else if (key > tmp->key) {
@@ -52,13 +56,14 @@ bool bstExists(Bstree* b, CG_UINT key)
   }
 }
 
-CG_UINT bstFind(Bstree* b, CG_UINT key)
+CG_UINT bstFind(Bstree *b, CG_UINT key)
 {
-  Node* tmp;
+  Node *tmp;
 
   tmp = b->root;
   while (1) {
-    if (tmp == NULL) return 0;
+    if (tmp == NULL)
+      return 0;
     if (key < tmp->key) {
       tmp = tmp->left;
     } else if (key > tmp->key) {
@@ -69,7 +74,7 @@ CG_UINT bstFind(Bstree* b, CG_UINT key)
   }
 }
 
-static void rWalk(Node* leaf)
+static void rWalk(Node *leaf)
 {
   if (leaf) {
     rWalk(leaf->left);
@@ -78,14 +83,17 @@ static void rWalk(Node* leaf)
   }
 }
 
-void bstWalk(Bstree* b) { rWalk(b->root); }
+void bstWalk(Bstree *b)
+{
+  rWalk(b->root);
+}
 
-void bstInsert(Bstree* b, CG_UINT key, CG_UINT value)
+void bstInsert(Bstree *b, CG_UINT key, CG_UINT value)
 {
   Node *bs, *tmp;
 
   /* First, create the new node */
-  bs        = (Node*)malloc(sizeof(Node));
+  bs        = (Node *)malloc(sizeof(Node));
   bs->left  = NULL;
   bs->right = NULL;
   bs->key   = key;

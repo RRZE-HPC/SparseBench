@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <errno.h>
@@ -9,10 +9,10 @@
 
 #include "allocate.h"
 
-void* allocate(size_t alignment, size_t bytesize)
+void *allocate(size_t alignment, size_t bytesize)
 {
   int errorCode;
-  void* ptr;
+  void *ptr;
 
   errorCode = posix_memalign(&ptr, alignment, bytesize);
 

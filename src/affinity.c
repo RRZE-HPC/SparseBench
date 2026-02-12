@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #ifdef __linux__
@@ -11,9 +11,9 @@
 #include <unistd.h>
 
 #define MAX_NUM_THREADS 128
-#define gettid()        syscall(SYS_gettid)
+#define gettid() syscall(SYS_gettid)
 
-static int getProcessorID(cpu_set_t* cpu_set)
+static int getProcessorID(cpu_set_t *cpu_set)
 {
   int processorId;
 

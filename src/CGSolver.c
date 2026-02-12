@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <math.h>
@@ -16,11 +16,11 @@
 #include "timing.h"
 #include "util.h"
 
-static void initVectors(Matrix* m, CG_FLOAT* x, CG_FLOAT* b, CG_FLOAT* xexact)
+static void initVectors(Matrix *m, CG_FLOAT *x, CG_FLOAT *b, CG_FLOAT *xexact)
 {
 #ifdef CRS
   CG_UINT numRows = m->nr;
-  CG_UINT* rowPtr = m->rowPtr;
+  CG_UINT *rowPtr = m->rowPtr;
 
   for (int rowID = 0; rowID < numRows; rowID++) {
 
@@ -37,19 +37,20 @@ static void initVectors(Matrix* m, CG_FLOAT* x, CG_FLOAT* b, CG_FLOAT* xexact)
 #endif
 }
 
-void solverCheckResidual(Comm* c, CG_FLOAT* x, CG_FLOAT* xexact, CG_UINT n)
+void solverCheckResidual(CommType *c, CG_FLOAT *x, CG_FLOAT *xexact, CG_UINT n)
 {
   if (xexact == NULL) {
     return;
   }
 
   CG_FLOAT residual = 0.0;
-  CG_FLOAT* v1      = x;
-  CG_FLOAT* v2      = xexact;
+  CG_FLOAT *v1      = x;
+  CG_FLOAT *v2      = xexact;
 
   for (int i = 0; i < n; i++) {
     double diff = fabs(v1[i] - v2[i]);
-    if (diff > residual) residual = diff;
+    if (diff > residual)
+      residual = diff;
   }
 
   commReduction(&residual, MAX);
@@ -59,23 +60,23 @@ void solverCheckResidual(Comm* c, CG_FLOAT* x, CG_FLOAT* xexact, CG_UINT n)
   }
 }
 
-int solveCG(Comm* comm, Parameter* param, Matrix* A)
+int solveCG(CommType *comm, Parameter *param, Matrix *A)
 {
-  CG_FLOAT eps = (CG_FLOAT)param->eps;
-  int itermax  = param->itermax;
+  CG_FLOAT eps     = (CG_FLOAT)param->eps;
+  int itermax      = param->itermax;
 
-  CG_UINT nrow = A->nr;
-  CG_UINT ncol = A->nc;
-  CG_FLOAT* r  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT* p  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, ncol * sizeof(CG_FLOAT));
-  CG_FLOAT* Ap = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT* x  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT* b  = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT* xexact = NULL;
+  CG_UINT nrow     = A->nr;
+  CG_UINT ncol     = A->nc;
+  CG_FLOAT *r      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  CG_FLOAT *p      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol * sizeof(CG_FLOAT));
+  CG_FLOAT *Ap     = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  CG_FLOAT *x      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  CG_FLOAT *b      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+  CG_FLOAT *xexact = NULL;
 
   if (strcmp(param->filename, "generate") == 0 ||
       strcmp(param->filename, "generate7P") == 0) {
-    xexact = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+    xexact = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
   }
   initVectors(A, x, b, xexact);
 
@@ -130,9 +131,7 @@ int solveCG(Comm* comm, Parameter* param, Matrix* A)
   timeStop = getTimeStamp();
 
   if (commIsMaster(comm)) {
-    printf("Solution performed %d iterations and took %.2fs\n",
-        k,
-        timeStop - timeStart);
+    printf("Solution performed %d iterations and took %.2fs\n", k, timeStop - timeStart);
   }
 
   solverCheckResidual(comm, x, xexact, A->nr);

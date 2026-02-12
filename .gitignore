@@ -63,3 +63,9 @@ tests/*.o
 tests/matrix/*.o
 tests/data/reported/*
 .cache
+.idea
+.DS_Store
+compile_commands.json
+data
+out-*.txt
+config.mk

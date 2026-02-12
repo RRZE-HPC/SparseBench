@@ -8,7 +8,7 @@
 
 #include "util.h"
 
-char* changeFileEnding(char* filename, char* newEnding)
+char *changeFileEnding(char *filename, char *newEnding)
 {
 
   char *dot, *newname;

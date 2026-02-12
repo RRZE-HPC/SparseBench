@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <stdio.h>
@@ -11,24 +11,23 @@
 #include "mmio.h"
 #include "util.h"
 
-static inline int compareColumn(const void* a, const void* b)
+static inline int compareColumn(const void *a, const void *b)
 {
-  const MMEntry* a_ = (const MMEntry*)a;
-  const MMEntry* b_ = (const MMEntry*)b;
+  const MMEntry *a_ = (const MMEntry *)a;
+  const MMEntry *b_ = (const MMEntry *)b;
 
   return (a_->col > b_->col) - (a_->col < b_->col);
 }
 
-static inline int compareRow(const void* a, const void* b)
+static inline int compareRow(const void *a, const void *b)
 {
-  const MMEntry* a_ = (const MMEntry*)a;
-  const MMEntry* b_ = (const MMEntry*)b;
+  const MMEntry *a_ = (const MMEntry *)a;
+  const MMEntry *b_ = (const MMEntry *)b;
 
   return (a_->row > b_->row) - (a_->row < b_->row);
 }
 
-void matrixGenerate(
-    GMatrix* m, Parameter* p, int rank, int size, bool use_7pt_stencil)
+void matrixGenerate(GMatrix *m, Parameter *p, int rank, int size, bool use_7pt_stencil)
 {
 
   CG_UINT local_nrow = p->nx * p->ny * p->nz;
@@ -37,8 +36,8 @@ void matrixGenerate(
   CG_UINT total_nrow = local_nrow * size;
   CG_UINT total_nnz  = 27 * total_nrow;
 
-  int start_row = local_nrow * rank;
-  int stop_row  = start_row + local_nrow - 1;
+  int start_row      = local_nrow * rank;
+  int stop_row       = start_row + local_nrow - 1;
 
   if (!rank) {
     if (use_7pt_stencil) {
@@ -46,21 +45,18 @@ void matrixGenerate(
     } else {
       printf("Generate 27pt matrix with ");
     }
-    printf("%.2e total rows and %.2e nonzeros\n",
-        (double)total_nrow,
-        (double)total_nnz);
+    printf("%.2e total rows and %.2e nonzeros\n", (double)total_nrow, (double)total_nnz);
   }
 
-  m->entries = (Entry*)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(Entry));
-  m->rowPtr  = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
-      (local_nrow + 1) * sizeof(CG_UINT));
+  m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(Entry));
+  m->rowPtr  = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (local_nrow + 1) * sizeof(CG_UINT));
 
-  CG_UINT* currowptr = m->rowPtr;
+  CG_UINT *currowptr = m->rowPtr;
   CG_UINT nnzglobal  = 0;
   int nx = p->nx, ny = p->ny, nz = p->nz;
   CG_UINT cursor = 0;
 
-  *currowptr++ = 0;
+  *currowptr++   = 0;
 
   for (int iz = 0; iz < nz; iz++) {
     for (int iy = 0; iy < ny; iy++) {
@@ -79,8 +75,8 @@ void matrixGenerate(
               // if sx and sy are reaching outside of the domain,
               // while the check for the curcol being valid is
               // sufficient to check the z values
-              if ((ix + sx >= 0) && (ix + sx < nx) && (iy + sy >= 0) &&
-                  (iy + sy < ny) && (curcol >= 0 && curcol < total_nrow)) {
+              if ((ix + sx >= 0) && (ix + sx < nx) && (iy + sy >= 0) && (iy + sy < ny) &&
+                  (curcol >= 0 && curcol < total_nrow)) {
                 // This logic will skip over point that are not part of a
                 // 7-pt stencil
                 if (!use_7pt_stencil || (sz * sz + sy * sy + sx * sx <= 1)) {
@@ -120,10 +116,10 @@ void matrixGenerate(
   m->nnz      = local_nnz;
 }
 
-void MMMatrixRead(MMMatrix* m, char* filename)
+void MMMatrixRead(MMMatrix *m, char *filename)
 {
   MM_typecode matcode;
-  FILE* f = NULL;
+  FILE *f = NULL;
   int M, N, nz;
 
   if ((f = fopen(filename, "r")) == NULL) {
@@ -136,18 +132,17 @@ void MMMatrixRead(MMMatrix* m, char* filename)
     exit(EXIT_FAILURE);
   }
 
-  if (!((mm_is_real(matcode) || mm_is_pattern(matcode) ||
-            mm_is_integer(matcode)) &&
+  if (!((mm_is_real(matcode) || mm_is_pattern(matcode) || mm_is_integer(matcode)) &&
           mm_is_matrix(matcode) && mm_is_sparse(matcode))) {
     fprintf(stderr, "Sorry, this application does not support ");
     fprintf(stderr, "Market Market type: [%s]\n", mm_typecode_to_str(matcode));
     exit(EXIT_FAILURE);
   }
 
-  bool compatible_flag = (mm_is_sparse(matcode) &&
-                             (mm_is_real(matcode) || mm_is_pattern(matcode) ||
-                                 mm_is_integer(matcode))) &&
-                         (mm_is_symmetric(matcode) || mm_is_general(matcode));
+  bool compatible_flag =
+      (mm_is_sparse(matcode) &&
+          (mm_is_real(matcode) || mm_is_pattern(matcode) || mm_is_integer(matcode))) &&
+      (mm_is_symmetric(matcode) || mm_is_general(matcode));
   bool sym_flag     = mm_is_symmetric(matcode);
   bool pattern_flag = mm_is_pattern(matcode);
   bool complex_flag = mm_is_complex(matcode);
@@ -176,15 +171,15 @@ void MMMatrixRead(MMMatrix* m, char* filename)
   printf("Read matrix %s with %d non zeroes and %d rows\n", filename, nz, M);
 
   if (sym_flag) {
-    m->entries = (MMEntry*)allocate(ARRAY_ALIGNMENT, nz * 2 * sizeof(MMEntry));
+    m->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, nz * 2 * sizeof(MMEntry));
   } else {
-    m->entries = (MMEntry*)allocate(ARRAY_ALIGNMENT, nz * sizeof(MMEntry));
+    m->entries = (MMEntry *)allocate(ARRAY_ALIGNMENT, nz * sizeof(MMEntry));
   }
 
   size_t cursor = 0;
   int row, col;
   double v;
-  MMEntry* entries = m->entries;
+  MMEntry *entries = m->entries;
 
   for (size_t i = 0; i < nz; i++) {
 
@@ -228,26 +223,25 @@ void MMMatrixRead(MMMatrix* m, char* filename)
 #endif
 }
 
-void matrixConvertfromMM(MMMatrix* mm, GMatrix* m)
+void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
 {
-  m->startRow = mm->startRow;
-  m->stopRow  = mm->stopRow;
-  m->totalNr  = mm->totalNr;
-  m->totalNnz = mm->totalNnz;
-  m->nr       = mm->nr;
-  m->nc       = mm->nr;
-  m->nnz      = mm->nnz;
-  m->entries  = (Entry*)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
-  m->rowPtr   = (CG_UINT*)allocate(ARRAY_ALIGNMENT,
-      (m->nr + 1) * sizeof(CG_UINT));
+  m->startRow     = mm->startRow;
+  m->stopRow      = mm->stopRow;
+  m->totalNr      = mm->totalNr;
+  m->totalNnz     = mm->totalNnz;
+  m->nr           = mm->nr;
+  m->nc           = mm->nr;
+  m->nnz          = mm->nnz;
+  m->entries      = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
+  m->rowPtr       = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
 
-  int* valsPerRow = (int*)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(int));
+  int *valsPerRow = (int *)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(int));
 
   for (int i = 0; i < m->nr; i++) {
     valsPerRow[i] = 0;
   }
 
-  MMEntry* entries = mm->entries;
+  MMEntry *entries = mm->entries;
   int startRow     = mm->startRow;
 
   for (int i = 0; i < mm->count; i++) {

@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include "profiler.h"
@@ -9,20 +9,22 @@
 #include <stddef.h>
 
 typedef struct {
-  char* label;
+  char *label;
   size_t words;
   size_t flops;
-} workType;
+} WorkType;
 
-double _t[NUMREGIONS];
+double T[NUMREGIONS];
 
-static workType _regions[NUMREGIONS] = { { "waxpby:  ", 3, 6 },
-  { "spMVM:   ", 0, 2 },
+static WorkType Regions[NUMREGIONS] = {
+  { "waxpby:  ",  3, 6 },
+  { "spMVM:   ",  0, 2 },
   { "spMMVM:   ", 5, 2 },
-  { "ddot:    ", 2, 4 },
-  { "comm:    ", 0, 0 } };
+  { "ddot:    ",  2, 4 },
+  { "comm:    ",  0, 0 }
+};
 
-void profilerInit(size_t* facFlops, size_t* facWords)
+void profilerInit(size_t *facFlops, size_t *facWords)
 {
   LIKWID_MARKER_INIT;
   _Pragma("omp parallel")
@@ -35,21 +37,15 @@ void profilerInit(size_t* facFlops, size_t* facWords)
   }
 
   for (int i = 0; i < NUMREGIONS; i++) {
-    _t[i] = 0.0;
-    printf("DEBUG: region %d - original: words=%zu flops=%zu, factors: words=%zu flops=%zu\n", 
-           i, _regions[i].words, _regions[i].flops, 
-           facWords[i], facFlops[i]);
-    _regions[i].flops *= facFlops[i];
-    _regions[i].words *= facWords[i];
-    printf("DEBUG: region %s - final: words=%zu flops=%zu\n", 
-           _regions[i].label, _regions[i].words, _regions[i].flops);
+    T[i] = 0.0;
+    Regions[i].flops *= facFlops[i];
+    Regions[i].words *= facWords[i];
   }
 
-  // _regions[SPMVM].words = facWords[SPMVM];
-  // _regions[SPMMVM].words = facWords[SPMMVM];
+  Regions[SPMVM].words = facWords[SPMVM];
 }
 
-void profilerPrint(Comm* c, int iterations)
+void profilerPrint(CommType *c, int iterations)
 {
 
   if (c->size > 1) {
@@ -58,9 +54,9 @@ void profilerPrint(Comm* c, int iterations)
     double tmax[NUMREGIONS];
     double tavg[NUMREGIONS];
 
-    MPI_Reduce(_t, tmin, NUMREGIONS, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(_t, tmax, NUMREGIONS, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(_t, tavg, NUMREGIONS, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(T, tmin, NUMREGIONS, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(T, tmax, NUMREGIONS, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(T, tavg, NUMREGIONS, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
     for (int i = 0; i < NUMREGIONS; i++) {
       tavg[i] /= c->size;
@@ -74,35 +70,21 @@ void profilerPrint(Comm* c, int iterations)
       commWords += c->recvCounts[i];
     }
 
-    _regions[COMM].words = sizeof(CG_FLOAT) * commWords;
+    Regions[COMM].words = sizeof(CG_FLOAT) * commWords;
     int commVolume[c->size];
-    MPI_Gather(&commWords,
-        1,
-        MPI_INT,
-        commVolume,
-        1,
-        MPI_INT,
-        0,
-        MPI_COMM_WORLD);
+    MPI_Gather(&commWords, 1, MPI_INT, commVolume, 1, MPI_INT, 0, MPI_COMM_WORLD);
     double commTime[c->size];
-    MPI_Gather(&_t[COMM],
-        1,
-        MPI_DOUBLE,
-        commTime,
-        1,
-        MPI_DOUBLE,
-        0,
-        MPI_COMM_WORLD);
+    MPI_Gather(&T[COMM], 1, MPI_DOUBLE, commTime, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
     if (commIsMaster(c)) {
       printf(HLINE);
       printf("Function   avg MB/s  avg MFlop/s  Walltime(s) min, max, avg\n");
       for (int j = 0; j < NUMREGIONS - 1; j++) {
-        double bytes = (double)_regions[j].words * iterations;
-        double flops = (double)_regions[j].flops * iterations;
+        double bytes = (double)Regions[j].words * iterations;
+        double flops = (double)Regions[j].flops * iterations;
 
         printf("%s%11.2f %11.2f %11.2f %11.2f %11.2f\n",
-            _regions[j].label,
+            Regions[j].label,
             1.0E-06 * bytes / tavg[j],
             1.0E-06 * flops / tavg[j],
             tmin[j],
@@ -135,21 +117,20 @@ void profilerPrint(Comm* c, int iterations)
     printf(HLINE);
     printf("Function   Rate(MB/s)  Rate(MFlop/s)  Walltime(s)\n");
     for (int j = 0; j < NUMREGIONS - 1; j++) {
-      double bytes = (double)_regions[j].words * iterations;
-      double flops = (double)_regions[j].flops * iterations;
-      
-      // Avoid division by zero
-      double rate_bytes = (_t[j] > 0.0) ? 1.0E-06 * bytes / _t[j] : 0.0;
-      double rate_flops = (_t[j] > 0.0) ? 1.0E-06 * flops / _t[j] : 0.0;
-      
+      double bytes = (double)Regions[j].words * iterations;
+      double flops = (double)Regions[j].flops * iterations;
+
       printf("%s%11.2f %11.2f %11.2f\n",
-          _regions[j].label,
-          rate_bytes,
-          rate_flops,
-          _t[j]);
+          Regions[j].label,
+          1.0E-06 * bytes / T[j],
+          1.0E-06 * flops / T[j],
+          T[j]);
     }
     printf(HLINE);
   }
 }
 
-void profilerFinalize(void) { LIKWID_MARKER_CLOSE; }
+void profilerFinalize(void)
+{
+  LIKWID_MARKER_CLOSE;
+}

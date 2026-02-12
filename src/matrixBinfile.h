@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #ifndef __MATRIXBINFILE_H_
@@ -10,7 +10,7 @@
 typedef struct {
   unsigned int col;
   float val;
-} FEntry;
+} FEntryType;
 
 // Matrix binary file format:
 // All ints are unsigned 32bit ints. All floats are float32.
@@ -18,7 +18,7 @@ typedef struct {
 // array of size <number of rows>[<row offset>]
 // array of size <number of non zeroes>[<<col id>,<value>>]
 
-extern void matrixBinWrite(GMatrix* m, Comm* c, char* filename);
-extern void matrixBinRead(GMatrix* m, Comm* c, char* filename);
+extern void matrixBinWrite(GMatrix *m, CommType *c, char *filename);
+extern void matrixBinRead(GMatrix *m, CommType *c, char *filename);
 
 #endif // __MATRIXBINFILE_H_
