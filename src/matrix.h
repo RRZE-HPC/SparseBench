@@ -35,6 +35,11 @@ typedef struct {
 } GMatrix;
 
 typedef struct {
+  CG_UINT nr, nc;       // number of rows, columns
+  CG_FLOAT* entries;
+} DMatrix; // for Block vectors
+
+typedef struct {
   int row;
   int col;
   double val;

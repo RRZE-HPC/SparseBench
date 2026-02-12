@@ -18,6 +18,7 @@ double _t[NUMREGIONS];
 
 static workType _regions[NUMREGIONS] = { { "waxpby:  ", 3, 6 },
   { "spMVM:   ", 0, 2 },
+  { "spMMVM:   ", 5, 2 },
   { "ddot:    ", 2, 4 },
   { "comm:    ", 0, 0 } };
 
@@ -28,17 +29,24 @@ void profilerInit(size_t* facFlops, size_t* facWords)
   {
     LIKWID_MARKER_REGISTER("WAXPBY");
     LIKWID_MARKER_REGISTER("SPMVM");
+    LIKWID_MARKER_REGISTER("SPMMVM");
     LIKWID_MARKER_REGISTER("DDOT");
     LIKWID_MARKER_REGISTER("COMM");
   }
 
   for (int i = 0; i < NUMREGIONS; i++) {
     _t[i] = 0.0;
+    printf("DEBUG: region %d - original: words=%zu flops=%zu, factors: words=%zu flops=%zu\n", 
+           i, _regions[i].words, _regions[i].flops, 
+           facWords[i], facFlops[i]);
     _regions[i].flops *= facFlops[i];
     _regions[i].words *= facWords[i];
+    printf("DEBUG: region %s - final: words=%zu flops=%zu\n", 
+           _regions[i].label, _regions[i].words, _regions[i].flops);
   }
 
-  _regions[SPMVM].words = facWords[SPMVM];
+  // _regions[SPMVM].words = facWords[SPMVM];
+  // _regions[SPMMVM].words = facWords[SPMMVM];
 }
 
 void profilerPrint(Comm* c, int iterations)
@@ -129,11 +137,15 @@ void profilerPrint(Comm* c, int iterations)
     for (int j = 0; j < NUMREGIONS - 1; j++) {
       double bytes = (double)_regions[j].words * iterations;
       double flops = (double)_regions[j].flops * iterations;
-
+      
+      // Avoid division by zero
+      double rate_bytes = (_t[j] > 0.0) ? 1.0E-06 * bytes / _t[j] : 0.0;
+      double rate_flops = (_t[j] > 0.0) ? 1.0E-06 * flops / _t[j] : 0.0;
+      
       printf("%s%11.2f %11.2f %11.2f\n",
           _regions[j].label,
-          1.0E-06 * bytes / _t[j],
-          1.0E-06 * flops / _t[j],
+          rate_bytes,
+          rate_flops,
           _t[j]);
     }
     printf(HLINE);

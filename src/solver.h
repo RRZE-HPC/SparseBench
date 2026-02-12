@@ -11,6 +11,7 @@
 extern int solveCG(Comm* comm, Parameter* param, Matrix* m);
 // extern void solverCheckResidual(Solver* s, Comm* c);
 extern void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y);
+extern void spMMVM(Matrix* m, const DMatrix*  x, DMatrix* y);
 
 extern void waxpby(const CG_UINT n,
     const CG_FLOAT alpha,

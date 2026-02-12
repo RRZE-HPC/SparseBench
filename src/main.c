@@ -19,7 +19,9 @@
 #include "timing.h"
 #include "util.h"
 
-typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } types;
+#define NUMVEC 10 // TODO:move this some where better
+
+typedef enum { CG = 0, SPMV, SPMMV, GMRES, CHEBFD, NUMTYPES } types;
 
 #define HELPTEXT                                                               \
   "Usage: sparseBench [options]\n\n"                                           \
@@ -67,10 +69,16 @@ static void initMatrix(Comm* c, Parameter* p, GMatrix* m)
       if (commIsMaster(c)) {
         printf("Read MTX matrix\n");
         MMMatrixRead(&mm, p->filename);
+        printf("DEBUG: Rank 0 after MMMatrixRead - totalNr=%d totalNnz=%d nr=%d nnz=%d count=%zu\n", 
+               mm.totalNr, mm.totalNnz, mm.nr, mm.nnz, mm.count);
       }
 
       commDistributeMatrix(c, &mm, &mmLocal);
+      printf("DEBUG: Rank %d after commDistributeMatrix - totalNr=%d totalNnz=%d nr=%d nnz=%d count=%zu\n", 
+             c->rank, mmLocal.totalNr, mmLocal.totalNnz, mmLocal.nr, mmLocal.nnz, mmLocal.count);
       matrixConvertfromMM(&mmLocal, m);
+      printf("DEBUG: Rank %d after matrixConvertfromMM - totalNr=%u totalNnz=%u nr=%u nnz=%u\n", 
+             c->rank, m->totalNr, m->totalNnz, m->nr, m->nnz);
     } else if (strcmp(dot, ".bmx") == 0) {
 #ifdef _MPI
       if (commIsMaster(c)) {
@@ -129,6 +137,8 @@ int main(int argc, char** argv)
       if (strcmp(optarg, "cg") == 0) type = CG;
       else if (strcmp(optarg, "spmv") == 0)
         type = SPMV;
+      else if (strcmp(optarg, "spmmv") == 0)
+        type = SPMMV;
       else if (strcmp(optarg, "gmres") == 0)
         type = GMRES;
       else if (strcmp(optarg, "cheb") == 0)
@@ -188,8 +198,12 @@ int main(int argc, char** argv)
   commPartition(&comm, &m);
   // commPrintConfig(&comm, m.nr, m.nnz, m.startRow, m.stopRow);
 
+  printf("DEBUG: Before convertMatrix - GMatrix: totalNr=%u totalNnz=%u nr=%u nnz=%u\n", 
+         m.totalNr, m.totalNnz, m.nr, m.nnz);
   Matrix sm;
   convertMatrix(&sm, &m);
+  printf("DEBUG: After convertMatrix - Matrix: totalNr=%u totalNnz=%u nr=%u nnz=%u\n", 
+         sm.totalNr, sm.totalNnz, sm.nr, sm.nnz);
   commBarrier();
   timeStop = getTimeStamp();
   if (commIsMaster(&comm)) {
@@ -200,13 +214,25 @@ int main(int argc, char** argv)
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
 
+  printf("DEBUG: Matrix values - totalNr=%u totalNnz=%u nc=%u nr=%u\n", 
+         m.totalNr, m.totalNnz, m.nc, m.nr);
+
   factorFlops[DDOT]   = m.totalNr;
   factorWords[DDOT]   = 3 * sizeof(CG_FLOAT) * m.totalNr / 2;
   factorFlops[WAXPBY] = m.totalNr;
   factorWords[WAXPBY] = 3 * sizeof(CG_FLOAT) * m.totalNr;
   factorFlops[SPMVM]  = m.totalNnz;
-  factorWords[SPMVM]  = sizeof(CG_FLOAT) * m.totalNnz +
+  factorWords[SPMVM]  = sizeof(CG_FLOAT) * (m.nc + m.nr + m.totalNnz) +
                        sizeof(CG_UINT) * m.totalNnz;
+  factorFlops[SPMMVM]  = NUMVEC * m.totalNnz;
+  factorWords[SPMMVM]  = sizeof(CG_FLOAT) * (NUMVEC * m.nc + NUMVEC * m.nr + m.totalNnz) +
+                       sizeof(CG_UINT) * m.totalNnz;
+
+  printf("DEBUG: Calculated factors:\n");
+  printf("  DDOT: flops=%zu words=%zu\n", factorFlops[DDOT], factorWords[DDOT]);
+  printf("  WAXPBY: flops=%zu words=%zu\n", factorFlops[WAXPBY], factorWords[WAXPBY]);
+  printf("  SPMVM: flops=%zu words=%zu\n", factorFlops[SPMVM], factorWords[SPMVM]);
+  printf("  SPMMVM: flops=%zu words=%zu\n", factorFlops[SPMMVM], factorWords[SPMMVM]);
 
   profilerInit(factorFlops, factorWords);
 
@@ -235,6 +261,30 @@ int main(int argc, char** argv)
       PROFILE(SPMVM, spMVM(&sm, x, y));
     }
     break;
+
+  case SPMMV: {
+    if (commIsMaster(&comm)) {
+      printf("Test type: SPMVM\n");
+    }
+    int itermax = param.itermax;
+    DMatrix x;
+    DMatrix y;
+    x.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT,NUMVEC * m.nc * sizeof(CG_FLOAT));
+    y.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT,NUMVEC * m.nr * sizeof(CG_FLOAT));
+
+    for (int i = 0; i < NUMVEC * m.nc; i++) {
+      x.entries[i] = (CG_FLOAT)1.0;
+    }
+    for (int i = 0; i < NUMVEC * m.nr; i++) {
+      y.entries[i] = (CG_FLOAT)1.0;
+    }
+
+    for (k = 1; k < itermax; k++) {
+      PROFILE(SPMMVM, spMMVM(&sm, &x, &y));
+    }
+  } 
+  break;
+
   case GMRES:
     if (commIsMaster(&comm)) {
       printf("Test type: GMRES\n");
@@ -258,3 +308,9 @@ int main(int argc, char** argv)
 
   return EXIT_SUCCESS;
 }
+
+
+
+/*
+NOTE DEBUG:
+*/

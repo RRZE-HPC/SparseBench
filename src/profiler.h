@@ -21,7 +21,7 @@
   _t[tag] += (getTimeStamp() - ts);
 #endif /* LIKWID_PERFMON */
 
-typedef enum { WAXPBY = 0, SPMVM, DDOT, COMM, NUMREGIONS } regions;
+typedef enum { WAXPBY = 0, SPMVM, SPMMVM,DDOT, COMM, NUMREGIONS } regions;
 
 extern double _t[NUMREGIONS];
 extern void profilerInit(size_t* facFlops, size_t* facWords);

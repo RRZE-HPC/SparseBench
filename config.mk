@@ -2,8 +2,8 @@
 TOOLCHAIN ?= ICC
 # Supported CRS, SCS, CCRS
 MTX_FMT ?= SCS
-ENABLE_MPI ?= true
-ENABLE_OPENMP ?= false
+ENABLE_MPI ?= false
+ENABLE_OPENMP ?= true
 FLOAT_TYPE ?= DP # SP for float, DP for double
 UINT_TYPE ?= U # U for unsigned int, ULL for unsigned long long int
 SELL_CHUNK_VALUE ?= 32

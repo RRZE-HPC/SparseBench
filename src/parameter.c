@@ -64,7 +64,7 @@ void readParameter(Parameter* param, const char* filename)
 void printParameter(Parameter* param)
 {
   printf("Parameters\n");
-  // printf("\tN rows: %d, Non zeroes: %d,\n", param->nx, param->ny, param->nz);
+  printf("\tN rows: %d, Non zeroes: %d,\n", param->nx, param->ny, param->nz);
   printf("Iterative solver parameters:\n");
   printf("\tMax iterations: %d\n", param->itermax);
   printf("\tepsilon (stopping tolerance) : %f\n", param->eps);

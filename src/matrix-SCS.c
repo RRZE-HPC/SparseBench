@@ -228,3 +228,43 @@ void spMVM(Matrix* m, const CG_FLOAT* restrict x, CG_FLOAT* restrict y)
     }
   }
 }
+
+void spMMVM(Matrix* m, const DMatrix* x, DMatrix* y)
+{
+  CG_UINT* colInd = m->colInd;
+  CG_FLOAT* val   = m->val;
+
+  CG_UINT numChunks  = m->nChunks;
+  CG_UINT C          = m->C;
+  CG_UINT* chunkPtr  = m->chunkPtr;
+  CG_UINT* chunkLens = m->chunkLens;
+
+
+  CG_UINT numVecs = x->nc;  // number of vectors in the block
+
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (int i = 0; i < numChunks; ++i) {
+    CG_FLOAT tmp[C * numVecs];
+    for (int j = 0; j < C * numVecs; ++j) {
+      tmp[j] = 0.0;
+    }
+
+    int chunkOffset = chunkPtr[i];
+    for (int j = 0; j < chunkLens[i]; ++j) {
+      // NOTE: SIMD should be applied here
+      for (int k = 0; k < C; ++k) {
+        CG_UINT col = colInd[chunkOffset + j * C + k];
+        CG_FLOAT a = val[chunkOffset + j * C + k];
+        for (int v = 0; v < numVecs; ++v) {
+          tmp[k * numVecs + v] += a * x->entries[col * numVecs + v];
+        }
+      }
+    }
+
+    for (int j = 0; j < C; ++j) {
+      for (int v = 0; v < numVecs; ++v) {
+        y->entries[(i * C + j) * numVecs + v] = tmp[j * numVecs + v];
+      }
+    }
+  }
+}
