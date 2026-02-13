@@ -35,32 +35,10 @@ static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
       if (commIsMaster(c)) {
         printf("Read MTX matrix\n");
         MMMatrixRead(&mm, p->filename);
-        printf("DEBUG: Rank 0 after MMMatrixRead - totalNr=%d totalNnz=%d nr=%d nnz=%d "
-               "count=%zu\n",
-            mm.totalNr,
-            mm.totalNnz,
-            mm.nr,
-            mm.nnz,
-            mm.count);
       }
 
       commDistributeMatrix(c, &mm, &mmLocal);
-      printf("DEBUG: Rank %d after commDistributeMatrix - totalNr=%d totalNnz=%d nr=%d "
-             "nnz=%d count=%zu\n",
-          c->rank,
-          mmLocal.totalNr,
-          mmLocal.totalNnz,
-          mmLocal.nr,
-          mmLocal.nnz,
-          mmLocal.count);
       matrixConvertfromMM(&mmLocal, m);
-      printf("DEBUG: Rank %d after matrixConvertfromMM - totalNr=%u totalNnz=%u nr=%u "
-             "nnz=%u\n",
-          c->rank,
-          m->totalNr,
-          m->totalNnz,
-          m->nr,
-          m->nnz);
     } else if (strcmp(dot, ".bmx") == 0) {
 #ifdef _MPI
       if (commIsMaster(c)) {
@@ -86,6 +64,7 @@ int main(int argc, char **argv)
   initParameter(&param);
   parseArguments(&comm, &param, argc, argv);
   commPrintBanner(&comm);
+  // printParameter(&param);
 
   double ts;
   GMatrix m;
@@ -99,18 +78,8 @@ int main(int argc, char **argv)
   timeStart = getTimeStamp();
   commLocalization(&comm, &m);
 
-  printf("DEBUG: Before convertMatrix - GMatrix: totalNr=%u totalNnz=%u nr=%u nnz=%u\n",
-      m.totalNr,
-      m.totalNnz,
-      m.nr,
-      m.nnz);
   Matrix sm;
   convertMatrix(&sm, &m);
-  printf("DEBUG: After convertMatrix - Matrix: totalNr=%u totalNnz=%u nr=%u nnz=%u\n",
-      sm.totalNr,
-      sm.totalNnz,
-      sm.nr,
-      sm.nnz);
   commBarrier();
   timeStop = getTimeStamp();
   if (commIsMaster(&comm)) {
@@ -121,30 +90,35 @@ int main(int argc, char **argv)
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
 
-  printf("DEBUG: Matrix values - totalNr=%u totalNnz=%u nc=%u nr=%u\n",
-      m.totalNr,
-      m.totalNnz,
-      m.nc,
-      m.nr);
-
   factorFlops[DDOT]   = m.totalNr;
   factorWords[DDOT]   = 3 * sizeof(CG_FLOAT) * m.totalNr / 2;
   factorFlops[WAXPBY] = m.totalNr;
   factorWords[WAXPBY] = 3 * sizeof(CG_FLOAT) * m.totalNr;
   factorFlops[SPMVM]  = m.totalNnz;
   factorWords[SPMVM]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
+  // TODO: EXTEND SPMMV
+  factorFlops[SPMMV] = m.totalNnz;
+  factorWords[SPMMV] = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
 
   profilerInit(factorFlops, factorWords);
+  int numSeq = 0;
+  int *seq   = NULL;
 
-  int k = 0;
+  int k      = 0;
   switch (BenchType) {
   case CG:
+    numSeq       = 3;
+    int seqCg[3] = { DDOT, WAXPBY, SPMVM };
+    seq          = seqCg;
     if (commIsMaster(&comm)) {
       printf("Test type: CG\n");
     }
     k = solveCG(&comm, &param, &sm);
     break;
   case SPMV:
+    numSeq          = 1;
+    int secSpmvm[1] = { SPMV };
+    seq             = secSpmvm;
     if (commIsMaster(&comm)) {
       printf("Test type: SPMVM\n");
     }
@@ -163,6 +137,9 @@ int main(int argc, char **argv)
     break;
 
   case SPMMV: {
+    numSeq          = 1;
+    int secSpmmv[1] = { SPMMV };
+    seq             = secSpmmv;
     if (commIsMaster(&comm)) {
       printf("Test type: SPMVM\n");
     }
@@ -202,7 +179,7 @@ int main(int argc, char **argv)
   default:;
   }
 
-  profilerPrint(&comm, k);
+  profilerPrint(&comm, seq, numSeq, k);
   profilerFinalize();
   commFinalize(&comm);
 

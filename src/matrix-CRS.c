@@ -62,3 +62,5 @@ void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)
     y[i] = sum;
   }
 }
+
+void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y) { }

@@ -24,7 +24,7 @@ OPTIONS +=  -DOMP_SCHEDULE=static
 ################################################################
 DEFINES =
 DEFINES += -D$(MTX_FMT)
-DEFINES += -DNUMVEC=$(NUMVEC)
+DEFINES += -DNUMVEC=$(NUM_VEC)
 
 ifeq ($(strip $(FLOAT_TYPE)),SP)
     DEFINES += -DPRECISION=1
