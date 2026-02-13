@@ -8,6 +8,7 @@ FLOAT_TYPE ?= DP # SP for float, DP for double
 UINT_TYPE ?= U # U for unsigned int, ULL for unsigned long long int
 SELL_CHUNK_VALUE ?= 32
 SELL_SIGMA_VALUE ?= 1
+NUM_VEC ?= 10
 
 #Feature options
 OPTIONS +=  -DARRAY_ALIGNMENT=64
@@ -23,6 +24,7 @@ OPTIONS +=  -DOMP_SCHEDULE=static
 ################################################################
 DEFINES =
 DEFINES += -D$(MTX_FMT)
+DEFINES += -DNUMVEC=$(NUMVEC)
 
 ifeq ($(strip $(FLOAT_TYPE)),SP)
     DEFINES += -DPRECISION=1

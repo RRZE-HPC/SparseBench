@@ -11,7 +11,7 @@
 #include "comm.h"
 #include "parameter.h"
 
-typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } BenchEnumType;
+typedef enum { CG = 0, SPMV, SPMMV, GMRES, CHEBFD, NUMTYPES } BenchEnumType;
 extern int BenchType;
 
 #define HELPTEXT                                                                         \
