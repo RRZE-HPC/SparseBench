@@ -69,6 +69,8 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
         BenchType = CG;
       } else if (strcmp(optarg, "spmv") == 0) {
         BenchType = SPMV;
+      } else if (strcmp(optarg, "spmmv") == 0) {
+        BenchType = SPMMV;
       } else if (strcmp(optarg, "gmres") == 0) {
         BenchType = GMRES;
       } else if (strcmp(optarg, "cheb") == 0) {
