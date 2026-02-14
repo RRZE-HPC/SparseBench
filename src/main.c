@@ -141,7 +141,7 @@ int main(int argc, char **argv)
     int secSpmmv[1] = { SPMMV };
     seq             = secSpmmv;
     if (commIsMaster(&comm)) {
-      printf("Test type: SPMVM\n");
+      printf("Test type: SPMMVM\n");
     }
     int itermax = param.itermax;
     DMatrix x;
