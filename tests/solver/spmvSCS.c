@@ -111,7 +111,7 @@ int test_spmvSCS(void* args, const char* dataDir){
 				
 				printf("pathToReportedData = %s\n", pathToReportedData);
 				
-				// dumpVectorToFile(y, A.nr, reportedData);
+				dumpVectorToFile(y, A.nr, reportedData);
 				fclose(reportedData);
 			
 				// If the expect and reported data differ in some way
