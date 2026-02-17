@@ -13,7 +13,7 @@
 typedef int (*TestFunc)(void* config, const char* dataDir);
 
 typedef struct {
-	const char* name;
+	char name[64];
 	TestFunc func;
 } Test;
 
