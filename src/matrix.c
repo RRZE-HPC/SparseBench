@@ -261,3 +261,48 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
     }
   }
 }
+
+void MMMatrixPrintToFile(MMMatrix *m, char *filename)
+{
+  FILE *fptr;
+  fptr = fopen(filename, "w");
+  MMMatrixPrint_impl(m, fptr);
+  fclose(fptr);
+}
+
+void MMMatrixPrint(MMMatrix *m) { 
+  MMMatrixPrint_impl(m, stdout);
+}
+
+void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr) { 
+  fprintf(fptr, "Matrix dimensions: %d x %d\n", m->nr, m->nr);
+  fprintf(fptr, "Number of non-zeros: %d\n", m->nnz);
+  fprintf(fptr, "\nMatrix entries (row, col, value):\n");
+  
+  for (size_t i = 0; i < m->count; i++) {
+    fprintf(fptr, "%d\t%d\t%g\n", m->entries[i].row, m->entries[i].col, m->entries[i].val);
+  }
+}
+
+void GMatrixPrintTofile(GMatrix *m, char *filename)
+{
+  FILE *fptr;
+  fptr = fopen(filename, "w");
+  GMatrixPrint_impl(m, fptr);
+  fclose(fptr);
+}
+
+void GMatrixPrint(GMatrix *m) { 
+  GMatrixPrint_impl(m, stdout);
+}
+
+void GMatrixPrint_impl(GMatrix *m, FILE *fptr) {
+  fprintf(fptr, "Matrix dimensions: %u x %u\n", m->nr, m->nc);
+  fprintf(fptr, "Number of non-zeros: %u\n", m->nnz);
+  fprintf(fptr, "\nMatrix entries (row, col, value):\n");
+  for (CG_UINT row = 0; row < m->nr; row++) {
+    for (CG_UINT idx = m->rowPtr[row]; idx < m->rowPtr[row + 1]; idx++) {
+      fprintf(fptr, "%u\t%u\t%g\n", row + m->startRow, m->entries[idx].col, m->entries[idx].val);
+    }
+  }
+}
