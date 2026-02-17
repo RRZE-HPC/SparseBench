@@ -10,6 +10,8 @@ typedef struct {
   int nx, ny, nz;
   int itermax;
   double eps;
+  int C;
+  int Sigma;
 } Parameter;
 
 void initParameter(Parameter *);

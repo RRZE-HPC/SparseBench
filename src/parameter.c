@@ -17,6 +17,10 @@ void initParameter(Parameter *param)
   param->nz       = 100;
   param->itermax  = 150;
   param->eps      = 0.0;
+#ifdef SCS
+  param->C        = SELL_CHUNK;
+  param->Sigma    = SELL_SIGMA;
+#endif
 }
 
 void readParameter(Parameter *param, const char *filename)
