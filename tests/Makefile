@@ -30,14 +30,15 @@ CFLAGS=-g -O0 -qopenmp $(DEFINES)
 all: $(TARGET)
 
 prebuild:
-	make -sC ../
+	@make -sC ../
 
 clean:
-	make -sC ../ clean
-	rm -f $(TARGET) $(OBJECTS) runTests.o
+	@make -sC ../ clean
+	$(info ===>  CLEAN TESTS)
+	@rm -f $(TARGET) $(OBJECTS) runTests.o
 
 # Link the object files to create the executable
-$(TARGET): | prebuild runTests.o $(OBJECTS) ${LINKS}
+$(TARGET): prebuild runTests.o $(OBJECTS) ${LINKS}
 	$(CC) $(CFLAGS) -o $@ runTests.o $(OBJECTS) ${LINKS}
 
 # Compile runTests.c into an object file
