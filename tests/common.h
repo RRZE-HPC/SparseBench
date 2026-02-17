@@ -25,7 +25,7 @@ int sigma;
 #ifndef BUILD_MATRIX_FILE_PATH
 #define BUILD_MATRIX_FILE_PATH(entry, dir, expect, C_str, sigma_str, path)  \
 {																\
-	strcpy((path), "data/");                                    \
+	strcpy((path), "./data/");                                    \
 	strcat((path), (dir));                                      \
 	strcat((path), (entry)->d_name);                            \
 	strcat((path), "_C_");                                      \

@@ -65,8 +65,11 @@ int test_spmvSCS(void* args, const char* dataDir){
 			if(fopen(pathToExpectedData, "r")){
 				++validFileCount;
 
-				MmMatrix m;
-				matrixRead( &m, pathToMatrix );
+				MMMatrix m;
+				MMMatrixRead( &m, pathToMatrix );
+
+				GMatrix gm;
+				matrixConvertfromMM(&m, &gm);
 
 				// Set single rank defaults for MmMatrix
 				m.startRow = 0;
@@ -78,17 +81,17 @@ int test_spmvSCS(void* args, const char* dataDir){
 				char* matrixFormat = (char*)malloc(4*sizeof(char)); 
 
 				if(A.C == 0 || A.sigma == 0){
-					matrixConvertMMtoCRS(&m, &A, rank, size);
+					convertMatrix(&A, &gm);
 					vectorSize = A.nr;
 					strcpy(matrixFormat, "CRS");
 				}
 				else{
-					matrixConvertMMtoSCS(&m, &A, rank, size);
+					convertMatrix(&A, &gm);
 					vectorSize = A.nrPadded;
 					strcpy(matrixFormat, "SCS");
 				}
 				VALIDATE_MATRIX_FORMAT(matrixFormat);
-				A.matrixFormat = matrixFormat;
+				// A.matrixFormat = matrixFormat;
 
 				CG_FLOAT* x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
 				CG_FLOAT* y = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
@@ -108,7 +111,7 @@ int test_spmvSCS(void* args, const char* dataDir){
 				
 				printf("pathToReportedData = %s\n", pathToReportedData);
 				
-				dumpVectorToFile(y, A.nr, reportedData);
+				// dumpVectorToFile(y, A.nr, reportedData);
 				fclose(reportedData);
 			
 				// If the expect and reported data differ in some way

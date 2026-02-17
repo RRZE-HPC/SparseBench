@@ -5,7 +5,7 @@ include ../config.mk
 include ../mk/include_$(TOOLCHAIN).mk
 
 BUILD_DIR=../build
-TC_DIR=${BUILD_DIR}/$(TOOLCHAIN)
+TC_DIR=${BUILD_DIR}/$(MTX_FMT)-$(TOOLCHAIN)
 
 # List of test modules
 MOD1=matrix
@@ -23,7 +23,7 @@ MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/solverTests.o
 OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
 # Always leave debugging flag on
-CFLAGS=-g -qopenmp
+CFLAGS=-g -O0 -qopenmp $(DEFINES)
 
 .PHONY: all clean
 

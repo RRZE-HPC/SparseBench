@@ -8,6 +8,7 @@
 #include "../../src/matrix.h"
 #include "../common.h"
 
+
 int test_convertSCS(void* args, const char* dataDir){
 
 	int rank = 0;
@@ -32,7 +33,7 @@ int test_convertSCS(void* args, const char* dataDir){
 			strcpy(pathToMatrix, pathToMatrices);	
 			strcat(pathToMatrix, entry->d_name);
 
-			Matrix A;
+			Matrix A; // thsi is the crs/sell matrix
 			Args* arguments = (Args*)args;
 			A.C = arguments->C;
 			A.sigma = arguments->sigma;
@@ -49,23 +50,26 @@ int test_convertSCS(void* args, const char* dataDir){
 			// Validate against expected data, if it exists
 			if(fopen(pathToExpectedData, "r")){
 
-				MmMatrix m;
-				matrixRead( &m, pathToMatrix );
+				MMMatrix m;
+				MMMatrixRead(&m, pathToMatrix);
+
+				GMatrix gm;
+				matrixConvertfromMM(&m, &gm);
 
 				// Set single rank defaults for MmMatrix
-				m.startRow = 0;
-				m.stopRow = m.nr;
-				m.totalNr = m.nr;
-				m.totalNnz = m.nnz;
+				// m.startRow = 0;
+				// m.stopRow = m.nr;
+				// m.totalNr = m.nr;
+				// m.totalNnz = m.nnz;
 			
-				matrixConvertMMtoSCS(&m, &A, rank, size);
+				convertMatrix(&A, &gm);
 
 				// Dump to this external file
 				char *pathToReportedData = malloc(STR_LEN);
 				BUILD_MATRIX_FILE_PATH(entry, "reported/", ".out", C_str, sigma_str, pathToReportedData);
 				FILE *reportedData = fopen(pathToReportedData, "w");
 
-				dumpSCSMatrixToFile(&A, reportedData);
+				dumpSCSMatrixTo_impl(&A, reportedData);
 				fclose(reportedData);
 			
 				// If the expect and reported data differ in some way
