@@ -77,5 +77,6 @@ extern void MatrixPrintTofile(Matrix *m, char *filename);
 extern void MatrixPrint(Matrix *m);
 extern void MatrixPrint_impl(Matrix *m, FILE *fptr);
 
+extern void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData);
 
 #endif // __MATRIX_H_
