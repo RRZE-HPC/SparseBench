@@ -124,7 +124,7 @@ int test_spmvSCS(void* args, const char* dataDir){
 					return 1;
 				} 
 			}
-			free(fptr);
+			fclose(fptr);
 			free(pathToExpectedData);
 			free(pathToMatrix);
 		}
