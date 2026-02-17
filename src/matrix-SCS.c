@@ -194,7 +194,7 @@ void MatrixPrintTofile(Matrix *m, char *filename)
 {
   FILE *fptr;
   fptr = fopen(filename, "w");
-  MatrixPrint_impl(m, stdout);
+  MatrixPrint_impl(m, fptr);
   fclose(fptr);
 }
 
@@ -242,11 +242,11 @@ void MatrixPrint_impl(Matrix *m, FILE *fptr)
   }
 }
 
-void dumpMatrixfile(Matrix *m, char *filename)
+void dumpMatrixToFile(Matrix *m, char *filename)
 {
   FILE *fptr;
   fptr = fopen(filename, "w");
-  dumpMatrix_impl(m, stdout);
+  dumpMatrix_impl(m, fptr);
   fclose(fptr);
 }
 
