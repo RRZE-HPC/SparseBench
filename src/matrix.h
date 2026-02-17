@@ -65,9 +65,9 @@ extern void MMMatrixPrintToFile(MMMatrix *m, char *filename);
 extern void MMMatrixPrint(MMMatrix *m);
 extern void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr);
 
-extern void dumpSCSMatrixToFile(Matrix *m, char *filename);
-extern void dumpSCSMatrixTo(Matrix *m);
-extern void dumpSCSMatrixTo_impl(Matrix *m, FILE *fptr);
+extern void dumpMatrixToFile(Matrix *m, char *filename);
+extern void dumpMatrix(Matrix *m);
+extern void dumpMatrix_impl(Matrix *m, FILE *fptr);
 
 extern void GMatrixPrintTofile(GMatrix *m, char *filename);
 extern void GMatrixPrint(GMatrix *m);

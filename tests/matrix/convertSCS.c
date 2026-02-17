@@ -69,7 +69,7 @@ int test_convertSCS(void* args, const char* dataDir){
 				BUILD_MATRIX_FILE_PATH(entry, "reported/", ".out", C_str, sigma_str, pathToReportedData);
 				FILE *reportedData = fopen(pathToReportedData, "w");
 
-				dumpSCSMatrixTo_impl(&A, reportedData);
+				dumpMatrix_impl(&A, reportedData);
 				fclose(reportedData);
 			
 				// If the expect and reported data differ in some way

@@ -246,13 +246,13 @@ void dumpSCSMatrixfile(Matrix *m, char *filename)
 {
   FILE *fptr;
   fptr = fopen(filename, "w");
-  dumpSCSMatrixTo_impl(m, stdout);
+  dumpMatrix_impl(m, stdout);
   fclose(fptr);
 }
 
 void dumpSCSMatrix(Matrix *m)
 {
-  dumpSCSMatrixTo_impl(m, stdout);
+  dumpMatrix_impl(m, stdout);
 }
 
 #define PRINT_FIELD(fp, obj, field) \
@@ -278,7 +278,7 @@ void dumpSCSMatrix(Matrix *m)
     } while (0)
 
 
-void dumpSCSMatrixTo_impl(Matrix *m, FILE* fptr){
+void dumpMatrix_impl(Matrix *m, FILE* fptr){
 	PRINT_FIELD(fptr, m, startRow);
 	PRINT_FIELD(fptr, m, stopRow);
 	PRINT_FIELD(fptr, m, totalNr);

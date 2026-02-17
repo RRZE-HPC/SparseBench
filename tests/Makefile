@@ -12,7 +12,7 @@ MOD1=matrix
 MOD2=solver
 
 # Link against all SparseBench object files
-LINKS := $(filter-out ${TC_DIR}/main.o, $(wildcard ${TC_DIR}/*.o))
+LINKS = $(shell ls ${TC_DIR}/*.o 2>/dev/null | grep -v main.o)
 
 # Target executable
 TARGET=runTests
@@ -25,31 +25,35 @@ OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u 
 # Always leave debugging flag on
 CFLAGS=-g -O0 -qopenmp $(DEFINES)
 
-.PHONY: all clean
+.PHONY: all clean prebuild
 
 all: $(TARGET)
 
+prebuild:
+	make -sC ../
+
 clean:
+	make -sC ../ clean
 	rm -f $(TARGET) $(OBJECTS) runTests.o
 
 # Link the object files to create the executable
-$(TARGET): runTests.o $(OBJECTS) ${LINKS}
+$(TARGET): | prebuild runTests.o $(OBJECTS) ${LINKS}
 	$(CC) $(CFLAGS) -o $@ runTests.o $(OBJECTS) ${LINKS}
 
 # Compile runTests.c into an object file
-runTests.o: runTests.c
+runTests.o: runTests.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Module 1 tests: matrix
 $(MOD1)/matrixTests.o: $(MOD1)/matrixTests.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c
+$(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Module 2 tests: solver
 $(MOD2)/solverTests.o: $(MOD2)/solverTests.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c
+$(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
