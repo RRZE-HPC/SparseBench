@@ -34,6 +34,41 @@ static void initVectors(Matrix *m, CG_FLOAT *x, CG_FLOAT *b, CG_FLOAT *xexact)
       b[rowID] = 1.0;
     }
   }
+#elif SCS
+  CG_UINT numRows = m->nr;
+  CG_UINT C = m->C;
+  CG_UINT *chunkPtr = m->chunkPtr;
+  CG_UINT *chunkLens = m->chunkLens;
+  CG_UINT *colInd = m->colInd;
+  CG_FLOAT *val = m->val;
+  CG_UINT *oldToNewPerm = m->oldToNewPerm;
+
+  for (int rowID = 0; rowID < numRows; rowID++) {
+    x[rowID] = 0.0;
+
+    // Map original row to new row position in SCS format
+    CG_UINT newRow = oldToNewPerm[rowID];
+    CG_UINT chunkIdx = newRow / C;
+    CG_UINT chunkRow = newRow % C;
+    CG_UINT chunkStart = chunkPtr[chunkIdx];
+    CG_UINT rowLen = chunkLens[chunkIdx];
+
+    // Count actual non-zero values in this row
+    int nnzrow = 0;
+    for (CG_UINT j = 0; j < rowLen; ++j) {
+      CG_UINT idx = chunkStart + j * C + chunkRow;
+      if (val[idx] != 0.0) {
+        nnzrow++;
+      }
+    }
+
+    if (xexact != NULL) {
+      b[rowID]      = 27.0 - ((CG_FLOAT)(nnzrow - 1));
+      xexact[rowID] = 1.0;
+    } else {
+      b[rowID] = 1.0;
+    }
+  }
 #endif
 }
 
