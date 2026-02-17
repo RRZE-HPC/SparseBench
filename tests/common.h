@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define c_sigma_max 10
+
 #define SET_ARGS(i, C_val, sigma_val) \
 {                              				\
 	args[i]->C = (C_val);         			\

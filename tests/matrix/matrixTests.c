@@ -7,8 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define c_sigma_max 10
-
 int matrixTests(int argc, char **argv)
 {
   // Hard-code data directory
