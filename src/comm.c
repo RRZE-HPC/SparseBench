@@ -698,6 +698,8 @@ void commDistributeMatrix(CommType *c, MMMatrix *m, MMMatrix *mLocal)
 #else
   mLocal->startRow = 0;
   mLocal->stopRow  = m->nr - 1;
+  mLocal->totalNr  = m->nr;
+  mLocal->totalNnz = m->nnz;
   mLocal->count    = m->count;
   mLocal->nr       = m->nr;
   mLocal->nnz      = m->nnz;

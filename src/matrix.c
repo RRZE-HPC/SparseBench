@@ -207,9 +207,13 @@ void MMMatrixRead(MMMatrix *m, char *filename)
   }
 
   fclose(f);
-  m->nr    = M;
-  m->nnz   = cursor;
-  m->count = cursor;
+  m->nr       = M;
+  m->nnz      = cursor;
+  m->count    = cursor;
+  m->totalNr  = M;
+  m->totalNnz = cursor;
+  m->startRow = 0;
+  m->stopRow  = M;
 
   // sort by column
   qsort(m->entries, m->count, sizeof(MMEntry), compareColumn);

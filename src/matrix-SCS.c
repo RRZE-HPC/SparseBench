@@ -206,32 +206,33 @@ void MatrixPrint(Matrix *m)
 void MatrixPrint_impl(Matrix *m, FILE *fptr)
 {
   // Print SCS matrix in strict row order (original row order, skipping padded rows)
-  if (!m || !fptr) return;
+  if (!m || !fptr)
+    return;
 
-  CG_UINT nr = m->nr;
-  CG_UINT nc = m->nc;
-  CG_UINT C = m->C;
-  CG_UINT nChunks = m->nChunks;
-  CG_UINT *chunkPtr = m->chunkPtr;
-  CG_UINT *chunkLens = m->chunkLens;
-  CG_UINT *colInd = m->colInd;
-  CG_FLOAT *val = m->val;
+  CG_UINT nr            = m->nr;
+  CG_UINT nc            = m->nc;
+  CG_UINT C             = m->C;
+  CG_UINT nChunks       = m->nChunks;
+  CG_UINT *chunkPtr     = m->chunkPtr;
+  CG_UINT *chunkLens    = m->chunkLens;
+  CG_UINT *colInd       = m->colInd;
+  CG_FLOAT *val         = m->val;
   CG_UINT *oldToNewPerm = m->oldToNewPerm;
   CG_UINT *newToOldPerm = m->newToOldPerm;
 
   // For each original row (strict order)
   for (CG_UINT row = 0; row < nr; ++row) {
-    CG_UINT newRow = oldToNewPerm[row];
-    CG_UINT chunkIdx = newRow / C;
-    CG_UINT chunkRow = newRow % C;
+    CG_UINT newRow     = oldToNewPerm[row];
+    CG_UINT chunkIdx   = newRow / C;
+    CG_UINT chunkRow   = newRow % C;
     CG_UINT chunkStart = chunkPtr[chunkIdx];
-    CG_UINT rowLen = chunkLens[chunkIdx];
+    CG_UINT rowLen     = chunkLens[chunkIdx];
 
     fprintf(fptr, "row %u:", row);
     for (CG_UINT j = 0; j < rowLen; ++j) {
       CG_UINT idx = chunkStart + j * C + chunkRow;
       CG_UINT col = colInd[idx];
-      CG_FLOAT v = val[idx];
+      CG_FLOAT v  = val[idx];
       // Only print nonzero values (strict fill)
       if (v != 0.0) {
         fprintf(fptr, " (%u, %.12g)", col, v);
@@ -239,10 +240,9 @@ void MatrixPrint_impl(Matrix *m, FILE *fptr)
     }
     fprintf(fptr, "\n");
   }
-
 }
 
-void dumpSCSMatrixfile(Matrix *m, char *filename)
+void dumpMatrixfile(Matrix *m, char *filename)
 {
   FILE *fptr;
   fptr = fopen(filename, "w");
@@ -250,53 +250,52 @@ void dumpSCSMatrixfile(Matrix *m, char *filename)
   fclose(fptr);
 }
 
-void dumpSCSMatrix(Matrix *m)
+void dumpMatrix(Matrix *m)
 {
   dumpMatrix_impl(m, stdout);
 }
 
-#define PRINT_FIELD(fp, obj, field) \
-    fprintf((fp), #obj "->" #field " = %lld\n", (long long)((obj)->field));
+#define PRINT_FIELD(fp, obj, field)                                                      \
+  fprintf((fp), #obj "->" #field " = %lld\n", (long long)((obj)->field));
 
+#define PRINT_INT_ARRAY(fp, obj, field, n)                                               \
+  do {                                                                                   \
+    fprintf((fp), #field ": ");                                                          \
+    for (size_t i = 0; i < (n); ++i) {                                                  \
+      fprintf((fp), "%d, ", (obj)->field[i]);                                            \
+    }                                                                                    \
+    fprintf((fp), "\n");                                                                 \
+  } while (0)
 
-#define PRINT_INT_ARRAY(fp, obj, field, n)                          \
-    do {                                                        \
-        fprintf((fp), #field ":");                              \
-        for (size_t _i = 0; _i < (n); ++_i) {                    \
-            fprintf((fp), " %d,", (obj)->field[_i]);            \
-        }                                                       \
-        fprintf((fp), "\n");                                    \
-    } while (0)
+#define PRINT_FLOAT_ARRAY(fp, obj, field, n)                                             \
+  do {                                                                                   \
+    fprintf((fp), #field ": ");                                                          \
+    for (size_t i = 0; i < (n); ++i) {                                                   \
+      fprintf((fp), "%f, ", (obj)->field[i]);                                            \
+    }                                                                                    \
+    fprintf((fp), "\n");                                                                 \
+  } while (0)
 
-#define PRINT_FLOAT_ARRAY(fp, obj, field, n)                          \
-    do {                                                        \
-        fprintf((fp), #field ":");                              \
-        for (size_t _i = 0; _i < (n); ++_i) {                    \
-            fprintf((fp), " %f,", (obj)->field[_i]);            \
-        }                                                       \
-        fprintf((fp), "\n");                                    \
-    } while (0)
-
-
-void dumpMatrix_impl(Matrix *m, FILE* fptr){
-	PRINT_FIELD(fptr, m, startRow);
-	PRINT_FIELD(fptr, m, stopRow);
-	PRINT_FIELD(fptr, m, totalNr);
-	PRINT_FIELD(fptr, m, totalNnz);
-	PRINT_FIELD(fptr, m, nr);
-	PRINT_FIELD(fptr, m, nc);
-	PRINT_FIELD(fptr, m, nnz);
-	PRINT_FIELD(fptr, m, C);
-	PRINT_FIELD(fptr, m, sigma);
-	PRINT_FIELD(fptr, m, nChunks);
-	PRINT_FIELD(fptr, m, nrPadded);
-	PRINT_FIELD(fptr, m, nElems);
-	PRINT_INT_ARRAY(fptr, m, oldToNewPerm, m->nrPadded);
-	PRINT_INT_ARRAY(fptr, m, newToOldPerm, m->nrPadded);
-	PRINT_INT_ARRAY(fptr, m, chunkLens, m->nrPadded);
-	PRINT_INT_ARRAY(fptr, m, chunkPtr, m->nrPadded);
-	PRINT_INT_ARRAY(fptr, m, colInd, m->nnz);
-	PRINT_FLOAT_ARRAY(fptr, m, val, m->nnz);
+void dumpMatrix_impl(Matrix *m, FILE *fptr)
+{
+  PRINT_FIELD(fptr, m, startRow);
+  PRINT_FIELD(fptr, m, stopRow);
+  PRINT_FIELD(fptr, m, totalNr);
+  PRINT_FIELD(fptr, m, totalNnz);
+  PRINT_FIELD(fptr, m, nr);
+  PRINT_FIELD(fptr, m, nc);
+  PRINT_FIELD(fptr, m, nnz);
+  PRINT_FIELD(fptr, m, C);
+  PRINT_FIELD(fptr, m, sigma);
+  PRINT_FIELD(fptr, m, nChunks);
+  PRINT_FIELD(fptr, m, nrPadded);
+  PRINT_FIELD(fptr, m, nElems);
+  PRINT_INT_ARRAY(fptr, m, oldToNewPerm, (m->nr));
+  PRINT_INT_ARRAY(fptr, m, newToOldPerm, (m->nr));
+  PRINT_INT_ARRAY(fptr, m, chunkLens, (m->nChunks));
+  PRINT_INT_ARRAY(fptr, m, chunkPtr, (m->nChunks + 1));
+  PRINT_INT_ARRAY(fptr, m, colInd, (m->nElems));
+  PRINT_FLOAT_ARRAY(fptr, m, val, (m->nElems));
 }
 
 void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)

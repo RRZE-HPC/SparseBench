@@ -42,7 +42,7 @@ int solverTests(int argc, char** argv){
 	}
 
 	// Manually assign one configuration per test
-	SET_ARGS(0, 0, 0);	// Test 1
+	SET_ARGS(0, 1, 1);	// Test 1
 	SET_ARGS(1, 1, 1);	// Test 2
 	SET_ARGS(2, 2, 1);	// Test 3
 	SET_ARGS(3, 4, 1);	// Test 4
