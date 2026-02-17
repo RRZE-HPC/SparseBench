@@ -35,8 +35,8 @@ typedef struct {
 } GMatrix;
 
 typedef struct {
-  CG_UINT nr, nc;       // number of rows, columns
-  CG_FLOAT* entries;
+  CG_UINT nr, nc; // number of rows, columns
+  CG_FLOAT *entries;
 } DMatrix; // for Block vectors
 
 typedef struct {
@@ -60,5 +60,22 @@ extern void matrixGenerate(
     GMatrix *m, Parameter *p, int rank, int size, bool use_7pt_stencil);
 
 extern void convertMatrix(Matrix *m, GMatrix *im);
+
+extern void MMMatrixPrintToFile(MMMatrix *m, char *filename);
+extern void MMMatrixPrint(MMMatrix *m);
+extern void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr);
+
+extern void dumpSCSMatrixToFile(Matrix *m, char *filename);
+extern void dumpSCSMatrixTo(Matrix *m);
+extern void dumpSCSMatrixTo_impl(Matrix *m, FILE *fptr);
+
+extern void GMatrixPrintTofile(GMatrix *m, char *filename);
+extern void GMatrixPrint(GMatrix *m);
+extern void GMatrixPrint_impl(GMatrix *m, FILE *fptr);
+
+extern void MatrixPrintTofile(Matrix *m, char *filename);
+extern void MatrixPrint(Matrix *m);
+extern void MatrixPrint_impl(Matrix *m, FILE *fptr);
+
 
 #endif // __MATRIX_H_
