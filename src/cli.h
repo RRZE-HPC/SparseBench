@@ -14,7 +14,10 @@
 typedef enum { CG = 0, SPMV, SPMMV, GMRES, CHEBFD, NUMTYPES } BenchEnumType;
 extern int BenchType;
 
-#define HELPTEXT                                                                         \
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+#define HELPTEXT_BASE                                                                    \
   "Usage: sparseBench [options]\n\n"                                                     \
   "Options:\n"                                                                           \
   "  -h         Show this help text\n"                                                   \
@@ -31,6 +34,20 @@ extern int BenchType;
   "loaded. Default 100.\n"                                                               \
   "  -i <int>   Number of solver iterations. Default 150.\n"                             \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
+
+#ifdef SCS
+
+#define HELPTEXT                                                                         \
+  HELPTEXT_BASE                                                                          \
+  "  -k <int>  Chunk size value for SELL-c-sigma. Default " STR(SELL_CHUNK) ".\n"        \
+  "  -s <int>  Sigma size value for SELL-c-sigma. Default " STR(SELL_SIGMA) ".\n"
+
+#else
+
+#define HELPTEXT HELPTEXT_BASE
+
+#endif
+
 
 extern void parseArguments(CommType *, Parameter *, int, char **);
 

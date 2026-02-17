@@ -33,16 +33,23 @@ static void writeBinMatrix(CommType *c, char *filename)
 }
 #endif
 
+#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:"
+
+#ifdef SCS
+  #define BASE_ARGS BASE_ARGS_COMMON "k:s:"
+#else
+  #define BASE_ARGS BASE_ARGS_COMMON
+#endif
+
 void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
 {
   char *cvalue = NULL;
   int index;
   bool stop = false;
   int c;
+  opterr        = 0;
 
-  opterr = 0;
-
-  while ((c = getopt(argc, argv, "hc:t:f:m:x:y:z:i:e:")) != -1) {
+  while ((c = getopt(argc, argv, BASE_ARGS)) != -1) {
     switch (c) {
     case 'h':
       if (commIsMaster(comm)) {
@@ -95,6 +102,14 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
     case 'e':
       param->eps = strtod(optarg, NULL);
       break;
+#ifdef SCS
+    case 'k':
+      param->C = (int)strtol(optarg, NULL, INT_BASE);
+      break;
+    case 's':
+      param->Sigma = (int)strtol(optarg, NULL, INT_BASE);
+      break;
+#endif
     case '?':
       if (optopt == 'c') {
         FPRINTF(stderr, "Option -%c requires an argument.\n", optopt);
