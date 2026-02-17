@@ -79,6 +79,10 @@ int main(int argc, char **argv)
   commLocalization(&comm, &m);
 
   Matrix sm;
+#if SCS
+  sm.C     = param.C;
+  sm.sigma = param.Sigma;
+#endif
   convertMatrix(&sm, &m);
   commBarrier();
   timeStop = getTimeStamp();
