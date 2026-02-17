@@ -48,7 +48,8 @@ int test_convertSCS(void* args, const char* dataDir){
 			BUILD_MATRIX_FILE_PATH(entry, "expected/", ".in", C_str, sigma_str, pathToExpectedData);
 
 			// Validate against expected data, if it exists
-			if(fopen(pathToExpectedData, "r")){
+			FILE* fptr = fopen(pathToExpectedData, "r");
+			if(fptr){
 
 				MMMatrix m;
 				MMMatrixRead(&m, pathToMatrix);
@@ -82,7 +83,7 @@ int test_convertSCS(void* args, const char* dataDir){
 					return 1;
 				} 
 			}
-
+			fclose(fptr);
 			free(pathToExpectedData);
 			free(pathToMatrix);
 		}

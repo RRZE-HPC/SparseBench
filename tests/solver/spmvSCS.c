@@ -61,8 +61,8 @@ int test_spmvSCS(void* args, const char* dataDir){
 			printf("pathToExpectedData = %s\n", pathToExpectedData);
 
 			// Validate against expected data, if it exists
-			
-			if(fopen(pathToExpectedData, "r")){
+			FILE *fptr = fopen(pathToExpectedData, "r");
+			if(fptr){
 				++validFileCount;
 
 				MMMatrix m;
@@ -124,6 +124,7 @@ int test_spmvSCS(void* args, const char* dataDir){
 					return 1;
 				} 
 			}
+			free(fptr);
 			free(pathToExpectedData);
 			free(pathToMatrix);
 		}
