@@ -53,7 +53,7 @@ int sigma;
 #ifndef BUILD_VECTOR_FILE_PATH
 #define BUILD_VECTOR_FILE_PATH(entry, dir, expect, path) \
 {														 \
-	strcpy((path), "data/");                             \
+	strcpy((path), "./data/");                             \
 	strcat((path), (dir));                               \
 	strcat((path), (entry)->d_name);                     \
 	strcat((path), (expect));              				 \

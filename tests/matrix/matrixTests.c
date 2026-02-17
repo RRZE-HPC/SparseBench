@@ -12,7 +12,7 @@ int matrixTests(int argc, char **argv)
   // Hard-code data directory
   char *dataDir = malloc(6);
   if (dataDir)
-    strcpy(dataDir, "data/");
+    strcpy(dataDir, "./data/");
 
   // Alternatively, if you want to get the data dir from the command line
   // Check if the user has provided the directory path
