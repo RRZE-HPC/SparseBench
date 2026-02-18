@@ -102,7 +102,24 @@ int test_spmvSCS(void* args, const char* dataDir){
 					y[i] = (CG_FLOAT)0.0;
 				}
 
-				spMVM(&A, x, y);
+				CG_FLOAT* x_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+				CG_FLOAT* y_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+
+				// Permute x for SCS format
+				// SCS format - permute the vector
+				permute_vector(A.oldToNewPerm, x, x_perm, A.nr);
+				// Pad the rest if needed
+				for(int i = A.nr; i < vectorSize; ++i){
+					x_perm[i] = 0.0;
+				}
+				
+				
+				spMVM(&A, x_perm, y_perm);
+				
+				// Unpermute y for SCS format
+				// SCS format - unpermute the vector
+				permute_vector(A.newToOldPerm, y_perm, y, A.nr);
+
 
 				// Dump to this external file
 				char *pathToReportedData = malloc(STR_LEN);
