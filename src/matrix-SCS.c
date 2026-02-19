@@ -39,7 +39,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
   m->totalNr  = im->totalNr;
   m->totalNnz = im->totalNnz;
   m->nr       = im->nr;
-  m->nc       = im->nr;
+  m->nc       = im->nc;
   m->nnz      = im->nnz;
   m->nChunks  = (m->nr + m->C - 1) / m->C;
   m->nrPadded = m->nChunks * m->C;
@@ -64,7 +64,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
   // Sort rows over a scope of sigma
   for (int i = 0; i < m->nrPadded; i += m->sigma) {
     int chunkStart = i;
-    int chunkStop  = ((i + m->sigma) < m->nrPadded) ? i + m->sigma : m->nrPadded;
+    int chunkStop  = MIN((i + m->sigma), m->nrPadded);
     int size       = chunkStop - chunkStart;
 
     // Sorting rows by element count using struct keeps index/count together
@@ -87,12 +87,10 @@ void convertMatrix(Matrix *m, GMatrix *im)
     // int chunkStop = ((i * m->C + m->C) < m->nrPadded)
     //               ? elemsPerRow[i * m->C + m->C].count
     //               : elemsPerRow[m->nrPadded - 1].count;
-    SellCSigmaPair chunkStart = elemsPerRow[i * m->C];
-    SellCSigmaPair chunkStop  = (i * m->C + m->C) < (m->nrPadded - 1)
-                                    ? elemsPerRow[i * m->C + m->C]
-                                    : elemsPerRow[m->nrPadded - 1];
+    // SellCSigmaPair chunkStart = elemsPerRow[i * m->C];
+    // SellCSigmaPair chunkStop  = elemsPerRow[MIN((i+1) * m->C, m->nrPadded - 1)];
 
-    int size                  = chunkStop.index - chunkStart.index;
+    // int size                  = chunkStop.index - chunkStart.index;
 
     // Collect longest row in chunk as chunk length
     CG_UINT maxLength = 0;
@@ -109,7 +107,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
   }
 
   // Account for final chunk
-  m->nElems = m->chunkPtr[m->nChunks - 1] + m->chunkLens[m->nChunks - 1] * m->C;
+  m->nElems = currentChunkPtr;
 
   m->chunkPtr[m->nChunks] = (CG_UINT)m->nElems;
 
