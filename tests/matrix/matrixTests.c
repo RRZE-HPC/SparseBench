@@ -46,7 +46,7 @@ int matrixTests(int argc, char **argv)
       snprintf(buff, sizeof(buff), "convertSell-%d-%d", c, sigma);
       tests[idx] = (Test) { "", test_convertSCS };
       strcpy(tests[idx].name, buff);
-      SET_ARGS(idx, c, sigma); // Test i
+      SET_ARGS(idx, c, sigma,0); // Test i
       ++idx;
     }
   }
