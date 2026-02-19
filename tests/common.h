@@ -6,10 +6,11 @@
 
 #define c_sigma_max 10
 
-#define SET_ARGS(i, C_val, sigma_val) \
-{                              				\
-	args[i]->C = (C_val);         			\
+#define SET_ARGS(i, C_val, sigma_val, run_cnt)  \
+{                              					\
+	args[i]->C = (C_val);         				\
 	args[i]->sigma = (sigma_val);				\
+	args[i]->run_count = (run_cnt); 			\
 }
 
 typedef int (*TestFunc)(void* config, const char* dataDir);
@@ -22,6 +23,7 @@ typedef struct {
 typedef struct {
 int C;
 int sigma;
+int run_count;
 } Args;
 
 #ifndef BUILD_MATRIX_FILE_PATH
