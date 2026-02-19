@@ -69,6 +69,14 @@ void printParameter(Parameter *param)
 {
   printf("Parameters\n");
   printf("Iterative solver parameters:\n");
+  printf("\tfile name: %s\n", param->filename);
+  printf("\tnx: %d\n", param->nx);
+  printf("\tny: %d\n", param->ny);
+  printf("\tnz: %d\n", param->nz);
   printf("\tMax iterations: %d\n", param->itermax);
   printf("\tepsilon (stopping tolerance) : %f\n", param->eps);
+#ifdef SCS
+  printf("\tSell chunk: %d\n", param->C);
+  printf("\tSell sigma: %d\n", param->Sigma);
+#endif
 }
