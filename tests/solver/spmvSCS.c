@@ -16,6 +16,13 @@
 #include <omp.h>
 #endif
 
+
+void swap_ptrs(CG_FLOAT** x_perm, CG_FLOAT** y_perm){
+	CG_FLOAT* tmp = *x_perm;
+	*x_perm = *y_perm;
+	*y_perm = tmp;
+}
+
 int test_spmvSCS(void* args, const char* dataDir){
 
 	int rank = 0;
@@ -46,6 +53,7 @@ int test_spmvSCS(void* args, const char* dataDir){
 			Args* arguments = (Args*)args;
 			A.C = arguments->C;
 			A.sigma = arguments->sigma;
+			int repeat_count = arguments->run_count;
 			char C_str[STR_LEN];                           
 			char sigma_str[STR_LEN];
 			sprintf(C_str, "%d", A.C);
@@ -56,7 +64,11 @@ int test_spmvSCS(void* args, const char* dataDir){
 
 			// This is the external file to check against
 			char *pathToExpectedData = malloc(STR_LEN);
-			BUILD_VECTOR_FILE_PATH(entry, "expected/", "_spmv_x_1.in", pathToExpectedData);
+			
+      		char in_file_name[64];
+      		snprintf(in_file_name, sizeof(in_file_name), "_spmv_x_%d.in", repeat_count);
+
+			BUILD_VECTOR_FILE_PATH(entry, "expected/", in_file_name, pathToExpectedData);
 
 			printf("pathToExpectedData = %s\n", pathToExpectedData);
 
@@ -105,25 +117,25 @@ int test_spmvSCS(void* args, const char* dataDir){
 				CG_FLOAT* x_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
 				CG_FLOAT* y_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
 
-				// Permute x for SCS format
-				// SCS format - permute the vector
 				permute_vector(A.oldToNewPerm, x, x_perm, A.nr);
-				// Pad the rest if needed
-				for(int i = A.nr; i < vectorSize; ++i){
-					x_perm[i] = 0.0;
+				
+				for (size_t i = 0; i < repeat_count; i++)
+				{
+					spMVM(&A, x_perm, y_perm);
+					
+					if (i < repeat_count - 1) {
+						swap_ptrs(&x_perm, &y_perm);
+					}
 				}
 				
-				
-				spMVM(&A, x_perm, y_perm);
-				
-				// Unpermute y for SCS format
-				// SCS format - unpermute the vector
 				permute_vector(A.newToOldPerm, y_perm, y, A.nr);
-
+					
 
 				// Dump to this external file
 				char *pathToReportedData = malloc(STR_LEN);
-				BUILD_MATRIX_FILE_PATH(entry, "reported/", "_spmv_x_1.out", C_str, sigma_str, pathToReportedData);
+      			char out_file_name[64];
+      			snprintf(out_file_name, sizeof(out_file_name), "_spmv_x_%d.out", repeat_count);
+				BUILD_MATRIX_FILE_PATH(entry, "reported/", out_file_name, C_str, sigma_str, pathToReportedData);
 				FILE *reportedData = fopen(pathToReportedData, "w");
 				
 				printf("pathToReportedData = %s\n", pathToReportedData);
@@ -132,16 +144,27 @@ int test_spmvSCS(void* args, const char* dataDir){
 				fclose(reportedData);
 			
 				// If the expect and reported data differ in some way
-				if(diff_files(pathToExpectedData, pathToReportedData)){
-					free(pathToReportedData);
+				int diff_result = diff_files(pathToExpectedData, pathToReportedData);
+
+				// Free per-iteration allocations
+				free(matrixFormat);
+				free(x);
+				free(y);
+				free(x_perm);
+				free(y_perm);
+				free(pathToReportedData);
+
+				if(diff_result){
+					fclose(fptr);
 					free(pathToExpectedData);
 					free(pathToMatrix);
-
+					free(pathToMatrices);
 					closedir(dir);
 					return 1;
-				} 
+				}
+
+				fclose(fptr);
 			}
-			fclose(fptr);
 			free(pathToExpectedData);
 			free(pathToMatrix);
 		}

@@ -35,23 +35,23 @@ static void initVectors(Matrix *m, CG_FLOAT *x, CG_FLOAT *b, CG_FLOAT *xexact)
     }
   }
 #elif SCS
-  CG_UINT numRows = m->nr;
-  CG_UINT C = m->C;
-  CG_UINT *chunkPtr = m->chunkPtr;
-  CG_UINT *chunkLens = m->chunkLens;
-  CG_UINT *colInd = m->colInd;
-  CG_FLOAT *val = m->val;
+  CG_UINT numRows       = m->nr;
+  CG_UINT C             = m->C;
+  CG_UINT *chunkPtr     = m->chunkPtr;
+  CG_UINT *chunkLens    = m->chunkLens;
+  CG_UINT *colInd       = m->colInd;
+  CG_FLOAT *val         = m->val;
   CG_UINT *oldToNewPerm = m->oldToNewPerm;
 
   for (int rowID = 0; rowID < numRows; rowID++) {
     x[rowID] = 0.0;
 
     // Map original row to new row position in SCS format
-    CG_UINT newRow = oldToNewPerm[rowID];
-    CG_UINT chunkIdx = newRow / C;
-    CG_UINT chunkRow = newRow % C;
+    CG_UINT newRow     = oldToNewPerm[rowID];
+    CG_UINT chunkIdx   = newRow / C;
+    CG_UINT chunkRow   = newRow % C;
     CG_UINT chunkStart = chunkPtr[chunkIdx];
-    CG_UINT rowLen = chunkLens[chunkIdx];
+    CG_UINT rowLen     = chunkLens[chunkIdx];
 
     // Count actual non-zero values in this row
     int nnzrow = 0;
@@ -97,23 +97,34 @@ void solverCheckResidual(CommType *c, CG_FLOAT *x, CG_FLOAT *xexact, CG_UINT n)
 
 int solveCG(CommType *comm, Parameter *param, Matrix *A)
 {
-  CG_FLOAT eps     = (CG_FLOAT)param->eps;
-  int itermax      = param->itermax;
+  CG_FLOAT eps      = (CG_FLOAT)param->eps;
+  int itermax       = param->itermax;
 
-  CG_UINT nrow     = A->nr;
-  CG_UINT ncol     = A->nc;
-  CG_FLOAT *r      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *p      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol * sizeof(CG_FLOAT));
-  CG_FLOAT *Ap     = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *x      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *b      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *xexact = NULL;
+  CG_UINT nrow_base = A->nr;
+  CG_UINT ncol_base = A->nc;
+  CG_FLOAT *r_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+  CG_FLOAT *p_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(CG_FLOAT));
+  CG_FLOAT *Ap_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+  CG_FLOAT *x_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+  CG_FLOAT *b_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+  CG_FLOAT *xexact_base = NULL;
 
   if (strcmp(param->filename, "generate") == 0 ||
       strcmp(param->filename, "generate7P") == 0) {
-    xexact = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+    xexact_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   }
-  initVectors(A, x, b, xexact);
+  initVectors(A, x_base, b_base, xexact_base);
+
+  // Allocate temporary vectors for SCS permutation/unpermutation
+#ifdef SCS
+  CG_UINT padded_size = A->nrPadded;
+  CG_FLOAT *p_perm =
+      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, padded_size * sizeof(CG_FLOAT));
+  CG_FLOAT *Ap_perm =
+      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, padded_size * sizeof(CG_FLOAT));
+  CG_UINT *oldToNewPerm = A->oldToNewPerm;
+  CG_UINT *newToOldPerm = A->newToOldPerm;
+#endif
 
   CG_FLOAT normr  = 0.0;
   CG_FLOAT rtrans = 0.0, oldrtrans = 0.0;
@@ -127,9 +138,31 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
   double timeStart, timeStop, ts;
 
+  CG_UINT nrow     = nrow_base;
+  CG_FLOAT *r      = r_base;
+  CG_FLOAT *p      = p_base;
+  CG_FLOAT *Ap     = Ap_base;
+  CG_FLOAT *x      = x_base;
+  CG_FLOAT *b      = b_base;
+  CG_FLOAT *xexact = xexact_base;
+
   PROFILE(WAXPBY, waxpby(nrow, 1.0, x, 0.0, x, p));
   PROFILE(COMM, commExchange(comm, A->nr, p));
+
+#ifdef SCS
+  // Permute p for SCS format
+  // Pad remaining elements
+  // for (CG_UINT i = 0; i < padded_size; ++i) {
+  //   p_perm[i] = 0.0;
+  // }
+  permute_vector(oldToNewPerm, p, p_perm, padded_size);
+  PROFILE(SPMVM, spMVM(A, p_perm, Ap_perm));
+  // Unpermute Ap_perm back to original ordering
+  permute_vector(newToOldPerm, Ap_perm, Ap, padded_size);
+#else
   PROFILE(SPMVM, spMVM(A, p, Ap));
+#endif
+
   PROFILE(WAXPBY, waxpby(nrow, 1.0, b, -1.0, Ap, r));
   PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
 
@@ -156,7 +189,21 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     }
 
     PROFILE(COMM, commExchange(comm, A->nr, p));
+
+#ifdef SCS
+    // Permute p for SCS format
+    permute_vector(oldToNewPerm, p, p_perm, padded_size);
+    // Pad remaining elements
+    // for (CG_UINT i = nrow; i < padded_size; ++i) {
+    //   p_perm[i] = 0.0;
+    // }
+    PROFILE(SPMVM, spMVM(A, p_perm, Ap_perm));
+    // Unpermute Ap_perm back to original ordering
+    permute_vector(newToOldPerm, Ap_perm, Ap, padded_size);
+#else
     PROFILE(SPMVM, spMVM(A, p, Ap));
+#endif
+
     CG_FLOAT alpha = 0.0;
     PROFILE(DDOT, ddot(nrow, p, Ap, &alpha));
     alpha = rtrans / alpha;
@@ -170,6 +217,12 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
 
   solverCheckResidual(comm, x, xexact, A->nr);
+
+#ifdef SCS
+  // Free temporary permuted vectors
+  free(p_perm);
+  free(Ap_perm);
+#endif
 
   return k;
 }
