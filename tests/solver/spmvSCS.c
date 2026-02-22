@@ -114,21 +114,18 @@ int test_spmvSCS(void* args, const char* dataDir){
 					y[i] = (CG_FLOAT)0.0;
 				}
 
-				CG_FLOAT* x_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
 				CG_FLOAT* y_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
 
-				permute_vector(A.oldToNewPerm, x, x_perm, A.nr);
 				
 				for (size_t i = 0; i < repeat_count; i++)
 				{
-					spMVM(&A, x_perm, y_perm);
-					
+					spMVM(&A, x, y_perm);
+					permute_vector(A.newToOldPerm, y_perm, y, A.nr);
 					if (i < repeat_count - 1) {
-						swap_ptrs(&x_perm, &y_perm);
+						swap_ptrs(&x, &y);
 					}
 				}
 				
-				permute_vector(A.newToOldPerm, y_perm, y, A.nr);
 					
 
 				// Dump to this external file
@@ -150,7 +147,6 @@ int test_spmvSCS(void* args, const char* dataDir){
 				free(matrixFormat);
 				free(x);
 				free(y);
-				free(x_perm);
 				free(y_perm);
 				free(pathToReportedData);
 

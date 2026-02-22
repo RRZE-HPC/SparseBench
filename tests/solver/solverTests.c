@@ -23,7 +23,7 @@ int solverTests(int argc, char **argv)
   // Get the directory path from the command line argument
   // const char *dataDir = argv[1];
 
-  Test tests[2 * c_sigma_max * c_sigma_max] = {};
+  Test tests[3 * c_sigma_max * c_sigma_max] = {};
 
   int num_tests                             = sizeof(tests) / sizeof(tests[0]);
   int passed                                = 0;
@@ -39,7 +39,7 @@ int solverTests(int argc, char **argv)
 
   // Manually assign one configuration per test
   int idx = 0;
-  for (int i = 1; i <= 3; i += 2) {
+  for (int i = 1; i <= 3; ++i) {
     for (int sigma = 1; sigma <= c_sigma_max; sigma++) {
       for (int c = 1; c <= c_sigma_max; c++) {
         char buff[64];
