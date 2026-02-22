@@ -118,11 +118,8 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   // Allocate temporary vectors for SCS permutation/unpermutation
 #ifdef SCS
   CG_UINT padded_size = A->nrPadded;
-  CG_FLOAT *p_perm =
-      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, padded_size * sizeof(CG_FLOAT));
   CG_FLOAT *Ap_perm =
       (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, padded_size * sizeof(CG_FLOAT));
-  CG_UINT *oldToNewPerm = A->oldToNewPerm;
   CG_UINT *newToOldPerm = A->newToOldPerm;
 #endif
 
@@ -150,15 +147,9 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   PROFILE(COMM, commExchange(comm, A->nr, p));
 
 #ifdef SCS
-  // Permute p for SCS format
-  // Pad remaining elements
-  // for (CG_UINT i = 0; i < padded_size; ++i) {
-  //   p_perm[i] = 0.0;
-  // }
-  permute_vector(oldToNewPerm, p, p_perm, padded_size);
-  PROFILE(SPMVM, spMVM(A, p_perm, Ap_perm));
+  PROFILE(SPMVM, spMVM(A, p, Ap_perm));
   // Unpermute Ap_perm back to original ordering
-  permute_vector(newToOldPerm, Ap_perm, Ap, padded_size);
+  permute_vector(newToOldPerm, Ap_perm, Ap, nrow);
 #else
   PROFILE(SPMVM, spMVM(A, p, Ap));
 #endif
@@ -191,15 +182,9 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     PROFILE(COMM, commExchange(comm, A->nr, p));
 
 #ifdef SCS
-    // Permute p for SCS format
-    permute_vector(oldToNewPerm, p, p_perm, padded_size);
-    // Pad remaining elements
-    // for (CG_UINT i = nrow; i < padded_size; ++i) {
-    //   p_perm[i] = 0.0;
-    // }
-    PROFILE(SPMVM, spMVM(A, p_perm, Ap_perm));
+    PROFILE(SPMVM, spMVM(A, p, Ap_perm));
     // Unpermute Ap_perm back to original ordering
-    permute_vector(newToOldPerm, Ap_perm, Ap, padded_size);
+    permute_vector(newToOldPerm, Ap_perm, Ap, nrow);
 #else
     PROFILE(SPMVM, spMVM(A, p, Ap));
 #endif
@@ -219,8 +204,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   solverCheckResidual(comm, x, xexact, A->nr);
 
 #ifdef SCS
-  // Free temporary permuted vectors
-  free(p_perm);
+  // Free temporary permuted vector
   free(Ap_perm);
 #endif
 

@@ -311,6 +311,11 @@ void GMatrixPrint_impl(GMatrix *m, FILE *fptr) {
   }
 }
 
+void dumpVectorPrint(CG_FLOAT *restrict y, CG_UINT numRows){
+  dumpVectorToFile(y, numRows, stdout);
+  printf("\n");
+}
+
 void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData){
 	fprintf(reportedData, "vec = ");
 	for (CG_UINT i = 0; i < numRows; i++)
