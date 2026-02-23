@@ -188,14 +188,6 @@ void convertMatrix(Matrix *m, GMatrix *im)
   free(rowLocalElemCount);
 }
 
-void permute_vector(const CG_UINT *permute,const CG_FLOAT* vec_src,CG_FLOAT* vec_dst, CG_UINT nr){
-  for (CG_UINT i = 0; i < nr; i++)
-  {
-    CG_UINT alt = permute[i];
-    vec_dst[alt] = vec_src[i];
-  }
-}
-
 void MatrixPrintTofile(Matrix *m, char *filename)
 {
   FILE *fptr;

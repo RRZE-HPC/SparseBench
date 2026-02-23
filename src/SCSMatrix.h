@@ -31,6 +31,4 @@ typedef struct {
   int count;
 } SellCSigmaPair;
 
-void permute_vector(const CG_UINT *permute,const CG_FLOAT* vec_src, CG_FLOAT* vec_dst, CG_UINT nr);
-
 #endif // __SCSMATRIX_H_

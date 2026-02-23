@@ -339,3 +339,28 @@ extern void dumpDMatrix_impl(DMatrix *m, FILE *reportedData){
 		fprintf(reportedData, "%lf, ", m->entries[i]);
 	}
 }
+
+void permute_vector(const CG_UINT *permute,const CG_FLOAT* vec_src,CG_FLOAT* vec_dst, CG_UINT nr){
+  for (CG_UINT i = 0; i < nr; i++)
+  {
+    CG_UINT alt = permute[i];
+    vec_dst[alt] = vec_src[i];
+  }
+}
+
+extern void permute_DMatrix(const CG_UINT *permute,const DMatrix* vec_src,DMatrix* vec_dst){
+  if (vec_src->nr != vec_dst->nr || vec_src->nc != vec_dst->nc)
+  {
+    exit(1);
+  }
+  
+  for (CG_UINT i = 0; i < vec_dst->nr; i++)
+  {
+    CG_UINT alt = permute[i];
+
+    for (CG_UINT j = 0; j < vec_dst->nc; j++)
+    {
+      vec_dst->entries[alt * vec_dst->nc + j] = vec_src->entries[i * vec_src->nc + j];
+    }
+  }
+}

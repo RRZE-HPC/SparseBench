@@ -65,7 +65,6 @@ extern void MMMatrixPrintToFile(MMMatrix *m, char *filename);
 extern void MMMatrixPrint(MMMatrix *m);
 extern void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr);
 
-
 extern void dumpDMatrixToFile(DMatrix *m, char *filename);
 extern void dumpDMatrix(DMatrix *m);
 extern void dumpDMatrix_impl(DMatrix *m, FILE *fptr);
@@ -84,5 +83,9 @@ extern void MatrixPrint_impl(Matrix *m, FILE *fptr);
 
 extern void dumpVectorPrint(CG_FLOAT *restrict y, CG_UINT numRows);
 extern void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData);
+
+extern void permute_DMatrix(const CG_UINT *permute,const DMatrix* vec_src,DMatrix* vec_dst);
+
+extern void permute_vector(const CG_UINT *permute,const CG_FLOAT* vec_src,CG_FLOAT* vec_dst, CG_UINT nr);
 
 #endif // __MATRIX_H_
