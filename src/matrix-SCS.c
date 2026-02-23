@@ -167,7 +167,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
       int chunkRow   = row % m->C;
       int idx        = chunkStart + rowLocalElemCount[row] * m->C + chunkRow;
 
-      m->colInd[idx] = (CG_UINT)e.col;
+      m->colInd[idx] = (CG_UINT)m->oldToNewPerm[e.col];
 #ifdef VERBOSE
       // Sanity check for common error
       if (m->colInd[idx] >= m->nc) {
