@@ -23,7 +23,7 @@ MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/solverTests.o
 OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
 # Always leave debugging flag on
-CFLAGS=-g -O0 -qopenmp $(DEFINES)
+CFLAGS=-g -O0 $(OPENMP) $(DEFINES)
 
 .PHONY: all clean prebuild
 
