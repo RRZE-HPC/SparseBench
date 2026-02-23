@@ -104,7 +104,11 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   CG_UINT ncol_base = A->nc;
   CG_FLOAT *r_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   CG_FLOAT *p_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(CG_FLOAT));
+#ifdef SCS
+  CG_FLOAT *Ap_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(CG_FLOAT));
+#else
   CG_FLOAT *Ap_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+#endif
   CG_FLOAT *x_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   CG_FLOAT *b_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   CG_FLOAT *xexact_base = NULL;
@@ -115,12 +119,35 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
   initVectors(A, x_base, b_base, xexact_base);
 
-  // Allocate temporary vectors for SCS permutation/unpermutation
+  // Permute colInd and vectors to SCS ordering so no per-iteration
+  // permute_vector is needed inside the CG loop.
 #ifdef SCS
-  CG_UINT padded_size = A->nrPadded;
-  CG_FLOAT *Ap_perm =
-      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, padded_size * sizeof(CG_FLOAT));
+  CG_UINT *oldToNewPerm = A->oldToNewPerm;
   CG_UINT *newToOldPerm = A->newToOldPerm;
+  CG_UINT *colInd_scs   = A->colInd;
+  CG_UINT  nElems_scs   = A->nElems;
+
+  // Remap local column indices to reference the permuted vector space
+  // for (CG_UINT i = 0; i < nElems_scs; i++) {
+  //   if (colInd_scs[i] < nrow_base) {
+  //     colInd_scs[i] = oldToNewPerm[colInd_scs[i]];
+  //   }
+  // }
+
+  // Permute b, x (and xexact) from original to SCS ordering
+  CG_FLOAT *perm_tmp = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+
+  permute_vector(oldToNewPerm, b_base, perm_tmp, nrow_base);
+  memcpy(b_base, perm_tmp, nrow_base * sizeof(CG_FLOAT));
+
+  permute_vector(oldToNewPerm, x_base, perm_tmp, nrow_base);
+  memcpy(x_base, perm_tmp, nrow_base * sizeof(CG_FLOAT));
+
+  if (xexact_base != NULL) {
+    permute_vector(oldToNewPerm, xexact_base, perm_tmp, nrow_base);
+    memcpy(xexact_base, perm_tmp, nrow_base * sizeof(CG_FLOAT));
+  }
+  free(perm_tmp);
 #endif
 
   CG_FLOAT normr  = 0.0;
@@ -146,14 +173,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   PROFILE(WAXPBY, waxpby(nrow, 1.0, x, 0.0, x, p));
   PROFILE(COMM, commExchange(comm, A->nr, p));
 
-#ifdef SCS
-  PROFILE(SPMVM, spMVM(A, p, Ap_perm));
-  // Unpermute Ap_perm back to original ordering
-  permute_vector(newToOldPerm, Ap_perm, Ap, nrow);
-#else
   PROFILE(SPMVM, spMVM(A, p, Ap));
-#endif
-
   PROFILE(WAXPBY, waxpby(nrow, 1.0, b, -1.0, Ap, r));
   PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
 
@@ -181,13 +201,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
     PROFILE(COMM, commExchange(comm, A->nr, p));
 
-#ifdef SCS
-    PROFILE(SPMVM, spMVM(A, p, Ap_perm));
-    // Unpermute Ap_perm back to original ordering
-    permute_vector(newToOldPerm, Ap_perm, Ap, nrow);
-#else
     PROFILE(SPMVM, spMVM(A, p, Ap));
-#endif
 
     CG_FLOAT alpha = 0.0;
     PROFILE(DDOT, ddot(nrow, p, Ap, &alpha));
@@ -201,12 +215,29 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     printf("Solution performed %d iterations and took %.2fs\n", k, timeStop - timeStart);
   }
 
-  solverCheckResidual(comm, x, xexact, A->nr);
-
 #ifdef SCS
-  // Free temporary permuted vector
-  free(Ap_perm);
+  // Unpermute x (and xexact) back to original ordering for residual check
+  perm_tmp = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+
+  permute_vector(newToOldPerm, x, perm_tmp, nrow);
+  memcpy(x, perm_tmp, nrow * sizeof(CG_FLOAT));
+
+  if (xexact != NULL) {
+    permute_vector(newToOldPerm, xexact, perm_tmp, nrow);
+    memcpy(xexact, perm_tmp, nrow * sizeof(CG_FLOAT));
+  }
+  free(perm_tmp);
+
+  // // Restore column indices to original ordering
+  // for (CG_UINT i = 0; i < nElems_scs; i++) {
+  //   if (colInd_scs[i] < nrow_base) {
+  //     colInd_scs[i] = newToOldPerm[colInd_scs[i]];
+  //   }
+  // }
+
 #endif
+
+  // solverCheckResidual(comm, x, xexact, A->nr);
 
   return k;
 }
