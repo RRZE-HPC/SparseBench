@@ -16,7 +16,7 @@
 #include <omp.h>
 #endif
 
-int test_spmvSCS(void* args, const char* dataDir){
+int test_spmmvSCS(void* args, const char* dataDir){
 
 	int rank = 0;
 	int size = 1;
@@ -59,7 +59,7 @@ int test_spmvSCS(void* args, const char* dataDir){
 			char *pathToExpectedData = malloc(STR_LEN);
 			
       		char in_file_name[64];
-      		snprintf(in_file_name, sizeof(in_file_name), "_spmv_x_%d.in", repeat_count);
+      		snprintf(in_file_name, sizeof(in_file_name), "_spmmv_x_%d.in", repeat_count);
 
 			BUILD_VECTOR_FILE_PATH(entry, "expected/", in_file_name, pathToExpectedData);
 
@@ -127,7 +127,7 @@ int test_spmvSCS(void* args, const char* dataDir){
 				// Dump to this external file
 				char *pathToReportedData = malloc(STR_LEN);
       			char out_file_name[64];
-      			snprintf(out_file_name, sizeof(out_file_name), "_spmv_x_%d.out", repeat_count);
+      			snprintf(out_file_name, sizeof(out_file_name), "_spmmv_x_%d.out", repeat_count);
 				BUILD_MATRIX_FILE_PATH(entry, "reported/", out_file_name, C_str, sigma_str, pathToReportedData);
 				FILE *reportedData = fopen(pathToReportedData, "w");
 				

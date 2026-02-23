@@ -24,7 +24,7 @@ int matrixTests(int argc, char **argv)
   // Get the directory path from the command line argument
   // const char *dataDir = argv[1];
 
-  Test tests[c_sigma_max * c_sigma_max] = {};
+  Test tests[C_SIGMA_MAX * C_SIGMA_MAX] = {};
 
   int num_tests                         = sizeof(tests) / sizeof(tests[0]);
   int passed                            = 0;
@@ -40,8 +40,8 @@ int matrixTests(int argc, char **argv)
 
   // Manually assign one configuration per test
   int idx = 0;
-  for (int c = 1; c <= c_sigma_max; c++) {
-    for (int sigma = 1; sigma <= c_sigma_max; sigma++) {
+  for (int c = 1; c <= C_SIGMA_MAX; c++) {
+    for (int sigma = 1; sigma <= C_SIGMA_MAX; sigma++) {
       char buff[64];
       snprintf(buff, sizeof(buff), "convertSell-%d-%d", c, sigma);
       tests[idx] = (Test) { "", test_convertSCS };

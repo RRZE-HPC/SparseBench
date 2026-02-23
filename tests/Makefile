@@ -19,7 +19,7 @@ TARGET=runTests
 
 # Collect objects from all test modules
 MOD1_OBJECTS=${MOD1}/convertSCS.o ${MOD1}/matrixTests.o
-MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/solverTests.o
+MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/spmmvSCS.o ${MOD2}/solverTests.o
 OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
 # Always leave debugging flag on
@@ -57,4 +57,7 @@ $(MOD2)/solverTests.o: $(MOD2)/solverTests.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c 
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(MOD2)/spmmvSCS.o: $(MOD2)/spmmvSCS.c 
 	$(CC) $(CFLAGS) -c -o $@ $<

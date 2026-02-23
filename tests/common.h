@@ -3,8 +3,10 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "../src/util.h"
 
-#define c_sigma_max 10
+#define REP_COUNT 3
+#define C_SIGMA_MAX 10
 
 #define SET_ARGS(i, C_val, sigma_val, run_cnt)  \
 {                              					\
@@ -80,6 +82,12 @@ int run_count;
 #ifndef ARRAY_ALIGNMENT
 #define ARRAY_ALIGNMENT 64
 #endif
+
+static inline void swap_ptrs(CG_FLOAT** x_perm, CG_FLOAT** y_perm){
+	CG_FLOAT* tmp = *x_perm;
+	*x_perm = *y_perm;
+	*y_perm = tmp;
+}
 
 static int diff_files(const char *expectedData, const char *reportedData) {
 	FILE *f1 = fopen(expectedData, "r");
