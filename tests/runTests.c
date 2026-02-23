@@ -4,10 +4,10 @@
 #include <string.h>
 
 #include "matrix/matrixTests.h"
-#include "solver/solverTests.h"
+#include "solver/solverTestsSPMV.h"
 
 int main(int argc, char** argv){
-	matrixTests(argc, argv);
-	solverTests(argc, argv);
+	// matrixTests(argc, argv);
+	solverTestsSPMV(argc, argv);
 	return 0;
 }

@@ -53,7 +53,7 @@ $(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Module 2 tests: solver
-$(MOD2)/solverTests.o: $(MOD2)/solverTests.c 
+$(MOD2)/solverTests.o: $(MOD2)/solverTestsSPMV.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c 
