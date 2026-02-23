@@ -173,7 +173,7 @@ class scsMatrix:
                 chunkRow = row % self.C
                 idx = chunkStart + rowLocalElemCount[row] * self.C + chunkRow
                 
-                self.colInd[idx] = col
+                self.colInd[idx] = self.oldToNewPerm[col]
                 self.val[idx] = value
                 rowLocalElemCount[row] += 1
         
