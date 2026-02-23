@@ -34,3 +34,7 @@ void *allocate(size_t alignment, size_t bytesize)
 
   return ptr;
 }
+
+extern void deallocate(void* ptr){
+  free(ptr);
+}
