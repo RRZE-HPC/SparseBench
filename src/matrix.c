@@ -323,3 +323,19 @@ void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData)
 		fprintf(reportedData, "%lf, ", y[i]);
 	}
 }
+
+extern void dumpDMatrixToFile(DMatrix *m, char *filename){
+  FILE* fptr = fopen(filename, "w");
+  dumpDMatrix_impl(m, fptr);
+  fclose(fptr);
+}
+extern void dumpDMatrix(DMatrix *m){
+  dumpDMatrix_impl(m, stdout);
+}
+extern void dumpDMatrix_impl(DMatrix *m, FILE *reportedData){
+  fprintf(reportedData, "row order matrix = ");
+	for (CG_UINT i = 0; i < m->nr * m->nc; i++)
+	{
+		fprintf(reportedData, "%lf, ", m->entries[i]);
+	}
+}
