@@ -340,8 +340,9 @@ extern void dumpDMatrix_impl(DMatrix *m, FILE *reportedData){
 	}
 }
 
-void permute_DMatrix(const CG_UINT *perm, CG_UINT nr, const DMatrix *src, DMatrix *dst){
+void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst){
   CG_UINT nc = src->nc;
+  CG_UINT nr = MIN(src->nr, dst->nr);
   for (CG_UINT i = 0; i < nr; i++) {
       CG_UINT newRow = perm[i];
       CG_FLOAT* dst_start = &dst->entries[newRow * nc];

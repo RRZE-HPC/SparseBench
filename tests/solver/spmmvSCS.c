@@ -106,8 +106,8 @@ int test_spmmvSCS(void* args, const char* dataDir){
 
 				// Use vectorSize (= nrPadded for SCS) so dimensions match
 				// permute_DMatrix requires src.nr == dst.nr
-				DMatrix x = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
-				DMatrix y = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
+				DMatrix x = {.nr = A.nc , .nc = NUMVEC , .entries = NULL};
+				DMatrix y = {.nr = A.nr , .nc = NUMVEC , .entries = NULL};
 				x.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
 				y.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
 
@@ -131,7 +131,7 @@ int test_spmmvSCS(void* args, const char* dataDir){
 					y_perm.entries[i] = (CG_FLOAT)0.0;
 
 				// Forward permutation: scatter x into SCS ordering
-				permute_DMatrix(A.oldToNewPerm, A.nr, &x, &x_perm);
+				permute_DMatrix(A.oldToNewPerm, &x, &x_perm);
 
 				for (size_t i = 0; i < repeat_count; i++)
 				{
@@ -142,10 +142,7 @@ int test_spmmvSCS(void* args, const char* dataDir){
 				}
 
 				// Inverse permutation: gather y from SCS ordering back to original
-				permute_DMatrix(A.newToOldPerm, A.nr, &y_perm, &y);
-
-				// Only dump the real (non-padded) rows
-				y.nr = A.nr;
+				permute_DMatrix(A.newToOldPerm, &y_perm, &y);
 
 				// Dump to this external file
 				char *pathToReportedData = malloc(STR_LEN);
