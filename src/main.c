@@ -148,16 +148,16 @@ int main(int argc, char **argv)
       printf("Test type: SPMMVM\n");
     }
     int itermax = param.itermax;
-    DMatrix x;
-    DMatrix y;
-    x.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, NUMVEC * m.nc * sizeof(CG_FLOAT));
-    y.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, NUMVEC * m.nr * sizeof(CG_FLOAT));
+    DMatrix x = { .nr = sm.nc, .nc = NUMVEC, .entries = NULL};
+    DMatrix y = { .nr = sm.nr, .nc = NUMVEC, .entries = NULL};
+    x.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
+    y.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
 
-    for (int i = 0; i < NUMVEC * m.nc; i++) {
+    for (int i = 0; i < x.nr * x.nc; i++) {
       x.entries[i] = (CG_FLOAT)1.0;
     }
-    for (int i = 0; i < NUMVEC * m.nr; i++) {
-      y.entries[i] = (CG_FLOAT)1.0;
+    for (int i = 0; i < y.nr * y.nc; i++) {
+      y.entries[i] = (CG_FLOAT)0.0;
     }
 
     for (k = 1; k < itermax; k++) {
