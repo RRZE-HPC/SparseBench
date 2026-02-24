@@ -16,6 +16,12 @@
 #include <omp.h>
 #endif
 
+void swap_DMatrix(DMatrix* x_perm,DMatrix*  y_perm){
+	DMatrix tmp = *x_perm;
+	*x_perm = *y_perm;
+	*y_perm = tmp;
+}
+
 int test_spmmvSCS(void* args, const char* dataDir){
 
 	int rank = 0;
@@ -98,31 +104,48 @@ int test_spmmvSCS(void* args, const char* dataDir){
 				VALIDATE_MATRIX_FORMAT(matrixFormat);
 				// A.matrixFormat = matrixFormat;
 
-				CG_FLOAT* x = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
-				CG_FLOAT* y = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+				// Use vectorSize (= nrPadded for SCS) so dimensions match
+				// permute_DMatrix requires src.nr == dst.nr
+				DMatrix x = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
+				DMatrix y = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
+				x.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
+				y.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
 
-				// Fix x = 1 for now
-				for(int i = 0; i < vectorSize; ++i){
-					x[i] = (CG_FLOAT)1.0;
-					y[i] = (CG_FLOAT)0.0;
+				// Initialize x: sequential values for real entries, 0 for padding
+				for(int i = 0; i < (x.nr * x.nc); ++i){
+					x.entries[i] = (i < A.nc * NUMVEC) ? (CG_FLOAT)i : (CG_FLOAT)0.0;
+				}
+				for(int i = 0; i < (y.nr * y.nc); ++i){
+					y.entries[i] = (CG_FLOAT)0.0;
 				}
 
-				CG_FLOAT* x_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
-				CG_FLOAT* y_perm = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+				DMatrix x_perm = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
+				DMatrix y_perm = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
+				x_perm.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, x_perm.nr * x_perm.nc * sizeof(CG_FLOAT));
+				y_perm.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, y_perm.nr * y_perm.nc * sizeof(CG_FLOAT));
 
-				// Permute x into SCS ordering once (colInd already remapped)
-				permute_vector(A.oldToNewPerm, x, x_perm, A.nr);
+				// Zero-fill permuted vectors (essential for padded rows)
+				for (int i = 0; i < (x_perm.nr * x_perm.nc); ++i)
+					x_perm.entries[i] = (CG_FLOAT)0.0;
+				for (int i = 0; i < (y_perm.nr * y_perm.nc); ++i)
+					y_perm.entries[i] = (CG_FLOAT)0.0;
+
+				// Forward permutation: scatter x into SCS ordering
+				permute_DMatrix(A.oldToNewPerm, A.nr, &x, &x_perm);
 
 				for (size_t i = 0; i < repeat_count; i++)
 				{
-					spMVM(&A, x_perm, y_perm);
+					spMMVM(&A, &x_perm, &y_perm);
 					if (i < repeat_count - 1) {
-						swap_ptrs(&x_perm, &y_perm);
+						swap_DMatrix(&x_perm, &y_perm);
 					}
 				}
 
-				// Unpermute y back to original ordering
-				permute_vector(A.newToOldPerm, y_perm, y, A.nr);
+				// Inverse permutation: gather y from SCS ordering back to original
+				permute_DMatrix(A.newToOldPerm, A.nr, &y_perm, &y);
+
+				// Only dump the real (non-padded) rows
+				y.nr = A.nr;
 
 				// Dump to this external file
 				char *pathToReportedData = malloc(STR_LEN);
@@ -133,7 +156,7 @@ int test_spmmvSCS(void* args, const char* dataDir){
 				
 				printf("pathToReportedData = %s\n", pathToReportedData);
 				
-				dumpVectorToFile(y, A.nr, reportedData);
+				dumpDMatrix_impl(&y, reportedData);
 				fclose(reportedData);
 			
 				// If the expect and reported data differ in some way
@@ -141,11 +164,11 @@ int test_spmmvSCS(void* args, const char* dataDir){
 
 				// Free per-iteration allocations
 				free(matrixFormat);
-				free(x);
-				free(y);
-				free(x_perm);
-				free(y_perm);
 				free(pathToReportedData);
+				deallocate(x.entries);
+				deallocate(y.entries);
+				deallocate(x_perm.entries);
+				deallocate(y_perm.entries);
 
 				if(diff_result){
 					fclose(fptr);

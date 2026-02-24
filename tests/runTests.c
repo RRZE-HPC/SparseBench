@@ -5,9 +5,11 @@
 
 #include "matrix/matrixTests.h"
 #include "solver/solverTestsSPMV.h"
+#include "solver/solverTestsSPMMV.h"
 
 int main(int argc, char** argv){
-	// matrixTests(argc, argv);
+	matrixTests(argc, argv);
 	solverTestsSPMV(argc, argv);
+	solverTestsSPMMV(argc, argv);
 	return 0;
 }

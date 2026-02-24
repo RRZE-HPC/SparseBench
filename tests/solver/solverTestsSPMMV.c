@@ -1,12 +1,12 @@
 #include "../common.h"
-#include "spmvSCS.h"
+#include "spmmvSCS.h"
 
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int solverTestsSPMV(int argc, char **argv)
+int solverTestsSPMMV(int argc, char **argv)
 {
   // Hard-code data directory
   char *dataDir = malloc(6);
@@ -43,8 +43,8 @@ int solverTestsSPMV(int argc, char **argv)
     for (int sigma = 1; sigma <= C_SIGMA_MAX; sigma++) {
       for (int c = 1; c <= C_SIGMA_MAX; c++) {
         char buff[64];
-        snprintf(buff, sizeof(buff), "SpMV_%d Sell-%d-%d", i, c, sigma);
-        tests[idx] = (Test) { "", test_spmvSCS };
+        snprintf(buff, sizeof(buff), "SpMMV_%d Sell-%d-%d", i, c, sigma);
+        tests[idx] = (Test) { "", test_spmmvSCS };
         strcpy(tests[idx].name, buff);
         SET_ARGS(idx, c, sigma, i); // Test idx, c, sigma, repeat
         ++idx;
@@ -65,7 +65,7 @@ int solverTestsSPMV(int argc, char **argv)
     }
   }
 
-  printf("\nSummary: %d/%d Solver SPMV tests passed.\n", passed, num_tests);
+  printf("\nSummary: %d/%d Solver SPMMV tests passed.\n", passed, num_tests);
 
   free(dataDir);
   free(args);
