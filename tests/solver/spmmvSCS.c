@@ -119,6 +119,8 @@ int test_spmmvSCS(void* args, const char* dataDir){
 					y.entries[i] = (CG_FLOAT)0.0;
 				}
 
+				// NOTE : since we switch the vectors around mkaing them bigger is necessary to 
+				// prevent accesssing garbage data 
 				DMatrix x_perm = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
 				DMatrix y_perm = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
 				x_perm.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, x_perm.nr * x_perm.nc * sizeof(CG_FLOAT));
