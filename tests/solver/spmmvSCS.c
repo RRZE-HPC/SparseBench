@@ -53,14 +53,16 @@ int test_spmmvSCS(void *args, const char *dataDir)
       printf("pathToMatrix = %s\n", pathToMatrix);
 
       Matrix A;
-      Args *arguments  = (Args *)args;
-      A.C              = arguments->C;
-      A.sigma          = arguments->sigma;
+      Args *arguments         = (Args *)args;
+      char C_str[STR_LEN]     = "";
+      char sigma_str[STR_LEN] = "";
+#ifdef SCS
+      A.C     = arguments->C;
+      A.sigma = arguments->sigma;
+#endif
+      sprintf(C_str, "%d", arguments->C);
+      sprintf(sigma_str, "%d", arguments->sigma);
       int repeat_count = arguments->run_count;
-      char C_str[STR_LEN];
-      char sigma_str[STR_LEN];
-      sprintf(C_str, "%d", A.C);
-      sprintf(sigma_str, "%d", A.sigma);
 
       // String preprocessing
       FORMAT_AND_STRIP_VECTOR_FILE(entry)
@@ -95,15 +97,15 @@ int test_spmmvSCS(void *args, const char *dataDir)
         int vectorSize;
         char *matrixFormat = (char *)malloc(4 * sizeof(char));
 
-        if (A.C == 0 || A.sigma == 0) {
-          convertMatrix(&A, &gm);
-          vectorSize = A.nr;
-          strcpy(matrixFormat, "CRS");
-        } else {
-          convertMatrix(&A, &gm);
-          vectorSize = A.nrPadded;
-          strcpy(matrixFormat, "SCS");
-        }
+#ifdef SCS
+        convertMatrix(&A, &gm);
+        vectorSize = A.nrPadded;
+        strcpy(matrixFormat, "SCS");
+#else
+        convertMatrix(&A, &gm);
+        vectorSize = A.nr;
+        strcpy(matrixFormat, "CRS");
+#endif
         VALIDATE_MATRIX_FORMAT(matrixFormat);
         // A.matrixFormat = matrixFormat;
 
@@ -122,8 +124,9 @@ int test_spmmvSCS(void *args, const char *dataDir)
           y.entries[i] = (CG_FLOAT)0.0;
         }
 
-        // NOTE : since we switch the vectors around mkaing them bigger is necessary to
-        // prevent accesssing garbage data
+// NOTE : since we switch the vectors around mkaing them bigger is necessary to
+// prevent accesssing garbage data
+#ifdef SCS
         DMatrix x_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
         DMatrix y_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
         x_perm.entries = (CG_FLOAT *)allocate(
@@ -139,17 +142,22 @@ int test_spmmvSCS(void *args, const char *dataDir)
 
         // Forward permutation: scatter x into SCS ordering
         permute_DMatrix(A.oldToNewPerm, &x, &x_perm);
-
         for (size_t i = 0; i < repeat_count; i++) {
           spMMVM(&A, &x_perm, &y_perm);
           if (i < repeat_count - 1) {
             swap_DMatrix(&x_perm, &y_perm);
           }
         }
-
         // Inverse permutation: gather y from SCS ordering back to original
         permute_DMatrix(A.newToOldPerm, &y_perm, &y);
-
+#else
+        for (size_t i = 0; i < repeat_count; i++) {
+          spMMVM(&A, &x, &y);
+          if (i < repeat_count - 1) {
+            swap_DMatrix(&x, &y);
+          }
+        }
+#endif
         // Dump to this external file
         char *pathToReportedData = malloc(STR_LEN);
         char out_file_name[64];
@@ -171,9 +179,10 @@ int test_spmmvSCS(void *args, const char *dataDir)
         free(pathToReportedData);
         deallocate(x.entries);
         deallocate(y.entries);
+#ifdef SCS
         deallocate(x_perm.entries);
         deallocate(y_perm.entries);
-
+#endif
         if (diff_result) {
           fclose(fptr);
           free(pathToExpectedData);

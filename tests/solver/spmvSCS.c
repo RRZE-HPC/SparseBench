@@ -44,14 +44,16 @@ int test_spmvSCS(void *args, const char *dataDir)
       printf("pathToMatrix = %s\n", pathToMatrix);
 
       Matrix A;
-      Args *arguments  = (Args *)args;
-      A.C              = arguments->C;
-      A.sigma          = arguments->sigma;
-      int repeat_count = arguments->run_count;
-      char C_str[STR_LEN];
-      char sigma_str[STR_LEN];
-      sprintf(C_str, "%d", A.C);
-      sprintf(sigma_str, "%d", A.sigma);
+      Args *arguments         = (Args *)args;
+      int repeat_count        = arguments->run_count;
+      char C_str[STR_LEN]     = "";
+      char sigma_str[STR_LEN] = "";
+#ifdef SCS
+      A.C     = arguments->C;
+      A.sigma = arguments->sigma;
+#endif
+      sprintf(C_str, "%d", arguments->C);
+      sprintf(sigma_str, "%d", arguments->sigma);
 
       // String preprocessing
       FORMAT_AND_STRIP_VECTOR_FILE(entry)
@@ -86,15 +88,15 @@ int test_spmvSCS(void *args, const char *dataDir)
         int vectorSize;
         char *matrixFormat = (char *)malloc(4 * sizeof(char));
 
-        if (A.C == 0 || A.sigma == 0) {
-          convertMatrix(&A, &gm);
-          vectorSize = A.nr;
-          strcpy(matrixFormat, "CRS");
-        } else {
-          convertMatrix(&A, &gm);
-          vectorSize = A.nrPadded;
-          strcpy(matrixFormat, "SCS");
-        }
+#ifdef SCS
+        convertMatrix(&A, &gm);
+        vectorSize = A.nrPadded;
+        strcpy(matrixFormat, "SCS");
+#else
+        convertMatrix(&A, &gm);
+        vectorSize = A.nr;
+        strcpy(matrixFormat, "CRS");
+#endif
         VALIDATE_MATRIX_FORMAT(matrixFormat);
         // A.matrixFormat = matrixFormat;
 
@@ -109,6 +111,7 @@ int test_spmvSCS(void *args, const char *dataDir)
           y[i] = (CG_FLOAT)0.0;
         }
 
+#ifdef SCS
         CG_FLOAT *x_perm =
             (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
         CG_FLOAT *y_perm =
@@ -126,6 +129,15 @@ int test_spmvSCS(void *args, const char *dataDir)
 
         // Unpermute y back to original ordering
         permute_vector(A.newToOldPerm, y_perm, y, A.nr);
+#else
+
+        for (size_t i = 0; i < repeat_count; i++) {
+          spMVM(&A, x, y);
+          if (i < repeat_count - 1) {
+            swap_ptrs(&x, &y);
+          }
+        }
+#endif
 
         // Dump to this external file
         char *pathToReportedData = malloc(STR_LEN);
@@ -147,8 +159,10 @@ int test_spmvSCS(void *args, const char *dataDir)
         free(matrixFormat);
         free(x);
         free(y);
+#ifdef SCS
         free(x_perm);
         free(y_perm);
+#endif
         free(pathToReportedData);
 
         if (diff_result) {

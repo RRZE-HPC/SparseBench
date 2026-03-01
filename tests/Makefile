@@ -18,7 +18,12 @@ LINKS = $(shell ls ${TC_DIR}/*.o 2>/dev/null | grep -v main.o)
 TARGET=runTests
 
 # Collect objects from all test modules
+# Module 1 (matrix) test objects: only include when MTX_FMT is not CRS
+ifeq ($(MTX_FMT),CRS)
+MOD1_OBJECTS=
+else
 MOD1_OBJECTS=${MOD1}/convertSCS.o ${MOD1}/matrixTests.o
+endif
 MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/spmmvSCS.o ${MOD2}/solverTestsSPMV.o ${MOD2}/solverTestsSPMMV.o
 OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
