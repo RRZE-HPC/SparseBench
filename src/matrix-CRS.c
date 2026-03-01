@@ -81,9 +81,9 @@ void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
 
     /* loop over all elements in row and accumulate the scaled x[col] row */
     for (CG_UINT j = rowPtr[row]; j < rowPtr[row + 1]; j++) {
-      CG_UINT col = colInd[j];
+      CG_UINT col     = colInd[j];
       CG_FLOAT *x_col = &x->entries[col * x->nc];
-      CG_FLOAT a = val[j];
+      CG_FLOAT a      = val[j];
       for (size_t c = 0; c < x->nc; c++)
         y_row[c] += a * x_col[c];
     }
