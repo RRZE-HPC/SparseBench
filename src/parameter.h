@@ -12,6 +12,7 @@ typedef struct {
   double eps;
   int C;
   int Sigma;
+  int blockwidth;
 } Parameter;
 
 void initParameter(Parameter *);

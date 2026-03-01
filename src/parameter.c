@@ -17,6 +17,7 @@ void initParameter(Parameter *param)
   param->nz       = 100;
   param->itermax  = 150;
   param->eps      = 0.0;
+  param->blockwidth = NUMVEC;
 #ifdef SCS
   param->C        = SELL_CHUNK;
   param->Sigma    = SELL_SIGMA;
@@ -75,6 +76,7 @@ void printParameter(Parameter *param)
   printf("\tnz: %d\n", param->nz);
   printf("\tMax iterations: %d\n", param->itermax);
   printf("\tepsilon (stopping tolerance) : %f\n", param->eps);
+  printf("\tBlock width: %d\n", param->blockwidth);
 #ifdef SCS
   printf("\tSell chunk: %d\n", param->C);
   printf("\tSell sigma: %d\n", param->Sigma);

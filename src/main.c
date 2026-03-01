@@ -101,8 +101,8 @@ int main(int argc, char **argv)
   factorFlops[SPMVM]  = m.totalNnz;
   factorWords[SPMVM]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
   // TODO: EXTEND SPMMV
-  factorFlops[SPMMV] = m.totalNnz;
-  factorWords[SPMMV] = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
+  factorFlops[SPMMV] = factorFlops[SPMVM] * param.blockwidth;
+  factorWords[SPMMV] = factorWords[SPMVM] * param.blockwidth;
 
   profilerInit(factorFlops, factorWords);
   int numSeq = 0;
@@ -148,8 +148,8 @@ int main(int argc, char **argv)
       printf("Test type: SPMMVM\n");
     }
     int itermax = param.itermax;
-    DMatrix x = { .nr = sm.nc, .nc = NUMVEC, .entries = NULL};
-    DMatrix y = { .nr = sm.nr, .nc = NUMVEC, .entries = NULL};
+    DMatrix x = { .nr = sm.nc, .nc = param.blockwidth, .entries = NULL};
+    DMatrix y = { .nr = sm.nr, .nc = param.blockwidth, .entries = NULL};
     x.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
     y.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
 
