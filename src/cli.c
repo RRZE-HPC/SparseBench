@@ -36,9 +36,9 @@ static void writeBinMatrix(CommType *c, char *filename)
 #define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:"
 
 #ifdef SCS
-  #define BASE_ARGS BASE_ARGS_COMMON "k:s:"
+#define BASE_ARGS BASE_ARGS_COMMON "k:s:"
 #else
-  #define BASE_ARGS BASE_ARGS_COMMON
+#define BASE_ARGS BASE_ARGS_COMMON
 #endif
 
 void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
@@ -47,7 +47,7 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
   int index;
   bool stop = false;
   int c;
-  opterr        = 0;
+  opterr = 0;
 
   while ((c = getopt(argc, argv, BASE_ARGS)) != -1) {
     switch (c) {

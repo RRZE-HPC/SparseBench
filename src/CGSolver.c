@@ -105,12 +105,13 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   CG_FLOAT *r_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   CG_FLOAT *p_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(CG_FLOAT));
 #ifdef SCS
-  CG_FLOAT *Ap_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(CG_FLOAT));
+  CG_FLOAT *Ap_base =
+      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(CG_FLOAT));
 #else
   CG_FLOAT *Ap_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
 #endif
-  CG_FLOAT *x_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
-  CG_FLOAT *b_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+  CG_FLOAT *x_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+  CG_FLOAT *b_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   CG_FLOAT *xexact_base = NULL;
 
   if (strcmp(param->filename, "generate") == 0 ||
@@ -125,10 +126,11 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   CG_UINT *oldToNewPerm = A->oldToNewPerm;
   CG_UINT *newToOldPerm = A->newToOldPerm;
   CG_UINT *colInd_scs   = A->colInd;
-  CG_UINT  nElems_scs   = A->nElems;
+  CG_UINT nElems_scs    = A->nElems;
 
   // Permute b, x (and xexact) from original to SCS ordering
-  CG_FLOAT *perm_tmp = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
+  CG_FLOAT *perm_tmp =
+      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
 
   permute_vector(oldToNewPerm, b_base, perm_tmp, nrow_base);
   memcpy(b_base, perm_tmp, nrow_base * sizeof(CG_FLOAT));

@@ -8,6 +8,6 @@
 
 extern void *allocate(size_t alignment, size_t bytesize);
 
-extern void deallocate(void* ptr);
+extern void deallocate(void *ptr);
 
 #endif

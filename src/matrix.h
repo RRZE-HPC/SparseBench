@@ -86,6 +86,7 @@ extern void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *report
 
 extern void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst);
 
-extern void permute_vector(const CG_UINT *permute,const CG_FLOAT* vec_src,CG_FLOAT* vec_dst, CG_UINT nr);
+extern void permute_vector(
+    const CG_UINT *permute, const CG_FLOAT *vec_src, CG_FLOAT *vec_dst, CG_UINT nr);
 
 #endif // __MATRIX_H_

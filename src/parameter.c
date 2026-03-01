@@ -11,16 +11,16 @@
 
 void initParameter(Parameter *param)
 {
-  param->filename = "generate";
-  param->nx       = 100;
-  param->ny       = 100;
-  param->nz       = 100;
-  param->itermax  = 150;
-  param->eps      = 0.0;
+  param->filename   = "generate";
+  param->nx         = 100;
+  param->ny         = 100;
+  param->nz         = 100;
+  param->itermax    = 150;
+  param->eps        = 0.0;
   param->blockwidth = NUMVEC;
 #ifdef SCS
-  param->C        = SELL_CHUNK;
-  param->Sigma    = SELL_SIGMA;
+  param->C     = SELL_CHUNK;
+  param->Sigma = SELL_SIGMA;
 #endif
 }
 

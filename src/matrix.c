@@ -274,17 +274,20 @@ void MMMatrixPrintToFile(MMMatrix *m, char *filename)
   fclose(fptr);
 }
 
-void MMMatrixPrint(MMMatrix *m) { 
+void MMMatrixPrint(MMMatrix *m)
+{
   MMMatrixPrint_impl(m, stdout);
 }
 
-void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr) { 
+void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr)
+{
   fprintf(fptr, "Matrix dimensions: %d x %d\n", m->nr, m->nr);
   fprintf(fptr, "Number of non-zeros: %d\n", m->nnz);
   fprintf(fptr, "\nMatrix entries (row, col, value):\n");
-  
+
   for (size_t i = 0; i < m->count; i++) {
-    fprintf(fptr, "%d\t%d\t%g\n", m->entries[i].row, m->entries[i].col, m->entries[i].val);
+    fprintf(
+        fptr, "%d\t%d\t%g\n", m->entries[i].row, m->entries[i].col, m->entries[i].val);
   }
 }
 
@@ -296,67 +299,78 @@ void GMatrixPrintTofile(GMatrix *m, char *filename)
   fclose(fptr);
 }
 
-void GMatrixPrint(GMatrix *m) { 
+void GMatrixPrint(GMatrix *m)
+{
   GMatrixPrint_impl(m, stdout);
 }
 
-void GMatrixPrint_impl(GMatrix *m, FILE *fptr) {
+void GMatrixPrint_impl(GMatrix *m, FILE *fptr)
+{
   fprintf(fptr, "Matrix dimensions: %u x %u\n", m->nr, m->nc);
   fprintf(fptr, "Number of non-zeros: %u\n", m->nnz);
   fprintf(fptr, "\nMatrix entries (row, col, value):\n");
   for (CG_UINT row = 0; row < m->nr; row++) {
     for (CG_UINT idx = m->rowPtr[row]; idx < m->rowPtr[row + 1]; idx++) {
-      fprintf(fptr, "%u\t%u\t%g\n", row + m->startRow, m->entries[idx].col, m->entries[idx].val);
+      fprintf(fptr,
+          "%u\t%u\t%g\n",
+          row + m->startRow,
+          m->entries[idx].col,
+          m->entries[idx].val);
     }
   }
 }
 
-void dumpVectorPrint(CG_FLOAT *restrict y, CG_UINT numRows){
+void dumpVectorPrint(CG_FLOAT *restrict y, CG_UINT numRows)
+{
   dumpVectorToFile(y, numRows, stdout);
   printf("\n");
 }
 
-void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData){
-	fprintf(reportedData, "vec = ");
-	for (CG_UINT i = 0; i < numRows; i++)
-	{
-		fprintf(reportedData, "%lf, ", y[i]);
-	}
-}
-
-extern void dumpDMatrixToFile(DMatrix *m, char *filename){
-  FILE* fptr = fopen(filename, "w");
-  dumpDMatrix_impl(m, fptr);
-  fclose(fptr);
-}
-extern void dumpDMatrix(DMatrix *m){
-  dumpDMatrix_impl(m, stdout);
-}
-extern void dumpDMatrix_impl(DMatrix *m, FILE *reportedData){
-  fprintf(reportedData, "row order matrix = ");
-	for (CG_UINT i = 0; i < m->nr * m->nc; i++)
-	{
-		fprintf(reportedData, "%lf, ", m->entries[i]);
-	}
-}
-
-void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst){
-  CG_UINT nc = src->nc;
-  CG_UINT nr = MIN(src->nr, dst->nr);
-  for (CG_UINT i = 0; i < nr; i++) {
-      CG_UINT newRow = perm[i];
-      CG_FLOAT* dst_start = &dst->entries[newRow * nc];
-      const CG_FLOAT* src_start = &src->entries[i * nc]; 
-      for (CG_UINT j = 0; j < nc; j++) {
-         dst_start[j] = src_start[j];
-      }
+void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData)
+{
+  fprintf(reportedData, "vec = ");
+  for (CG_UINT i = 0; i < numRows; i++) {
+    fprintf(reportedData, "%lf, ", y[i]);
   }
 }
 
-void permute_vector(const CG_UINT *permute,const CG_FLOAT* vec_src,CG_FLOAT* vec_dst, CG_UINT nr){
-  for (CG_UINT i = 0; i < nr; i++)
-  {
-    CG_UINT alt = permute[i];
+extern void dumpDMatrixToFile(DMatrix *m, char *filename)
+{
+  FILE *fptr = fopen(filename, "w");
+  dumpDMatrix_impl(m, fptr);
+  fclose(fptr);
+}
+extern void dumpDMatrix(DMatrix *m)
+{
+  dumpDMatrix_impl(m, stdout);
+}
+extern void dumpDMatrix_impl(DMatrix *m, FILE *reportedData)
+{
+  fprintf(reportedData, "row order matrix = ");
+  for (CG_UINT i = 0; i < m->nr * m->nc; i++) {
+    fprintf(reportedData, "%lf, ", m->entries[i]);
+  }
+}
+
+void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst)
+{
+  CG_UINT nc = src->nc;
+  CG_UINT nr = MIN(src->nr, dst->nr);
+  for (CG_UINT i = 0; i < nr; i++) {
+    CG_UINT newRow            = perm[i];
+    CG_FLOAT *dst_start       = &dst->entries[newRow * nc];
+    const CG_FLOAT *src_start = &src->entries[i * nc];
+    for (CG_UINT j = 0; j < nc; j++) {
+      dst_start[j] = src_start[j];
+    }
+  }
+}
+
+void permute_vector(
+    const CG_UINT *permute, const CG_FLOAT *vec_src, CG_FLOAT *vec_dst, CG_UINT nr)
+{
+  for (CG_UINT i = 0; i < nr; i++) {
+    CG_UINT alt  = permute[i];
     vec_dst[alt] = vec_src[i];
   }
 }

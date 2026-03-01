@@ -64,7 +64,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
   // Sort rows over a scope of sigma
   for (int i = 0; i < m->nrPadded; i += m->sigma) {
     int chunkStart = i;
-    int chunkStop  = MIN((i + m->sigma), m->nrPadded);
+    int chunkStop  = MIN(i + m->sigma, m->nrPadded);
     int size       = chunkStop - chunkStart;
 
     // Sorting rows by element count using struct keeps index/count together
@@ -107,7 +107,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
   }
 
   // Account for final chunk
-  m->nElems = currentChunkPtr;
+  m->nElems               = currentChunkPtr;
 
   m->chunkPtr[m->nChunks] = (CG_UINT)m->nElems;
 
@@ -259,7 +259,7 @@ void dumpMatrix(Matrix *m)
 #define PRINT_INT_ARRAY(fp, obj, field, n)                                               \
   do {                                                                                   \
     fprintf((fp), #field ": ");                                                          \
-    for (size_t i = 0; i < (n); ++i) {                                                  \
+    for (size_t i = 0; i < (n); ++i) {                                                   \
       fprintf((fp), "%d, ", (obj)->field[i]);                                            \
     }                                                                                    \
     fprintf((fp), "\n");                                                                 \
@@ -288,12 +288,12 @@ void dumpMatrix_impl(Matrix *m, FILE *fptr)
   PRINT_FIELD(fptr, m, nChunks);
   PRINT_FIELD(fptr, m, nrPadded);
   PRINT_FIELD(fptr, m, nElems);
-  PRINT_INT_ARRAY(fptr, m, oldToNewPerm, (m->nr));
-  PRINT_INT_ARRAY(fptr, m, newToOldPerm, (m->nr));
-  PRINT_INT_ARRAY(fptr, m, chunkLens, (m->nChunks));
-  PRINT_INT_ARRAY(fptr, m, chunkPtr, (m->nChunks + 1));
-  PRINT_INT_ARRAY(fptr, m, colInd, (m->nElems));
-  PRINT_FLOAT_ARRAY(fptr, m, val, (m->nElems));
+  PRINT_INT_ARRAY(fptr, m, oldToNewPerm, m->nr);
+  PRINT_INT_ARRAY(fptr, m, newToOldPerm, m->nr);
+  PRINT_INT_ARRAY(fptr, m, chunkLens, m->nChunks);
+  PRINT_INT_ARRAY(fptr, m, chunkPtr, m->nChunks + 1);
+  PRINT_INT_ARRAY(fptr, m, colInd, m->nElems);
+  PRINT_FLOAT_ARRAY(fptr, m, val, m->nElems);
 }
 
 void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)
