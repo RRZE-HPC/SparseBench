@@ -33,10 +33,12 @@ extern int BenchType;
   "  -z <int>   Size in z for generated matrix, ignored if MM file is "                  \
   "loaded. Default 100.\n"                                                               \
   "  -i <int>   Number of solver iterations. Default 150.\n"                             \
+  "  -w <int>   Width of block vector for SpMMV\n"                                       \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
 
 #ifdef SCS
 
+// clang-format off
 #define HELPTEXT                                                                         \
   HELPTEXT_BASE                                                                          \
   "  -k <int>  Chunk size value for SELL-c-sigma. Default " STR(SELL_CHUNK) ".\n"        \
@@ -48,6 +50,7 @@ extern int BenchType;
 
 #endif
 
+// clang-format on
 
 extern void parseArguments(CommType *, Parameter *, int, char **);
 
