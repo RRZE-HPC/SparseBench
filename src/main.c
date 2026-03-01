@@ -64,7 +64,9 @@ int main(int argc, char **argv)
   initParameter(&param);
   parseArguments(&comm, &param, argc, argv);
   commPrintBanner(&comm);
-  // printParameter(&param);
+  if (param.verbose > 0 && commIsMaster(&comm)) {
+    printParameter(&param);
+  }
 
   double ts;
   GMatrix m;

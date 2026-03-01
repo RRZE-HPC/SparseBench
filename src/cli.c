@@ -33,14 +33,6 @@ static void writeBinMatrix(CommType *c, char *filename)
 }
 #endif
 
-#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:"
-
-#ifdef SCS
-#define BASE_ARGS BASE_ARGS_COMMON "k:s:"
-#else
-#define BASE_ARGS BASE_ARGS_COMMON
-#endif
-
 void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
 {
   char *cvalue = NULL;
@@ -104,6 +96,9 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
       break;
     case 'w':
       param->blockwidth = (int)strtol(optarg, NULL, INT_BASE);
+      break;
+    case 'v':
+      param->verbose = (int)strtol(optarg, NULL, INT_BASE);
       break;
 #ifdef SCS
     case 'k':

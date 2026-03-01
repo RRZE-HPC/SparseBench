@@ -34,10 +34,14 @@ extern int BenchType;
   "loaded. Default 100.\n"                                                               \
   "  -i <int>   Number of solver iterations. Default 150.\n"                             \
   "  -w <int>   Width of block vector for SpMMV\n"                                       \
+  "  -v <int>   Verbose Level \n"                                                        \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
+
+#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:v:"
 
 #ifdef SCS
 
+#define BASE_ARGS BASE_ARGS_COMMON "k:s:"
 // clang-format off
 #define HELPTEXT                                                                         \
   HELPTEXT_BASE                                                                          \
@@ -46,6 +50,7 @@ extern int BenchType;
 
 #else
 
+#define BASE_ARGS BASE_ARGS_COMMON
 #define HELPTEXT HELPTEXT_BASE
 
 #endif

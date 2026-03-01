@@ -10,9 +10,12 @@ typedef struct {
   int nx, ny, nz;
   int itermax;
   double eps;
+#ifdef SCS
   int C;
   int Sigma;
+#endif
   int blockwidth;
+  int verbose;
 } Parameter;
 
 void initParameter(Parameter *);

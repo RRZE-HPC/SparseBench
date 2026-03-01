@@ -22,6 +22,7 @@ void initParameter(Parameter *param)
   param->C     = SELL_CHUNK;
   param->Sigma = SELL_SIGMA;
 #endif
+  param->verbose = 0;
 }
 
 void readParameter(Parameter *param, const char *filename)
@@ -81,4 +82,5 @@ void printParameter(Parameter *param)
   printf("\tSell chunk: %d\n", param->C);
   printf("\tSell sigma: %d\n", param->Sigma);
 #endif
+  printf("\tVerbose Level: %d\n", param->verbose);
 }
