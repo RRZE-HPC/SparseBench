@@ -23,12 +23,12 @@ int solverTestsSPMV(int argc, char **argv)
   // Get the directory path from the command line argument
   // const char *dataDir = argv[1];
 
-  Test tests[REP_COUNT * C_SIGMA_MAX * C_SIGMA_MAX] = {};
+  Test tests[REP_COUNT * C_SIGMA_MAX * C_SIGMA_MAX] = { };
 
-  int num_tests                             = sizeof(tests) / sizeof(tests[0]);
-  int passed                                = 0;
+  int num_tests                                     = sizeof(tests) / sizeof(tests[0]);
+  int passed                                        = 0;
 
-  Args **args                               = (Args **)malloc(num_tests * sizeof(Args *));
+  Args **args = (Args **)malloc(num_tests * sizeof(Args *));
   for (int i = 0; i < num_tests; ++i) {
     args[i] = (Args *)malloc(sizeof(Args));
     if (!args[i]) {
