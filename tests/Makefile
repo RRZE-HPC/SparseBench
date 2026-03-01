@@ -64,3 +64,8 @@ $(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c
 
 $(MOD2)/spmmvSCS.o: $(MOD2)/spmmvSCS.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+format:
+	@echo "Formatting source files..."
+	@find .. -type f \( -name '*.c' -o -name '*.h' -o -name '*.cpp' -o -name '*.hpp' -o -name '*.cc' -o -name '*.hh' -o -name '*.cxx' -o -name '*.hxx' \) -print0 | xargs -0 -r clang-format -i
+	@echo "Done"
