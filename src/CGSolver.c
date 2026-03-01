@@ -127,13 +127,6 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   CG_UINT *colInd_scs   = A->colInd;
   CG_UINT  nElems_scs   = A->nElems;
 
-  // Remap local column indices to reference the permuted vector space
-  // for (CG_UINT i = 0; i < nElems_scs; i++) {
-  //   if (colInd_scs[i] < nrow_base) {
-  //     colInd_scs[i] = oldToNewPerm[colInd_scs[i]];
-  //   }
-  // }
-
   // Permute b, x (and xexact) from original to SCS ordering
   CG_FLOAT *perm_tmp = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
 
@@ -147,7 +140,6 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     permute_vector(oldToNewPerm, xexact_base, perm_tmp, nrow_base);
     memcpy(xexact_base, perm_tmp, nrow_base * sizeof(CG_FLOAT));
   }
-  free(perm_tmp);
 #endif
 
   CG_FLOAT normr  = 0.0;
@@ -216,8 +208,6 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
 
 #ifdef SCS
-  // Unpermute x (and xexact) back to original ordering for residual check
-  perm_tmp = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
 
   permute_vector(newToOldPerm, x, perm_tmp, nrow);
   memcpy(x, perm_tmp, nrow * sizeof(CG_FLOAT));
@@ -227,17 +217,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     memcpy(xexact, perm_tmp, nrow * sizeof(CG_FLOAT));
   }
   free(perm_tmp);
-
-  // // Restore column indices to original ordering
-  // for (CG_UINT i = 0; i < nElems_scs; i++) {
-  //   if (colInd_scs[i] < nrow_base) {
-  //     colInd_scs[i] = newToOldPerm[colInd_scs[i]];
-  //   }
-  // }
-
 #endif
-
-  // solverCheckResidual(comm, x, xexact, A->nr);
 
   return k;
 }

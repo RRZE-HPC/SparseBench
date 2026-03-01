@@ -37,6 +37,8 @@ int test_spmmvSCS(void* args, const char* dataDir){
 			perror("Error opening directory");
 			return 1;
 	}
+	
+	const int test_blockwidth = 3;
 
 	// Read the directory entries
 	struct dirent *entry;
@@ -106,14 +108,14 @@ int test_spmmvSCS(void* args, const char* dataDir){
 
 				// Use vectorSize (= nrPadded for SCS) so dimensions match
 				// permute_DMatrix requires src.nr == dst.nr
-				DMatrix x = {.nr = A.nc , .nc = NUMVEC , .entries = NULL};
-				DMatrix y = {.nr = A.nr , .nc = NUMVEC , .entries = NULL};
+				DMatrix x = {.nr = A.nc , .nc = test_blockwidth , .entries = NULL};
+				DMatrix y = {.nr = A.nr , .nc = test_blockwidth , .entries = NULL};
 				x.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
 				y.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
 
 				// Initialize x: sequential values for real entries, 0 for padding
 				for(int i = 0; i < (x.nr * x.nc); ++i){
-					x.entries[i] = (i < A.nc * NUMVEC) ? (CG_FLOAT)i : (CG_FLOAT)0.0;
+					x.entries[i] = (CG_FLOAT)i;
 				}
 				for(int i = 0; i < (y.nr * y.nc); ++i){
 					y.entries[i] = (CG_FLOAT)0.0;
@@ -121,8 +123,8 @@ int test_spmmvSCS(void* args, const char* dataDir){
 
 				// NOTE : since we switch the vectors around mkaing them bigger is necessary to 
 				// prevent accesssing garbage data 
-				DMatrix x_perm = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
-				DMatrix y_perm = {.nr = vectorSize , .nc = NUMVEC , .entries = NULL};
+				DMatrix x_perm = {.nr = vectorSize , .nc = test_blockwidth , .entries = NULL};
+				DMatrix y_perm = {.nr = vectorSize , .nc = test_blockwidth , .entries = NULL};
 				x_perm.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, x_perm.nr * x_perm.nc * sizeof(CG_FLOAT));
 				y_perm.entries = (CG_FLOAT*)allocate(ARRAY_ALIGNMENT, y_perm.nr * y_perm.nc * sizeof(CG_FLOAT));
 

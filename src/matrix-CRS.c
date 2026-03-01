@@ -63,4 +63,6 @@ void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)
   }
 }
 
-void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y) { }
+void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y) { 
+  
+}
