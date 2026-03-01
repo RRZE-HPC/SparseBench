@@ -63,4 +63,29 @@ void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)
   }
 }
 
-void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y) { }
+void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
+{
+  CG_UINT *colInd = m->colInd;
+  CG_FLOAT *val   = m->val;
+
+  CG_UINT numRows = m->nr;
+  CG_UINT *rowPtr = m->rowPtr;
+
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (int row = 0; row < numRows; row++) {
+    CG_FLOAT *y_row = &y->entries[row * y->nc];
+
+    /* initialize output row before accumulation */
+    for (size_t c = 0; c < y->nc; c++)
+      y_row[c] = (CG_FLOAT)0.0;
+
+    /* loop over all elements in row and accumulate the scaled x[col] row */
+    for (CG_UINT j = rowPtr[row]; j < rowPtr[row + 1]; j++) {
+      CG_UINT col = colInd[j];
+      CG_FLOAT *x_col = &x->entries[col * x->nc];
+      CG_FLOAT a = val[j];
+      for (size_t c = 0; c < x->nc; c++)
+        y_row[c] += a * x_col[c];
+    }
+  }
+}
