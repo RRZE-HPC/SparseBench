@@ -102,7 +102,6 @@ int main(int argc, char **argv)
   factorWords[WAXPBY] = 3 * sizeof(CG_FLOAT) * m.totalNr;
   factorFlops[SPMVM]  = m.totalNnz;
   factorWords[SPMVM]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
-  // TODO: EXTEND SPMMV
   factorFlops[SPMMV] = factorFlops[SPMVM] * param.blockwidth;
   factorWords[SPMMV] = factorWords[SPMVM] * param.blockwidth;
 
