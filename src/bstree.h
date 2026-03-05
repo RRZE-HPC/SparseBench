@@ -6,7 +6,7 @@
 #define __BSTREE_H
 
 #include "stdbool.h"
-#include "util.h"
+#include "complex.h"
 typedef struct node {
   CG_UINT key;
   CG_UINT value;

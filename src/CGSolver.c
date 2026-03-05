@@ -14,7 +14,7 @@
 #include "profiler.h"
 #include "solver.h"
 #include "timing.h"
-#include "util.h"
+#include "complex.h"
 
 static void initVectors(Matrix *m, CG_FLOAT *x, CG_FLOAT *b, CG_FLOAT *xexact)
 {

@@ -30,4 +30,10 @@ extern CG_FLOAT Cabs2(const complex *c1);
 extern CG_FLOAT Cabs(const complex *c1);
 extern CG_FLOAT Carg(const complex *c1);
 
+#ifdef USE_COMPLEX
+  #define V_ELE complex
+#else
+  #define V_ELE CG_FLOAT
+#endif
+
 #endif
