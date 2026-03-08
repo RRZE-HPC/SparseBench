@@ -4,6 +4,7 @@
  * license that can be found in the LICENSE file. */
 #include "matrix.h"
 #include "util.h"
+#include "complex.h"
 #include <limits.h>
 #include <pthread.h>
 #include <sched.h>

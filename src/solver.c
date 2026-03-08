@@ -12,13 +12,14 @@
 #include "comm.h"
 #include "solver.h"
 #include "util.h"
+#include "complex.h"
 
 void waxpby(const CG_UINT n,
-    const CG_FLOAT alpha,
-    const CG_FLOAT *restrict x,
-    const CG_FLOAT beta,
-    const CG_FLOAT *restrict y,
-    CG_FLOAT *const w)
+    const V_ELE alpha,
+    const V_ELE *restrict x,
+    const V_ELE beta,
+    const V_ELE *restrict y,
+    V_ELE *const w)
 {
   if (alpha == 1.0) {
 #pragma omp parallel for schedule(static)
@@ -39,9 +40,9 @@ void waxpby(const CG_UINT n,
 }
 
 void ddot(const CG_UINT n,
-    const CG_FLOAT *restrict x,
-    const CG_FLOAT *restrict y,
-    CG_FLOAT *restrict result)
+    const V_ELE *restrict x,
+    const V_ELE *restrict y,
+    V_ELE *restrict result)
 {
   CG_FLOAT sum = 0.0;
 

@@ -2,6 +2,7 @@
 #define __COMMON_H_
 
 #include "../src/util.h"
+#include "../src/complex.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -83,9 +84,9 @@ typedef struct {
 #define ARRAY_ALIGNMENT 64
 #endif
 
-static inline void swap_ptrs(CG_FLOAT **x_perm, CG_FLOAT **y_perm)
+static inline void swap_ptrs(V_ELE **x_perm, V_ELE **y_perm)
 {
-  CG_FLOAT *tmp = *x_perm;
+  V_ELE *tmp = *x_perm;
   *x_perm       = *y_perm;
   *y_perm       = tmp;
 }

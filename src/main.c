@@ -19,6 +19,7 @@
 #include "solver.h"
 #include "timing.h"
 #include "util.h"
+#include "complex.h"
 
 static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
 {
@@ -96,6 +97,7 @@ int main(int argc, char **argv)
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
 
+  // TODO : update the flops based on V_ELE type
   factorFlops[DDOT]   = m.totalNr;
   factorWords[DDOT]   = 3 * sizeof(CG_FLOAT) * m.totalNr / 2;
   factorFlops[WAXPBY] = m.totalNr;
@@ -127,9 +129,10 @@ int main(int argc, char **argv)
     if (commIsMaster(&comm)) {
       printf("Test type: SPMVM\n");
     }
+    // TODO : update for V_ELE
     const int itermax = param.itermax;
-    CG_FLOAT *x       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
-    CG_FLOAT *y       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
+    CG_FLOAT *x       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(V_ELE));
+    CG_FLOAT *y       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(V_ELE));
 
     for (int i = 0; i < m.nr; i++) {
       x[i] = (CG_FLOAT)1.0;
@@ -151,8 +154,10 @@ int main(int argc, char **argv)
     int itermax = param.itermax;
     DMatrix x   = { .nr = sm.nc, .nc = param.blockwidth, .entries = NULL };
     DMatrix y   = { .nr = sm.nr, .nc = param.blockwidth, .entries = NULL };
-    x.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
-    y.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
+    // TODO : update for V_ELE
+
+    x.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(V_ELE));
+    y.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(V_ELE));
 
     for (int i = 0; i < x.nr * x.nc; i++) {
       x.entries[i] = (CG_FLOAT)1.0;

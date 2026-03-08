@@ -10,6 +10,7 @@
 #include "matrix.h"
 #include "mmio.h"
 #include "util.h"
+#include "complex.h"
 
 static inline int compareColumn(const void *a, const void *b)
 {
@@ -260,7 +261,7 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
 
     // loop over all elements in Row
     for (int id = m->rowPtr[rowID]; id < m->rowPtr[rowID + 1]; id++) {
-      m->entries[id].val = (CG_FLOAT)entries[id].val;
+      m->entries[id].val = (V_ELE)entries[id].val;
       m->entries[id].col = (CG_UINT)entries[id].col;
     }
   }

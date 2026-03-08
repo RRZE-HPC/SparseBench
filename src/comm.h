@@ -5,6 +5,7 @@
 #ifndef __COMM_H_
 #define __COMM_H_
 #include "util.h"
+#include "complex.h"
 #include <stdio.h>
 #include <stdlib.h>
 #if defined(_MPI)

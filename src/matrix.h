@@ -10,6 +10,7 @@
 
 #include "parameter.h"
 #include "util.h"
+#include "complex.h"
 
 #ifdef CRS
 #include "CRSMatrix.h"
@@ -23,7 +24,7 @@
 
 typedef struct {
   CG_UINT col;
-  CG_FLOAT val;
+  V_ELE val;
 } Entry;
 
 typedef struct {
@@ -36,7 +37,7 @@ typedef struct {
 
 typedef struct {
   CG_UINT nr, nc; // number of rows, columns
-  CG_FLOAT *entries;
+  V_ELE *entries;
 } DMatrix; // for Block vectors
 
 typedef struct {

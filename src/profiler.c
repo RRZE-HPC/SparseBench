@@ -6,6 +6,7 @@
 #include "comm.h"
 #include "likwid-marker.h"
 #include "util.h"
+#include "complex.h"
 #include <stddef.h>
 
 typedef struct {

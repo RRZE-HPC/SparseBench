@@ -7,21 +7,22 @@
 #include "comm.h"
 #include "parameter.h"
 #include "util.h"
+#include "complex.h"
 
 extern int solveCG(CommType *comm, Parameter *param, Matrix *m);
 // extern void solverCheckResidual(Solver* s, Comm* c);
-extern void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y);
+extern void spMVM(Matrix *m, const V_ELE *restrict x, V_ELE *restrict y);
 extern void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y);
 
 extern void waxpby(const CG_UINT n,
-    const CG_FLOAT alpha,
-    const CG_FLOAT *restrict x,
-    const CG_FLOAT beta,
-    const CG_FLOAT *restrict y,
-    CG_FLOAT *restrict w);
+    const V_ELE alpha,
+    const V_ELE *restrict x,
+    const V_ELE beta,
+    const V_ELE *restrict y,
+    V_ELE *restrict w);
 
 extern void ddot(const CG_UINT n,
-    const CG_FLOAT *restrict e,
-    const CG_FLOAT *restrict y,
-    CG_FLOAT *restrict result);
+    const V_ELE *restrict e,
+    const V_ELE *restrict y,
+    V_ELE *restrict result);
 #endif // __SOLVER_H_
