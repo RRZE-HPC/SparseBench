@@ -86,6 +86,16 @@ int main(int argc, char **argv)
   sm.sigma = param.Sigma;
 #endif
   convertMatrix(&sm, &m);
+
+#if defined(_MPI) && defined(SCS)
+  // Remap elementsToSend from original local indices to SCS-permuted indices.
+  // After SCS conversion the vectors are in permuted order, so commExchange
+  // must pack from the permuted positions.
+  for (int i = 0; i < comm.totalSendCount; i++) {
+    comm.elementsToSend[i] = (int)sm.oldToNewPerm[comm.elementsToSend[i]];
+  }
+#endif
+
   commBarrier();
   timeStop = getTimeStamp();
   if (commIsMaster(&comm)) {
