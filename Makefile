@@ -30,7 +30,7 @@ INCLUDES  += -I$(SRC_DIR)/includes -I$(BUILD_DIR)
 VPATH     = $(SRC_DIR)
 ASM       = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.s,$(wildcard $(SRC_DIR)/*.c))
 OBJ       = $(filter-out $(BUILD_DIR)/matrix-%, $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c)))
-SRC       = $(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/*.c)
+SRC       = $(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/*.c $(CUDA_DIR)/*.h $(CUDA_DIR)/*.cu)
 CPPFLAGS := $(CPPFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES)
 
 # GPU kernel objects (when TOOLCHAIN=NVCC or HIP)
