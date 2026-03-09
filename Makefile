@@ -7,6 +7,7 @@
 TARGET	   = sparseBench-$(MTX_FMT)-$(TOOLCHAIN)
 BUILD_DIR  = ./build/$(MTX_FMT)-$(TOOLCHAIN)
 SRC_DIR    = ./src
+CUDA_DIR   = ./src/cuda
 MAKE_DIR   = ./mk
 Q         ?= @
 
@@ -31,6 +32,16 @@ ASM       = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.s,$(wildcard $(SRC_DIR)/*.
 OBJ       = $(filter-out $(BUILD_DIR)/matrix-%, $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c)))
 SRC       = $(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/*.c)
 CPPFLAGS := $(CPPFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES)
+
+# GPU kernel objects (when TOOLCHAIN=NVCC or HIP)
+CUDA_SRC  = $(wildcard $(CUDA_DIR)/*.cu)
+CUDA_OBJ  = $(patsubst $(CUDA_DIR)/%.cu, $(BUILD_DIR)/cuda_%.o, $(CUDA_SRC))
+ifneq (,$(filter $(TOOLCHAIN),NVCC HIP))
+  CPPFLAGS += -D_GPU
+  ALL_OBJ   = $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o $(CUDA_OBJ)
+else
+  ALL_OBJ   = $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o
+endif
 c := ,
 clist = $(subst $(eval) ,$c,$(strip $1))
 
@@ -40,14 +51,18 @@ CompileFlags:
   Compiler: clang
 endef
 
-${TARGET}: $(BUILD_DIR) .clangd $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o
+${TARGET}: $(BUILD_DIR) .clangd $(ALL_OBJ)
 	$(info ===>  LINKING  $(TARGET))
-	$(Q)${LD} ${LFLAGS} -o $(TARGET) $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o $(LIBS)
+	$(Q)${LD} ${LFLAGS} -o $(TARGET) $(ALL_OBJ) $(LIBS)
 
 $(BUILD_DIR)/%.o:  %.c $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
 	$(info ===>  COMPILE  $@)
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 	$(Q)$(CC) $(CPPFLAGS) -MT $(@:.d=.o) -MM  $< > $(BUILD_DIR)/$*.d
+
+$(BUILD_DIR)/cuda_%.o: $(CUDA_DIR)/%.cu $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
+	$(info ===>  COMPILE CUDA  $@)
+	$(Q)$(NVCC) -c $(NVCCFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES) $< -o $@
 
 $(BUILD_DIR)/%.s:  %.c
 	$(info ===>  GENERATE ASM  $@)

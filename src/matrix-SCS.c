@@ -190,8 +190,8 @@ void convertMatrix(Matrix *m, GMatrix *im)
     }
   }
 
-  free(elemsPerRow);
-  free(rowLocalElemCount);
+  deallocate(elemsPerRow);
+  deallocate(rowLocalElemCount);
 }
 
 void MatrixPrintTofile(Matrix *m, char *filename)

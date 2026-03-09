@@ -218,7 +218,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     permute_vector(newToOldPerm, xexact, perm_tmp, nrow);
     memcpy(xexact, perm_tmp, nrow * sizeof(CG_FLOAT));
   }
-  free(perm_tmp);
+  deallocate(perm_tmp);
 #endif
 
   return k;

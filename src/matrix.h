@@ -8,6 +8,11 @@
 #include <stddef.h>
 #include <stdio.h>
 
+/* restrict is not a keyword in C++; hide it for nvcc/hipcc */
+#ifdef __cplusplus
+#define restrict __restrict__
+#endif
+
 #include "parameter.h"
 #include "util.h"
 

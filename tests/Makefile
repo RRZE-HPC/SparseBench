@@ -6,6 +6,7 @@ include ../mk/include_$(TOOLCHAIN).mk
 
 BUILD_DIR=../build
 TC_DIR=${BUILD_DIR}/$(MTX_FMT)-$(TOOLCHAIN)
+CUDA_DIR=../src/cuda
 
 # List of test modules
 MOD1=matrix
@@ -44,7 +45,7 @@ clean:
 
 # Link the object files to create the executable
 $(TARGET): prebuild runTests.o $(OBJECTS) ${LINKS}
-	$(CC) $(CFLAGS) -o $@ runTests.o $(OBJECTS) ${LINKS}
+	$(LD) $(LFLAGS) -o $@ runTests.o $(OBJECTS) ${LINKS} $(LIBS)
 
 # Compile runTests.c into an object file
 runTests.o: runTests.c 

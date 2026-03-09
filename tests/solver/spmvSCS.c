@@ -157,11 +157,11 @@ int test_spmvSCS(void *args, const char *dataDir)
 
         // Free per-iteration allocations
         free(matrixFormat);
-        free(x);
-        free(y);
+        deallocate(x);
+        deallocate(y);
 #ifdef SCS
-        free(x_perm);
-        free(y_perm);
+        deallocate(x_perm);
+        deallocate(y_perm);
 #endif
         free(pathToReportedData);
 
