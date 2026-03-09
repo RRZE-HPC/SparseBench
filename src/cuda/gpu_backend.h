@@ -77,8 +77,14 @@
 
 /* --- Portable type aliases ---------------------------------------- */
 typedef GCXX_RUNTIME_BACKEND(Error_t)       gpuError_t;
-typedef GCXX_RUNTIME_BACKEND(DeviceProp)  gpuDeviceProp_t;
 typedef GCXX_RUNTIME_BACKEND(Stream_t)      gpuStream_t;
 typedef GCXX_RUNTIME_BACKEND(Event_t)       gpuEvent_t;
+
+/* DeviceProp: CUDA uses cudaDeviceProp, HIP uses hipDeviceProp_t */
+#if defined(RUNTIME_BACKEND_IS_CUDA)
+typedef struct cudaDeviceProp gpuDeviceProp_t;
+#elif defined(RUNTIME_BACKEND_IS_HIP)
+typedef hipDeviceProp_t       gpuDeviceProp_t;
+#endif
 
 #endif /* __GPU_BACKEND_H_ */

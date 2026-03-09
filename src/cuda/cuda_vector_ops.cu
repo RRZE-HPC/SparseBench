@@ -97,7 +97,7 @@ void gpu_init(int device)
 extern "C"
 void gpu_finalize(void)
 {
-    GCXX_RUNTIME_BACKEND(DeviceReset)();
+    GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(DeviceReset)());
 }
 
 /* ------------------------------------------------------------------ */
