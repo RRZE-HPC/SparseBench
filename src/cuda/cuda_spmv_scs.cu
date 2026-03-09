@@ -101,6 +101,7 @@ __global__ void kernel_spmmv_scs(CG_UINT nChunks,
 /*  Expects managed-memory pointers (allocated via gpu_allocate_managed) */
 /* ------------------------------------------------------------------ */
 
+#ifdef SCS
 extern "C" void gpu_spMVM(Matrix *m, const CG_FLOAT *x, CG_FLOAT *y)
 {
   dim3 grid(m->nChunks);
@@ -126,3 +127,4 @@ extern "C" void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
       y->entries);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
 }
+#endif /* SCS */

@@ -31,6 +31,13 @@ void gpu_spmv_scs(CG_UINT nChunks,
     const CG_FLOAT *x,
     CG_FLOAT *y);
 
+void gpu_spmv_crs(CG_UINT numRows,
+    const CG_UINT *rowPtr,
+    const CG_UINT *colInd,
+    const CG_FLOAT *val,
+    const CG_FLOAT *x,
+    CG_FLOAT *y);
+
 /*
  * High-level wrappers — mirror the CPU interface from solver.h.
  * These use managed memory for internal allocations and call
