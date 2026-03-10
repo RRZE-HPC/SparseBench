@@ -145,13 +145,9 @@ int main(int argc, char **argv)
       printf("Test type: SPMVM\n");
     }
     const int itermax = param.itermax;
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-    CG_FLOAT *x       = (CG_FLOAT *)gpu_allocate_managed(m.nc * sizeof(CG_FLOAT));
-    CG_FLOAT *y       = (CG_FLOAT *)gpu_allocate_managed(m.nr * sizeof(CG_FLOAT));
-#else
+
     CG_FLOAT *x       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
     CG_FLOAT *y       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
-#endif
 
     for (int i = 0; i < m.nr; i++) {
       x[i] = (CG_FLOAT)1.0;
@@ -177,13 +173,9 @@ int main(int argc, char **argv)
     int itermax = param.itermax;
     DMatrix x   = { .nr = sm.nc, .nc = param.blockwidth, .entries = NULL };
     DMatrix y   = { .nr = sm.nr, .nc = param.blockwidth, .entries = NULL };
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-    x.entries   = (CG_FLOAT *)gpu_allocate_managed(x.nr * x.nc * sizeof(CG_FLOAT));
-    y.entries   = (CG_FLOAT *)gpu_allocate_managed(y.nr * y.nc * sizeof(CG_FLOAT));
-#else
+
     x.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
     y.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
-#endif
 
     for (int i = 0; i < x.nr * x.nc; i++) {
       x.entries[i] = (CG_FLOAT)1.0;

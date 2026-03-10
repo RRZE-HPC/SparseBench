@@ -106,24 +106,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
   CG_UINT nrow_base = A->nr;
   CG_UINT ncol_base = A->nc;
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  CG_FLOAT *r_base  = (CG_FLOAT *)gpu_allocate_managed(nrow_base * sizeof(CG_FLOAT));
-  CG_FLOAT *p_base  = (CG_FLOAT *)gpu_allocate_managed(ncol_base * sizeof(CG_FLOAT));
-#ifdef SCS
-  CG_FLOAT *Ap_base =
-      (CG_FLOAT *)gpu_allocate_managed(A->nrPadded * sizeof(CG_FLOAT));
-#else
-  CG_FLOAT *Ap_base = (CG_FLOAT *)gpu_allocate_managed(nrow_base * sizeof(CG_FLOAT));
-#endif
-  CG_FLOAT *x_base = (CG_FLOAT *)gpu_allocate_managed(nrow_base * sizeof(CG_FLOAT));
-  CG_FLOAT *b_base = (CG_FLOAT *)gpu_allocate_managed(nrow_base * sizeof(CG_FLOAT));
-  CG_FLOAT *xexact_base = NULL;
 
-  if (strcmp(param->filename, "generate") == 0 ||
-      strcmp(param->filename, "generate7P") == 0) {
-    xexact_base = (CG_FLOAT *)gpu_allocate_managed(nrow_base * sizeof(CG_FLOAT));
-  }
-#else
   CG_FLOAT *r_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   CG_FLOAT *p_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(CG_FLOAT));
 #ifdef SCS
@@ -140,7 +123,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
       strcmp(param->filename, "generate7P") == 0) {
     xexact_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   }
-#endif
+  
   initVectors(A, x_base, b_base, xexact_base);
 
   // Permute colInd and vectors to SCS ordering so no per-iteration
