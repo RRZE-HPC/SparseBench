@@ -167,7 +167,13 @@ void convertMatrix(Matrix *m, GMatrix *im)
       int chunkRow   = row % m->C;
       int idx        = chunkStart + rowLocalElemCount[row] * m->C + chunkRow;
 
-      m->colInd[idx] = (CG_UINT)m->oldToNewPerm[e.col];
+      // Only permute local column indices; external columns (from MPI
+      // localization) live beyond nr and must not be permuted.
+      if (e.col < m->nr) {
+        m->colInd[idx] = (CG_UINT)m->oldToNewPerm[e.col];
+      } else {
+        m->colInd[idx] = (CG_UINT)e.col;
+      }
 #ifdef VERBOSE
       // Sanity check for common error
       if (m->colInd[idx] >= m->nc) {
@@ -184,8 +190,8 @@ void convertMatrix(Matrix *m, GMatrix *im)
     }
   }
 
-  free(elemsPerRow);
-  free(rowLocalElemCount);
+  deallocate(elemsPerRow);
+  deallocate(rowLocalElemCount);
 }
 
 void MatrixPrintTofile(Matrix *m, char *filename)

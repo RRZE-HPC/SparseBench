@@ -16,6 +16,10 @@
 #include "timing.h"
 #include "complex.h"
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+#include "cuda/cuda_kernels.h"
+#endif
+
 static void initVectors(Matrix *m, CG_FLOAT *x, CG_FLOAT *b, CG_FLOAT *xexact)
 {
 #ifdef CRS
@@ -102,6 +106,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
   CG_UINT nrow_base = A->nr;
   CG_UINT ncol_base = A->nc;
+
   CG_FLOAT *r_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   CG_FLOAT *p_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(CG_FLOAT));
 #ifdef SCS
@@ -118,6 +123,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
       strcmp(param->filename, "generate7P") == 0) {
     xexact_base = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
   }
+  
   initVectors(A, x_base, b_base, xexact_base);
 
   // Permute colInd and vectors to SCS ordering so no per-iteration
@@ -164,12 +170,21 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   CG_FLOAT *b      = b_base;
   CG_FLOAT *xexact = xexact_base;
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, x, 0.0, x, p));
+  PROFILE(COMM, commExchange(comm, A->nr, p));
+
+  PROFILE(SPMVM, gpu_spMVM(A, p, Ap));
+  PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, b, -1.0, Ap, r));
+  PROFILE(DDOT, gpu_ddot_sync(nrow, r, r, &rtrans));
+#else
   PROFILE(WAXPBY, waxpby(nrow, 1.0, x, 0.0, x, p));
   PROFILE(COMM, commExchange(comm, A->nr, p));
 
   PROFILE(SPMVM, spMVM(A, p, Ap));
   PROFILE(WAXPBY, waxpby(nrow, 1.0, b, -1.0, Ap, r));
   PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
+#endif
 
   normr = sqrt(rtrans);
   if (commIsMaster(comm)) {
@@ -180,12 +195,22 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   timeStart = getTimeStamp();
   for (k = 1; k < itermax && normr > eps; k++) {
     if (k == 1) {
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+      PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, r, 0.0, r, p));
+#else
       PROFILE(WAXPBY, waxpby(nrow, 1.0, r, 0.0, r, p));
+#endif
     } else {
       oldrtrans = rtrans;
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+      PROFILE(DDOT, gpu_ddot_sync(nrow, r, r, &rtrans));
+      double beta = rtrans / oldrtrans;
+      PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, r, beta, p, p));
+#else
       PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
       double beta = rtrans / oldrtrans;
       PROFILE(WAXPBY, waxpby(nrow, 1.0, r, beta, p, p));
+#endif
     }
     normr = sqrt(rtrans);
 
@@ -195,6 +220,15 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
     PROFILE(COMM, commExchange(comm, A->nr, p));
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+    PROFILE(SPMVM, gpu_spMVM(A, p, Ap));
+
+    CG_FLOAT alpha = 0.0;
+    PROFILE(DDOT, gpu_ddot_sync(nrow, p, Ap, &alpha));
+    alpha = rtrans / alpha;
+    PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, x, alpha, p, x));
+    PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, r, -alpha, Ap, r));
+#else
     PROFILE(SPMVM, spMVM(A, p, Ap));
 
     CG_FLOAT alpha = 0.0;
@@ -202,6 +236,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     alpha = rtrans / alpha;
     PROFILE(WAXPBY, waxpby(nrow, 1.0, x, alpha, p, x));
     PROFILE(WAXPBY, waxpby(nrow, 1.0, r, -alpha, Ap, r));
+#endif
   }
   timeStop = getTimeStamp();
 
@@ -218,7 +253,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     permute_vector(newToOldPerm, xexact, perm_tmp, nrow);
     memcpy(xexact, perm_tmp, nrow * sizeof(CG_FLOAT));
   }
-  free(perm_tmp);
+  deallocate(perm_tmp);
 #endif
 
   return k;

@@ -16,6 +16,10 @@
 #include <omp.h>
 #endif
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+#include "../../src/cuda/cuda_kernels.h"
+#endif
+
 void swap_DMatrix(DMatrix *x_perm, DMatrix *y_perm)
 {
   DMatrix tmp = *x_perm;
@@ -113,6 +117,7 @@ int test_spmmvSCS(void *args, const char *dataDir)
         // permute_DMatrix requires src.nr == dst.nr
         DMatrix x = { .nr = A.nc, .nc = test_blockwidth, .entries = NULL };
         DMatrix y = { .nr = A.nr, .nc = test_blockwidth, .entries = NULL };
+
         x.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
         y.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
 
@@ -129,6 +134,7 @@ int test_spmmvSCS(void *args, const char *dataDir)
 #ifdef SCS
         DMatrix x_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
         DMatrix y_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
+
         x_perm.entries = (CG_FLOAT *)allocate(
             ARRAY_ALIGNMENT, x_perm.nr * x_perm.nc * sizeof(CG_FLOAT));
         y_perm.entries = (CG_FLOAT *)allocate(
@@ -143,7 +149,11 @@ int test_spmmvSCS(void *args, const char *dataDir)
         // Forward permutation: scatter x into SCS ordering
         permute_DMatrix(A.oldToNewPerm, &x, &x_perm);
         for (size_t i = 0; i < repeat_count; i++) {
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+          gpu_spMMVM(&A, &x_perm, &y_perm);
+#else
           spMMVM(&A, &x_perm, &y_perm);
+#endif
           if (i < repeat_count - 1) {
             swap_DMatrix(&x_perm, &y_perm);
           }
@@ -152,7 +162,11 @@ int test_spmmvSCS(void *args, const char *dataDir)
         permute_DMatrix(A.newToOldPerm, &y_perm, &y);
 #else
         for (size_t i = 0; i < repeat_count; i++) {
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+          gpu_spMMVM(&A, &x, &y);
+#else
           spMMVM(&A, &x, &y);
+#endif
           if (i < repeat_count - 1) {
             swap_DMatrix(&x, &y);
           }
@@ -177,8 +191,10 @@ int test_spmmvSCS(void *args, const char *dataDir)
         // Free per-iteration allocations
         free(matrixFormat);
         free(pathToReportedData);
+
         deallocate(x.entries);
         deallocate(y.entries);
+
 #ifdef SCS
         deallocate(x_perm.entries);
         deallocate(y_perm.entries);

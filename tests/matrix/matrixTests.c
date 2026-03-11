@@ -10,7 +10,7 @@
 int matrixTests(int argc, char **argv)
 {
   // Hard-code data directory
-  char *dataDir = malloc(6);
+  char *dataDir = malloc(8);
   if (dataDir)
     strcpy(dataDir, "./data/");
 

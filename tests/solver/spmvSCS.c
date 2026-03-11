@@ -16,6 +16,10 @@
 #include <omp.h>
 #endif
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+#include "../../src/cuda/cuda_kernels.h"
+#endif
+
 int test_spmvSCS(void *args, const char *dataDir)
 {
 
@@ -112,6 +116,7 @@ int test_spmvSCS(void *args, const char *dataDir)
         }
 
 #ifdef SCS
+
         CG_FLOAT *x_perm =
             (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
         CG_FLOAT *y_perm =
@@ -121,7 +126,11 @@ int test_spmvSCS(void *args, const char *dataDir)
         permute_vector(A.oldToNewPerm, x, x_perm, A.nr);
 
         for (size_t i = 0; i < repeat_count; i++) {
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+          gpu_spMVM(&A, x_perm, y_perm);
+#else
           spMVM(&A, x_perm, y_perm);
+#endif
           if (i < repeat_count - 1) {
             swap_ptrs(&x_perm, &y_perm);
           }
@@ -132,7 +141,11 @@ int test_spmvSCS(void *args, const char *dataDir)
 #else
 
         for (size_t i = 0; i < repeat_count; i++) {
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+          gpu_spMVM(&A, x, y);
+#else
           spMVM(&A, x, y);
+#endif
           if (i < repeat_count - 1) {
             swap_ptrs(&x, &y);
           }
@@ -157,11 +170,12 @@ int test_spmvSCS(void *args, const char *dataDir)
 
         // Free per-iteration allocations
         free(matrixFormat);
-        free(x);
-        free(y);
+
+        deallocate(x);
+        deallocate(y);
 #ifdef SCS
-        free(x_perm);
-        free(y_perm);
+        deallocate(x_perm);
+        deallocate(y_perm);
 #endif
         free(pathToReportedData);
 

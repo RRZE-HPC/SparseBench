@@ -8,9 +8,16 @@
 #include <stdlib.h>
 
 #include "allocate.h"
+#ifdef _GPU
+#include "cuda/cuda_kernels.h"
+#endif
 
 void *allocate(size_t alignment, size_t bytesize)
 {
+#ifdef _GPU
+  (void)alignment;
+  return gpu_allocate_managed(bytesize);
+#else
   int errorCode;
   void *ptr;
 
@@ -33,9 +40,14 @@ void *allocate(size_t alignment, size_t bytesize)
   }
 
   return ptr;
+#endif
 }
 
 extern void deallocate(void *ptr)
 {
+#ifdef _GPU
+  gpu_free_managed(ptr);
+#else
   free(ptr);
+#endif
 }

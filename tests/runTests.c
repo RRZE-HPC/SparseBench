@@ -8,12 +8,22 @@
 #include "solver/solverTestsSPMMV.h"
 #include "solver/solverTestsSPMV.h"
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+#include "../src/cuda/cuda_kernels.h"
+#endif
+
 int main(int argc, char **argv)
 {
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  gpu_init(0);
+#endif
 #ifdef SCS
   matrixTests(argc, argv);
 #endif
   solverTestsSPMV(argc, argv);
   solverTestsSPMMV(argc, argv);
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  gpu_finalize();
+#endif
   return 0;
 }
