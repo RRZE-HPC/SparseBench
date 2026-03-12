@@ -7,7 +7,7 @@
 #include "comm.h"
 #include "parameter.h"
 #include "util.h"
-#include "complex.h"
+#include "vtype.h"
 
 extern int solveCG(CommType *comm, Parameter *param, Matrix *m);
 // extern void solverCheckResidual(Solver* s, Comm* c);

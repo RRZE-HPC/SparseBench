@@ -10,7 +10,7 @@
 
 #include "parameter.h"
 #include "util.h"
-#include "complex.h"
+#include "vtype.h"
 
 #ifdef CRS
 #include "CRSMatrix.h"
@@ -44,6 +44,7 @@ typedef struct {
   int row;
   int col;
   double val;
+  double val_imag;
 } MMEntry;
 
 typedef struct {
@@ -82,12 +83,12 @@ extern void MatrixPrintTofile(Matrix *m, char *filename);
 extern void MatrixPrint(Matrix *m);
 extern void MatrixPrint_impl(Matrix *m, FILE *fptr);
 
-extern void dumpVectorPrint(CG_FLOAT *restrict y, CG_UINT numRows);
-extern void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData);
+extern void dumpVectorPrint(V_ELE *restrict y, CG_UINT numRows);
+extern void dumpVectorToFile(V_ELE *restrict y, CG_UINT numRows, FILE *reportedData);
 
 extern void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst);
 
 extern void permute_vector(
-    const CG_UINT *permute, const CG_FLOAT *vec_src, CG_FLOAT *vec_dst, CG_UINT nr);
+    const CG_UINT *permute, const V_ELE *vec_src, V_ELE *vec_dst, CG_UINT nr);
 
 #endif // __MATRIX_H_

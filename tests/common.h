@@ -2,7 +2,7 @@
 #define __COMMON_H_
 
 #include "../src/util.h"
-#include "../src/complex.h"
+#include "../src/vtype.h"
 #include <stdio.h>
 #include <string.h>
 

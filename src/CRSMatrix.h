@@ -5,7 +5,7 @@
 #ifndef __CRSMATRIX_H_
 #define __CRSMATRIX_H_
 #include "util.h"
-#include "complex.h"
+#include "vtype.h"
 
 typedef struct {
   CG_UINT nr, nc, nnz; // number of rows, columns and non zeros
