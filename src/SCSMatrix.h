@@ -25,6 +25,7 @@ typedef struct {
   CG_UINT *chunkLens; // lengths of chunks
   CG_UINT *oldToNewPerm; // permutations for rows (and cols)
   CG_UINT *newToOldPerm; // inverse permutations for rows (and cols)
+  double beta;
 } Matrix;
 
 typedef struct {
