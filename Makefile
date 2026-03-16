@@ -62,7 +62,7 @@ $(BUILD_DIR)/%.o:  %.c $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
 
 $(BUILD_DIR)/cuda_%.o: $(CUDA_DIR)/%.cu $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
 	$(info ===>  COMPILE CUDA  $@)
-	$(Q)$(NVCC) -c $(NVCCFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES) $< -o $@
+	$(NVCC) -c $(NVCCFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES) $< -o $@
 
 $(BUILD_DIR)/%.s:  %.c
 	$(info ===>  GENERATE ASM  $@)
