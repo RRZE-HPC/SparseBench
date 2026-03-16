@@ -19,7 +19,7 @@
 #include "solver.h"
 #include "timing.h"
 #include "util.h"
-#include "complex.h"
+#include "vtype.h"
 
 static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
 {
@@ -129,14 +129,13 @@ int main(int argc, char **argv)
     if (commIsMaster(&comm)) {
       printf("Test type: SPMVM\n");
     }
-    // TODO : update for V_ELE
     const int itermax = param.itermax;
-    CG_FLOAT *x       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(V_ELE));
-    CG_FLOAT *y       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(V_ELE));
+    V_ELE *x          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(V_ELE));
+    V_ELE *y          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(V_ELE));
 
     for (int i = 0; i < m.nr; i++) {
-      x[i] = (CG_FLOAT)1.0;
-      y[i] = (CG_FLOAT)1.0;
+      x[i] = 1.0;
+      y[i] = 1.0;
     }
 
     for (k = 1; k < itermax; k++) {
@@ -154,16 +153,14 @@ int main(int argc, char **argv)
     int itermax = param.itermax;
     DMatrix x   = { .nr = sm.nc, .nc = param.blockwidth, .entries = NULL };
     DMatrix y   = { .nr = sm.nr, .nc = param.blockwidth, .entries = NULL };
-    // TODO : update for V_ELE
-
-    x.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(V_ELE));
-    y.entries   = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(V_ELE));
+    x.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(V_ELE));
+    y.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(V_ELE));
 
     for (int i = 0; i < x.nr * x.nc; i++) {
-      x.entries[i] = (CG_FLOAT)1.0;
+      x.entries[i] = 1.0;
     }
     for (int i = 0; i < y.nr * y.nc; i++) {
-      y.entries[i] = (CG_FLOAT)0.0;
+      y.entries[i] = 0.0;
     }
 
     for (k = 1; k < itermax; k++) {

@@ -4,7 +4,7 @@
  * license that can be found in the LICENSE file. */
 #ifndef __CCRSMATRIX_H_
 #define __CCRSMATRIX_H_
-#include "complex.h"
+#include "vtype.h"
 
 typedef struct {
   CG_UINT col;

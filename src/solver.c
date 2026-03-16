@@ -12,7 +12,7 @@
 #include "comm.h"
 #include "solver.h"
 #include "util.h"
-#include "complex.h"
+#include "vtype.h"
 
 void waxpby(const CG_UINT n,
     const V_ELE alpha,
@@ -44,8 +44,21 @@ void ddot(const CG_UINT n,
     const V_ELE *restrict y,
     V_ELE *restrict result)
 {
-  CG_FLOAT sum = 0.0;
+  V_ELE sum = 0.0;
 
+#ifdef USE_COMPLEX
+  if (y == x) {
+#pragma omp parallel for reduction(+ : sum) schedule(static)
+    for (int i = 0; i < n; i++) {
+      sum += conj(x[i]) * x[i];
+    }
+  } else {
+#pragma omp parallel for reduction(+ : sum) schedule(static)
+    for (int i = 0; i < n; i++) {
+      sum += conj(x[i]) * y[i];
+    }
+  }
+#else
   if (y == x) {
 #pragma omp parallel for reduction(+ : sum) schedule(static)
     for (int i = 0; i < n; i++) {
@@ -57,7 +70,8 @@ void ddot(const CG_UINT n,
       sum += x[i] * y[i];
     }
   }
+#endif
 
-  commReduction(&sum, SUM);
+  commReductionV(&sum, SUM);
   *result = sum;
 }

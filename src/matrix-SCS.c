@@ -138,11 +138,11 @@ void convertMatrix(Matrix *m, GMatrix *im)
 
   // Now that chunk data is collected, fill with matrix data
   m->colInd = (CG_UINT *)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(CG_UINT));
-  m->val    = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(CG_FLOAT));
+  m->val    = (V_ELE *)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(V_ELE));
 
   // Initialize defaults (essential for padded elements)
   for (int i = 0; i < m->nElems; ++i) {
-    m->val[i]    = (CG_FLOAT)0.0;
+    m->val[i]    = 0.0;
     m->colInd[i] = (CG_UINT)0;
     // TODO: may need to offset when used with MPI
     // m->colInd[i] = padded_val;
@@ -185,7 +185,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
             m->nc);
       }
 #endif
-      m->val[idx] = (CG_FLOAT)e.val;
+      m->val[idx] = e.val;
       ++rowLocalElemCount[row];
     }
   }
@@ -220,7 +220,7 @@ void MatrixPrint_impl(Matrix *m, FILE *fptr)
   CG_UINT *chunkPtr     = m->chunkPtr;
   CG_UINT *chunkLens    = m->chunkLens;
   CG_UINT *colInd       = m->colInd;
-  CG_FLOAT *val         = m->val;
+  V_ELE *val            = m->val;
   CG_UINT *oldToNewPerm = m->oldToNewPerm;
   CG_UINT *newToOldPerm = m->newToOldPerm;
 
@@ -236,11 +236,16 @@ void MatrixPrint_impl(Matrix *m, FILE *fptr)
     for (CG_UINT j = 0; j < rowLen; ++j) {
       CG_UINT idx = chunkStart + j * C + chunkRow;
       CG_UINT col = colInd[idx];
-      CG_FLOAT v  = val[idx];
-      // Only print nonzero values (strict fill)
+      V_ELE v     = val[idx];
+#ifdef USE_COMPLEX
+      if (creal(v) != 0.0 || cimag(v) != 0.0) {
+        fprintf(fptr, " (%u, %.12g+%.12gi)", col, creal(v), cimag(v));
+      }
+#else
       if (v != 0.0) {
         fprintf(fptr, " (%u, %.12g)", col, v);
       }
+#endif
     }
     fprintf(fptr, "\n");
   }
@@ -271,7 +276,17 @@ void dumpMatrix(Matrix *m)
     fprintf((fp), "\n");                                                                 \
   } while (0)
 
-#define PRINT_FLOAT_ARRAY(fp, obj, field, n)                                             \
+#ifdef USE_COMPLEX
+#define PRINT_V_ELE_ARRAY(fp, obj, field, n)                                             \
+  do {                                                                                   \
+    fprintf((fp), #field ": ");                                                          \
+    for (size_t i = 0; i < (n); ++i) {                                                   \
+      fprintf((fp), "(%f+%fi), ", creal((obj)->field[i]), cimag((obj)->field[i]));        \
+    }                                                                                    \
+    fprintf((fp), "\n");                                                                 \
+  } while (0)
+#else
+#define PRINT_V_ELE_ARRAY(fp, obj, field, n)                                             \
   do {                                                                                   \
     fprintf((fp), #field ": ");                                                          \
     for (size_t i = 0; i < (n); ++i) {                                                   \
@@ -279,6 +294,7 @@ void dumpMatrix(Matrix *m)
     }                                                                                    \
     fprintf((fp), "\n");                                                                 \
   } while (0)
+#endif
 
 void dumpMatrix_impl(Matrix *m, FILE *fptr)
 {
@@ -299,13 +315,13 @@ void dumpMatrix_impl(Matrix *m, FILE *fptr)
   PRINT_INT_ARRAY(fptr, m, chunkLens, m->nChunks);
   PRINT_INT_ARRAY(fptr, m, chunkPtr, m->nChunks + 1);
   PRINT_INT_ARRAY(fptr, m, colInd, m->nElems);
-  PRINT_FLOAT_ARRAY(fptr, m, val, m->nElems);
+  PRINT_V_ELE_ARRAY(fptr, m, val, m->nElems);
 }
 
-void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)
+void spMVM(Matrix *m, const V_ELE *restrict x, V_ELE *restrict y)
 {
   CG_UINT *colInd    = m->colInd;
-  CG_FLOAT *val      = m->val;
+  V_ELE *val         = m->val;
 
   CG_UINT numChunks  = m->nChunks;
   CG_UINT C          = m->C;
@@ -314,7 +330,7 @@ void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)
 
 #pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int i = 0; i < numChunks; ++i) {
-    CG_FLOAT tmp[C];
+    V_ELE tmp[C];
     for (int j = 0; j < C; ++j) {
       tmp[j] = 0.0;
     }
@@ -336,7 +352,7 @@ void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y)
 void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
 {
   CG_UINT *colInd    = m->colInd;
-  CG_FLOAT *val      = m->val;
+  V_ELE *val         = m->val;
 
   CG_UINT numChunks  = m->nChunks;
   CG_UINT C          = m->C;
@@ -347,7 +363,7 @@ void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
 
 #pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int i = 0; i < numChunks; ++i) {
-    CG_FLOAT tmp[C * numVecs];
+    V_ELE tmp[C * numVecs];
     for (int j = 0; j < C * numVecs; ++j) {
       tmp[j] = 0.0;
     }
@@ -357,7 +373,7 @@ void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
       // NOTE: SIMD should be applied here
       for (int k = 0; k < C; ++k) {
         CG_UINT col = colInd[chunkOffset + j * C + k];
-        CG_FLOAT a  = val[chunkOffset + j * C + k];
+        V_ELE a     = val[chunkOffset + j * C + k];
         for (int v = 0; v < numVecs; ++v) {
           tmp[k * numVecs + v] += a * x->entries[col * numVecs + v];
         }

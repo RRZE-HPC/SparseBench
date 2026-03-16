@@ -10,7 +10,7 @@
 #include "matrix.h"
 #include "mmio.h"
 #include "util.h"
-#include "complex.h"
+#include "vtype.h"
 
 static inline int compareColumn(const void *a, const void *b)
 {
@@ -133,20 +133,23 @@ void MMMatrixRead(MMMatrix *m, char *filename)
     exit(EXIT_FAILURE);
   }
 
-  if (!((mm_is_real(matcode) || mm_is_pattern(matcode) || mm_is_integer(matcode)) &&
-          mm_is_matrix(matcode) && mm_is_sparse(matcode))) {
+  if (!(mm_is_matrix(matcode) && mm_is_sparse(matcode) &&
+          (mm_is_real(matcode) || mm_is_pattern(matcode) || mm_is_integer(matcode) ||
+              mm_is_complex(matcode)))) {
     fprintf(stderr, "Sorry, this application does not support ");
     fprintf(stderr, "Market Market type: [%s]\n", mm_typecode_to_str(matcode));
     exit(EXIT_FAILURE);
   }
 
   bool compatible_flag =
-      (mm_is_sparse(matcode) &&
-          (mm_is_real(matcode) || mm_is_pattern(matcode) || mm_is_integer(matcode))) &&
-      (mm_is_symmetric(matcode) || mm_is_general(matcode));
-  bool sym_flag     = mm_is_symmetric(matcode);
-  bool pattern_flag = mm_is_pattern(matcode);
-  bool complex_flag = mm_is_complex(matcode);
+      mm_is_sparse(matcode) &&
+      (mm_is_real(matcode) || mm_is_pattern(matcode) || mm_is_integer(matcode) ||
+          mm_is_complex(matcode)) &&
+      (mm_is_symmetric(matcode) || mm_is_general(matcode) || mm_is_hermitian(matcode));
+  bool sym_flag       = mm_is_symmetric(matcode) || mm_is_hermitian(matcode);
+  bool hermitian_flag = mm_is_hermitian(matcode);
+  bool pattern_flag   = mm_is_pattern(matcode);
+  bool complex_flag   = mm_is_complex(matcode);
 
   if (!compatible_flag) {
     printf("The matrix market file provided is not supported.\n Reason :\n");
@@ -154,12 +157,13 @@ void MMMatrixRead(MMMatrix *m, char *filename)
       printf(" * matrix has to be sparse\n");
     }
 
-    if (!mm_is_real(matcode) && !(mm_is_pattern(matcode))) {
-      printf(" * matrix has to be real or pattern\n");
+    if (!mm_is_real(matcode) && !mm_is_pattern(matcode) && !mm_is_complex(matcode)) {
+      printf(" * matrix has to be real, complex, or pattern\n");
     }
 
-    if (!mm_is_symmetric(matcode)) {
-      printf(" * matrix has to be symmetric\n");
+    if (!mm_is_symmetric(matcode) && !mm_is_general(matcode) &&
+        !mm_is_hermitian(matcode)) {
+      printf(" * matrix has to be symmetric, hermitian, or general\n");
     }
 
     exit(EXIT_FAILURE);
@@ -179,16 +183,17 @@ void MMMatrixRead(MMMatrix *m, char *filename)
 
   size_t cursor = 0;
   int row, col;
-  double v;
+  double v, v_imag;
   MMEntry *entries = m->entries;
 
   for (size_t i = 0; i < nz; i++) {
+    v_imag = 0.0;
 
     if (pattern_flag) {
       fscanf(f, "%d %d\n", &row, &col);
       v = 1.;
     } else if (complex_flag) {
-      fscanf(f, "%d %d %lg %*g\n", &row, &col, &v);
+      fscanf(f, "%d %d %lg %lg\n", &row, &col, &v, &v_imag);
     } else {
       fscanf(f, "%d %d %lg\n", &row, &col, &v);
     }
@@ -196,14 +201,16 @@ void MMMatrixRead(MMMatrix *m, char *filename)
     row--; /* adjust from 1-based to 0-based */
     col--;
 
-    entries[cursor].row   = row;
-    entries[cursor].col   = col;
-    entries[cursor++].val = v;
+    entries[cursor].row      = row;
+    entries[cursor].col      = col;
+    entries[cursor].val      = v;
+    entries[cursor++].val_imag = v_imag;
 
     if (sym_flag && (row != col)) {
-      entries[cursor].row   = col;
-      entries[cursor].col   = row;
-      entries[cursor++].val = v;
+      entries[cursor].row      = col;
+      entries[cursor].col      = row;
+      entries[cursor].val      = v;
+      entries[cursor++].val_imag = hermitian_flag ? -v_imag : v_imag;
     }
   }
 
@@ -261,7 +268,11 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
 
     // loop over all elements in Row
     for (int id = m->rowPtr[rowID]; id < m->rowPtr[rowID + 1]; id++) {
+#ifdef USE_COMPLEX
+      m->entries[id].val = VCONST(entries[id].val, entries[id].val_imag);
+#else
       m->entries[id].val = (V_ELE)entries[id].val;
+#endif
       m->entries[id].col = (CG_UINT)entries[id].col;
     }
   }
@@ -287,8 +298,13 @@ void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr)
   fprintf(fptr, "\nMatrix entries (row, col, value):\n");
 
   for (size_t i = 0; i < m->count; i++) {
-    fprintf(
-        fptr, "%d\t%d\t%g\n", m->entries[i].row, m->entries[i].col, m->entries[i].val);
+    if (m->entries[i].val_imag != 0.0) {
+      fprintf(fptr, "%d\t%d\t%g\t%g\n", m->entries[i].row, m->entries[i].col,
+          m->entries[i].val, m->entries[i].val_imag);
+    } else {
+      fprintf(fptr, "%d\t%d\t%g\n", m->entries[i].row, m->entries[i].col,
+          m->entries[i].val);
+    }
   }
 }
 
@@ -312,26 +328,39 @@ void GMatrixPrint_impl(GMatrix *m, FILE *fptr)
   fprintf(fptr, "\nMatrix entries (row, col, value):\n");
   for (CG_UINT row = 0; row < m->nr; row++) {
     for (CG_UINT idx = m->rowPtr[row]; idx < m->rowPtr[row + 1]; idx++) {
+#ifdef USE_COMPLEX
+      fprintf(fptr,
+          "%u\t%u\t%g+%gi\n",
+          row + m->startRow,
+          m->entries[idx].col,
+          creal(m->entries[idx].val),
+          cimag(m->entries[idx].val));
+#else
       fprintf(fptr,
           "%u\t%u\t%g\n",
           row + m->startRow,
           m->entries[idx].col,
           m->entries[idx].val);
+#endif
     }
   }
 }
 
-void dumpVectorPrint(CG_FLOAT *restrict y, CG_UINT numRows)
+void dumpVectorPrint(V_ELE *restrict y, CG_UINT numRows)
 {
   dumpVectorToFile(y, numRows, stdout);
   printf("\n");
 }
 
-void dumpVectorToFile(CG_FLOAT *restrict y, CG_UINT numRows, FILE *reportedData)
+void dumpVectorToFile(V_ELE *restrict y, CG_UINT numRows, FILE *reportedData)
 {
   fprintf(reportedData, "vec = ");
   for (CG_UINT i = 0; i < numRows; i++) {
+#ifdef USE_COMPLEX
+    fprintf(reportedData, "(%lf+%lfi), ", creal(y[i]), cimag(y[i]));
+#else
     fprintf(reportedData, "%lf, ", y[i]);
+#endif
   }
 }
 
@@ -349,7 +378,11 @@ extern void dumpDMatrix_impl(DMatrix *m, FILE *reportedData)
 {
   fprintf(reportedData, "row order matrix = ");
   for (CG_UINT i = 0; i < m->nr * m->nc; i++) {
+#ifdef USE_COMPLEX
+    fprintf(reportedData, "(%lf+%lfi), ", creal(m->entries[i]), cimag(m->entries[i]));
+#else
     fprintf(reportedData, "%lf, ", m->entries[i]);
+#endif
   }
 }
 
@@ -358,9 +391,9 @@ void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst)
   CG_UINT nc = src->nc;
   CG_UINT nr = MIN(src->nr, dst->nr);
   for (CG_UINT i = 0; i < nr; i++) {
-    CG_UINT newRow            = perm[i];
-    CG_FLOAT *dst_start       = &dst->entries[newRow * nc];
-    const CG_FLOAT *src_start = &src->entries[i * nc];
+    CG_UINT newRow          = perm[i];
+    V_ELE *dst_start        = &dst->entries[newRow * nc];
+    const V_ELE *src_start  = &src->entries[i * nc];
     for (CG_UINT j = 0; j < nc; j++) {
       dst_start[j] = src_start[j];
     }
@@ -368,7 +401,7 @@ void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst)
 }
 
 void permute_vector(
-    const CG_UINT *permute, const CG_FLOAT *vec_src, CG_FLOAT *vec_dst, CG_UINT nr)
+    const CG_UINT *permute, const V_ELE *vec_src, V_ELE *vec_dst, CG_UINT nr)
 {
   for (CG_UINT i = 0; i < nr; i++) {
     CG_UINT alt  = permute[i];
