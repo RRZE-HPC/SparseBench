@@ -114,22 +114,22 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
   CG_UINT nrow_base = A->nr;
   CG_UINT ncol_base = A->nc;
-  V_ELE *r_base  = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
-  V_ELE *p_base  = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(V_ELE));
+  V_ELE *r_base     = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *p_base     = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(V_ELE));
 #ifdef SCS
-  V_ELE *Ap_base    = (V_ELE *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(V_ELE));
+  V_ELE *Ap_base = (V_ELE *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(V_ELE));
 #else
-  V_ELE *Ap_base    = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *Ap_base = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
 #endif
-  V_ELE *x_base     = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
-  V_ELE *b_base     = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *x_base      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *b_base      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
   V_ELE *xexact_base = NULL;
 
   if (strcmp(param->filename, "generate") == 0 ||
       strcmp(param->filename, "generate7P") == 0) {
     xexact_base = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
   }
-  
+
   initVectors(A, x_base, b_base, xexact_base);
 
   // Permute colInd and vectors to SCS ordering so no per-iteration
@@ -155,11 +155,11 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
 #endif
 
-  CG_FLOAT normr      = 0.0;
-  V_ELE rtrans        = 0.0;
-  V_ELE oldrtrans     = 0.0;
+  CG_FLOAT normr  = 0.0;
+  V_ELE rtrans    = 0.0;
+  V_ELE oldrtrans = 0.0;
 
-  int printFreq = itermax / 10;
+  int printFreq   = itermax / 10;
   if (printFreq > 50) {
     printFreq = 50;
   }
@@ -168,13 +168,13 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
   double timeStart, timeStop, ts;
 
-  CG_UINT nrow   = nrow_base;
-  V_ELE *r       = r_base;
-  V_ELE *p       = p_base;
-  V_ELE *Ap      = Ap_base;
-  V_ELE *x       = x_base;
-  V_ELE *b       = b_base;
-  V_ELE *xexact  = xexact_base;
+  CG_UINT nrow  = nrow_base;
+  V_ELE *r      = r_base;
+  V_ELE *p      = p_base;
+  V_ELE *Ap     = Ap_base;
+  V_ELE *x      = x_base;
+  V_ELE *b      = b_base;
+  V_ELE *xexact = xexact_base;
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
   PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, x, 0.0, x, p));
@@ -222,10 +222,10 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
       PROFILE(WAXPBY, waxpby(nrow, 1.0, r, beta, p, p));
 #endif
     }
-  #ifdef USE_COMPLEX
-  normr = sqrt(creal(rtrans));
+#ifdef USE_COMPLEX
+    normr = sqrt(creal(rtrans));
 #else
-  normr = sqrt(rtrans);
+    normr = sqrt(rtrans);
 #endif
 
     if (commIsMaster(comm) && (k % printFreq == 0 || k + 1 == itermax)) {

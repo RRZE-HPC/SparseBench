@@ -15,11 +15,11 @@
  * and supports the same arithmetic operators in device code. */
 #include <thrust/complex.h>
 #if PRECISION == 1
-  #define V_ELE thrust::complex<float>
-  #define VCONST(r, i) thrust::complex<float>((r), (i))
+#define V_ELE thrust::complex<float>
+#define VCONST(r, i) thrust::complex<float>((r), (i))
 #else
-  #define V_ELE thrust::complex<double>
-  #define VCONST(r, i) thrust::complex<double>((r), (i))
+#define V_ELE thrust::complex<double>
+#define VCONST(r, i) thrust::complex<double>((r), (i))
 #endif
 
 #else
@@ -28,17 +28,17 @@
 #undef I
 
 #if PRECISION == 1
-  #define V_ELE float _Complex
-  #define VCONST(r, i) CMPLXF((r), (i))
+#define V_ELE float _Complex
+#define VCONST(r, i) CMPLXF((r), (i))
 #else
-  #define V_ELE double _Complex
-  #define VCONST(r, i) CMPLX((r), (i))
+#define V_ELE double _Complex
+#define VCONST(r, i) CMPLX((r), (i))
 #endif
 
 #endif /* __NVCC__ */
 
 #else
-  #define V_ELE CG_FLOAT
+#define V_ELE CG_FLOAT
 #endif /* USE_COMPLEX */
 
 #endif /* __VTYPE_H_ */

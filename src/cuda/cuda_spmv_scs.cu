@@ -37,7 +37,7 @@ __global__ void kernel_spmv_scs(CG_UINT nChunks,
   CG_UINT offset = chunkPtr[chunk];
   CG_UINT len    = chunkLens[chunk];
 
-  V_ELE tmp   = 0.0;
+  V_ELE tmp      = 0.0;
   for (CG_UINT j = 0; j < len; j++) {
     CG_UINT idx = offset + j * C + lane;
     tmp += val[idx] * x[colInd[idx]];
@@ -86,7 +86,7 @@ __global__ void kernel_spmmv_scs(CG_UINT nChunks,
   CG_UINT offset = chunkPtr[chunk];
   CG_UINT len    = chunkLens[chunk];
 
-  V_ELE tmp   = 0.0;
+  V_ELE tmp      = 0.0;
   for (CG_UINT j = 0; j < len; j++) {
     CG_UINT idx = offset + j * C + lane;
     CG_UINT col = colInd[idx];

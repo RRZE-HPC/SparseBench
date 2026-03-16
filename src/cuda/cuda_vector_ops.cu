@@ -16,12 +16,8 @@
 /* ------------------------------------------------------------------ */
 /*  waxpby:  w = alpha*x + beta*y                                    */
 /* ------------------------------------------------------------------ */
-__global__ void kernel_waxpby(CG_UINT n,
-    V_ELE alpha,
-    const V_ELE *x,
-    V_ELE beta,
-    const V_ELE *y,
-    V_ELE *w)
+__global__ void kernel_waxpby(
+    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
 {
   CG_UINT i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < n) {
@@ -29,12 +25,8 @@ __global__ void kernel_waxpby(CG_UINT n,
   }
 }
 
-extern "C" void gpu_waxpby(CG_UINT n,
-    V_ELE alpha,
-    const V_ELE *x,
-    V_ELE beta,
-    const V_ELE *y,
-    V_ELE *w)
+extern "C" void gpu_waxpby(
+    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
 {
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;
@@ -44,8 +36,7 @@ extern "C" void gpu_waxpby(CG_UINT n,
 /* ------------------------------------------------------------------ */
 /*  ddot:  result = x^T * y   (uses shared-memory reduction)         */
 /* ------------------------------------------------------------------ */
-__global__ void kernel_ddot(
-    CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *partial)
+__global__ void kernel_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *partial)
 {
   extern __shared__ V_ELE sdata[];
 
@@ -65,8 +56,7 @@ __global__ void kernel_ddot(
     partial[blockIdx.x] = sdata[0];
 }
 
-extern "C" void gpu_ddot(
-    CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
+extern "C" void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
 {
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;
@@ -130,12 +120,8 @@ extern "C" void gpu_free_managed(void *ptr)
 /*  Synchronous wrappers — behave like CPU kernels                    */
 /*  Use managed memory pointers; call DeviceSynchronize after launch  */
 /* ------------------------------------------------------------------ */
-extern "C" void gpu_waxpby_sync(CG_UINT n,
-    V_ELE alpha,
-    const V_ELE *x,
-    V_ELE beta,
-    const V_ELE *y,
-    V_ELE *w)
+extern "C" void gpu_waxpby_sync(
+    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
 {
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;
@@ -143,8 +129,7 @@ extern "C" void gpu_waxpby_sync(CG_UINT n,
   GPU_SAFE_CALL(gpuDeviceSynchronize());
 }
 
-extern "C" void gpu_ddot_sync(
-    CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
+extern "C" void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
 {
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;

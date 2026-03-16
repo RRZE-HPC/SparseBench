@@ -161,8 +161,7 @@ static void buildElementsToSend(CommType *c, int startRow, int *extLocalToGlobal
     c->totalSendCount += c->sendCounts[i];
   }
 
-  c->sendBuffer =
-      (V_ELE *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(V_ELE));
+  c->sendBuffer = (V_ELE *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(V_ELE));
   MPI_Request request[c->outdegree];
   c->elementsToSend   = (int *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(int));
   int *elementsToSend = c->elementsToSend;
@@ -1007,7 +1006,10 @@ void commMatrixDump(CommType *c, Matrix *m)
         for (int rowEntry = (int)rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
             rowEntry++) {
 #ifdef USE_COMPLEX
-          printf("[%d]:(%.2f+%.2fi) ", colInd[rowEntry], creal(val[rowEntry]), cimag(val[rowEntry]));
+          printf("[%d]:(%.2f+%.2fi) ",
+              colInd[rowEntry],
+              creal(val[rowEntry]),
+              cimag(val[rowEntry]));
 #else
           printf("[%d]:%.2f ", colInd[rowEntry], val[rowEntry]);
 #endif
@@ -1123,8 +1125,11 @@ void commGMatrixDump(CommType *c, GMatrix *m)
         for (int rowEntry = (int)rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
             rowEntry++) {
 #ifdef USE_COMPLEX
-          FPRINTF(c->logFile, "[%d]:(%.2f+%.2fi) ", entries[rowEntry].col,
-              creal(entries[rowEntry].val), cimag(entries[rowEntry].val));
+          FPRINTF(c->logFile,
+              "[%d]:(%.2f+%.2fi) ",
+              entries[rowEntry].col,
+              creal(entries[rowEntry].val),
+              cimag(entries[rowEntry].val));
 #else
           FPRINTF(c->logFile, "[%d]:%.2f ", entries[rowEntry].col, entries[rowEntry].val);
 #endif

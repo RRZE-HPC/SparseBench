@@ -281,7 +281,7 @@ void dumpMatrix(Matrix *m)
   do {                                                                                   \
     fprintf((fp), #field ": ");                                                          \
     for (size_t i = 0; i < (n); ++i) {                                                   \
-      fprintf((fp), "(%f+%fi), ", creal((obj)->field[i]), cimag((obj)->field[i]));        \
+      fprintf((fp), "(%f+%fi), ", creal((obj)->field[i]), cimag((obj)->field[i]));       \
     }                                                                                    \
     fprintf((fp), "\n");                                                                 \
   } while (0)

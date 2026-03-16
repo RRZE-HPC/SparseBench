@@ -201,15 +201,15 @@ void MMMatrixRead(MMMatrix *m, char *filename)
     row--; /* adjust from 1-based to 0-based */
     col--;
 
-    entries[cursor].row      = row;
-    entries[cursor].col      = col;
-    entries[cursor].val      = v;
+    entries[cursor].row        = row;
+    entries[cursor].col        = col;
+    entries[cursor].val        = v;
     entries[cursor++].val_imag = v_imag;
 
     if (sym_flag && (row != col)) {
-      entries[cursor].row      = col;
-      entries[cursor].col      = row;
-      entries[cursor].val      = v;
+      entries[cursor].row        = col;
+      entries[cursor].col        = row;
+      entries[cursor].val        = v;
       entries[cursor++].val_imag = hermitian_flag ? -v_imag : v_imag;
     }
   }
@@ -299,11 +299,15 @@ void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr)
 
   for (size_t i = 0; i < m->count; i++) {
     if (m->entries[i].val_imag != 0.0) {
-      fprintf(fptr, "%d\t%d\t%g\t%g\n", m->entries[i].row, m->entries[i].col,
-          m->entries[i].val, m->entries[i].val_imag);
+      fprintf(fptr,
+          "%d\t%d\t%g\t%g\n",
+          m->entries[i].row,
+          m->entries[i].col,
+          m->entries[i].val,
+          m->entries[i].val_imag);
     } else {
-      fprintf(fptr, "%d\t%d\t%g\n", m->entries[i].row, m->entries[i].col,
-          m->entries[i].val);
+      fprintf(
+          fptr, "%d\t%d\t%g\n", m->entries[i].row, m->entries[i].col, m->entries[i].val);
     }
   }
 }
@@ -391,9 +395,9 @@ void permute_DMatrix(const CG_UINT *perm, const DMatrix *src, DMatrix *dst)
   CG_UINT nc = src->nc;
   CG_UINT nr = MIN(src->nr, dst->nr);
   for (CG_UINT i = 0; i < nr; i++) {
-    CG_UINT newRow          = perm[i];
-    V_ELE *dst_start        = &dst->entries[newRow * nc];
-    const V_ELE *src_start  = &src->entries[i * nc];
+    CG_UINT newRow         = perm[i];
+    V_ELE *dst_start       = &dst->entries[newRow * nc];
+    const V_ELE *src_start = &src->entries[i * nc];
     for (CG_UINT j = 0; j < nc; j++) {
       dst_start[j] = src_start[j];
     }

@@ -13,12 +13,8 @@ extern "C" {
 #endif
 
 /* Low-level kernel launchers (async — no sync, no managed memory) */
-void gpu_waxpby(CG_UINT n,
-    V_ELE alpha,
-    const V_ELE *x,
-    V_ELE beta,
-    const V_ELE *y,
-    V_ELE *w);
+void gpu_waxpby(
+    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w);
 
 void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result);
 
@@ -47,12 +43,8 @@ void gpu_spmv_crs(CG_UINT numRows,
 void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y);
 void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y);
 
-void gpu_waxpby_sync(CG_UINT n,
-    V_ELE alpha,
-    const V_ELE *x,
-    V_ELE beta,
-    const V_ELE *y,
-    V_ELE *w);
+void gpu_waxpby_sync(
+    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w);
 
 void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result);
 
