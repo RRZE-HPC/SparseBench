@@ -120,12 +120,18 @@ extern "C" void gpu_free_managed(void *ptr)
 /*  Synchronous wrappers — behave like CPU kernels                    */
 /*  Use managed memory pointers; call DeviceSynchronize after launch  */
 /* ------------------------------------------------------------------ */
-extern "C" void gpu_waxpby_sync(
+extern "C" void gpu_waxpby_nosync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
 {
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;
   kernel_waxpby<<<blocks, threads>>>(n, alpha, x, beta, y, w);
+}
+
+extern "C" void gpu_waxpby_sync(
+    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
+{
+  gpu_waxpby_nosync(n, alpha, x, beta, y, w);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
 }
 

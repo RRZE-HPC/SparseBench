@@ -77,17 +77,15 @@ __global__ void kernel_spmmv_crs(CG_UINT numRows,
 /*  High-level synchronous wrappers matching the CPU solver.h API     */
 /*  Only compiled when building with MTX_FMT=CRS                     */
 /* ------------------------------------------------------------------ */
-
 #ifdef CRS
-extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
+extern "C" void gpu_spMVM_nosync(Matrix *m, const V_ELE *x, V_ELE *y)
 {
   int threads = 256;
   int blocks  = (m->nr + threads - 1) / threads;
   kernel_spmv_crs<<<blocks, threads>>>(m->nr, m->rowPtr, m->colInd, m->val, x, y);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
 }
 
-extern "C" void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
+extern "C" void gpu_spMMVM_nosync(Matrix *m, const DMatrix *x, DMatrix *y)
 {
   CG_UINT numVecs = x->nc;
   int threads_x   = 256;
@@ -96,6 +94,18 @@ extern "C" void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
   dim3 block(threads_x, numVecs);
   kernel_spmmv_crs<<<grid, block>>>(
       m->nr, numVecs, m->rowPtr, m->colInd, m->val, x->entries, y->entries);
+}
+
+#ifdef CRS
+extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
+{
+  gpu_spMVM_nosync(m, x, y);
+  GPU_SAFE_CALL(gpuDeviceSynchronize());
+}
+
+extern "C" void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
+{
+  gpu_spMMVM_nosync(m, x, y);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
 }
 #endif /* CRS */

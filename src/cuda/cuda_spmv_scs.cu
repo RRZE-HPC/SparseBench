@@ -101,17 +101,15 @@ __global__ void kernel_spmmv_scs(CG_UINT nChunks,
 /*  Expects managed-memory pointers (allocated via gpu_allocate_managed) */
 /* ------------------------------------------------------------------ */
 
-#ifdef SCS
-extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
+extern "C" void gpu_spMVM_nosync(Matrix *m, const V_ELE *x, V_ELE *y)
 {
   dim3 grid(m->nChunks);
   dim3 block(m->C);
   kernel_spmv_scs<<<grid, block>>>(
       m->nChunks, m->C, m->chunkPtr, m->chunkLens, m->colInd, m->val, x, y);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
 }
 
-extern "C" void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
+extern "C" void gpu_spMMVM_nosync(Matrix *m, const DMatrix *x, DMatrix *y)
 {
   CG_UINT numVecs = x->nc;
   dim3 grid(m->nChunks);
@@ -125,6 +123,18 @@ extern "C" void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
       m->val,
       x->entries,
       y->entries);
+}
+
+#ifdef SCS
+extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
+{
+  gpu_spMVM_nosync(m, x, y);
+  GPU_SAFE_CALL(gpuDeviceSynchronize());
+}
+
+extern "C" void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y)
+{
+  gpu_spMMVM_nosync(m, x, y);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
 }
 #endif /* SCS */
