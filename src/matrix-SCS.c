@@ -108,7 +108,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
 
   // Account for final chunk
   m->nElems               = currentChunkPtr;
-
+  m->beta                 = (double)m->nnz / (double)m->nElems;
   m->chunkPtr[m->nChunks] = (CG_UINT)m->nElems;
 
   // Construct permutation vector
@@ -140,12 +140,15 @@ void convertMatrix(Matrix *m, GMatrix *im)
   m->colInd = (CG_UINT *)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(CG_UINT));
   m->val    = (V_ELE *)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(V_ELE));
 
-  // Initialize defaults (essential for padded elements)
-  for (int i = 0; i < m->nElems; ++i) {
-    m->val[i]    = 0.0;
-    m->colInd[i] = (CG_UINT)0;
-    // TODO: may need to offset when used with MPI
-    // m->colInd[i] = padded_val;
+// Initialize defaults (essential for padded elements)
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (int c = 0; c < m->nChunks; ++c) {
+    CG_UINT start = m->chunkPtr[c];
+    CG_UINT end   = m->chunkPtr[c + 1];
+    for (CG_UINT j = start; j < end; ++j) {
+      m->val[j]    = 0.0;
+      m->colInd[j] = (CG_UINT)0;
+    }
   }
 
   // (Temporary array) Keep track of how many elements we've seen in each row
