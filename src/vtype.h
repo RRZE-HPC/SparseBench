@@ -8,6 +8,22 @@
 #include "util.h"
 
 #ifdef USE_COMPLEX
+
+#ifdef __NVCC__
+/* CUDA C++ compilation context (.cu files compiled by nvcc).
+ * thrust::complex<T> has the same memory layout as C99 _Complex
+ * and supports the same arithmetic operators in device code. */
+#include <thrust/complex.h>
+#if PRECISION == 1
+  #define V_ELE thrust::complex<float>
+  #define VCONST(r, i) thrust::complex<float>((r), (i))
+#else
+  #define V_ELE thrust::complex<double>
+  #define VCONST(r, i) thrust::complex<double>((r), (i))
+#endif
+
+#else
+/* C compilation context (.c files compiled by the host compiler). */
 #include <complex.h>
 #undef I
 
@@ -19,8 +35,10 @@
   #define VCONST(r, i) CMPLX((r), (i))
 #endif
 
+#endif /* __NVCC__ */
+
 #else
   #define V_ELE CG_FLOAT
-#endif
+#endif /* USE_COMPLEX */
 
-#endif
+#endif /* __VTYPE_H_ */

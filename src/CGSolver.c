@@ -114,8 +114,8 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
   CG_UINT nrow_base = A->nr;
   CG_UINT ncol_base = A->nc;
-  CG_FLOAT *r_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(CG_FLOAT));
-  CG_FLOAT *p_base  = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(CG_FLOAT));
+  V_ELE *r_base  = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *p_base  = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(V_ELE));
 #ifdef SCS
   V_ELE *Ap_base    = (V_ELE *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(V_ELE));
 #else
@@ -214,7 +214,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
       oldrtrans = rtrans;
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
       PROFILE(DDOT, gpu_ddot_sync(nrow, r, r, &rtrans));
-      double beta = rtrans / oldrtrans;
+      V_ELE beta = rtrans / oldrtrans;
       PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, r, beta, p, p));
 #else
       PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
@@ -237,7 +237,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
     PROFILE(SPMVM, gpu_spMVM(A, p, Ap));
 
-    CG_FLOAT alpha = 0.0;
+    V_ELE alpha = 0.0;
     PROFILE(DDOT, gpu_ddot_sync(nrow, p, Ap, &alpha));
     alpha = rtrans / alpha;
     PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, x, alpha, p, x));

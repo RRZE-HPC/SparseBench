@@ -24,9 +24,9 @@ __global__ void kernel_spmv_scs(CG_UINT nChunks,
     const CG_UINT *chunkPtr,
     const CG_UINT *chunkLens,
     const CG_UINT *colInd,
-    const CG_FLOAT *val,
-    const CG_FLOAT *x,
-    CG_FLOAT *y)
+    const V_ELE *val,
+    const V_ELE *x,
+    V_ELE *y)
 {
   CG_UINT chunk = blockIdx.x;
   CG_UINT lane  = threadIdx.x;
@@ -37,7 +37,7 @@ __global__ void kernel_spmv_scs(CG_UINT nChunks,
   CG_UINT offset = chunkPtr[chunk];
   CG_UINT len    = chunkLens[chunk];
 
-  CG_FLOAT tmp   = 0.0;
+  V_ELE tmp   = 0.0;
   for (CG_UINT j = 0; j < len; j++) {
     CG_UINT idx = offset + j * C + lane;
     tmp += val[idx] * x[colInd[idx]];
@@ -51,9 +51,9 @@ extern "C" void gpu_spmv_scs(CG_UINT nChunks,
     const CG_UINT *chunkPtr,
     const CG_UINT *chunkLens,
     const CG_UINT *colInd,
-    const CG_FLOAT *val,
-    const CG_FLOAT *x,
-    CG_FLOAT *y)
+    const V_ELE *val,
+    const V_ELE *x,
+    V_ELE *y)
 {
   /* One block per chunk, C threads per block */
   dim3 grid(nChunks);
@@ -72,9 +72,9 @@ __global__ void kernel_spmmv_scs(CG_UINT nChunks,
     const CG_UINT *chunkPtr,
     const CG_UINT *chunkLens,
     const CG_UINT *colInd,
-    const CG_FLOAT *val,
-    const CG_FLOAT *x,
-    CG_FLOAT *y)
+    const V_ELE *val,
+    const V_ELE *x,
+    V_ELE *y)
 {
   CG_UINT chunk = blockIdx.x;
   CG_UINT lane  = threadIdx.x; /* row within chunk */
@@ -86,7 +86,7 @@ __global__ void kernel_spmmv_scs(CG_UINT nChunks,
   CG_UINT offset = chunkPtr[chunk];
   CG_UINT len    = chunkLens[chunk];
 
-  CG_FLOAT tmp   = 0.0;
+  V_ELE tmp   = 0.0;
   for (CG_UINT j = 0; j < len; j++) {
     CG_UINT idx = offset + j * C + lane;
     CG_UINT col = colInd[idx];
@@ -102,7 +102,7 @@ __global__ void kernel_spmmv_scs(CG_UINT nChunks,
 /* ------------------------------------------------------------------ */
 
 #ifdef SCS
-extern "C" void gpu_spMVM(Matrix *m, const CG_FLOAT *x, CG_FLOAT *y)
+extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
 {
   dim3 grid(m->nChunks);
   dim3 block(m->C);

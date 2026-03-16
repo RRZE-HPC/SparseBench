@@ -17,16 +17,16 @@
 __global__ void kernel_spmv_crs(CG_UINT numRows,
     const CG_UINT *rowPtr,
     const CG_UINT *colInd,
-    const CG_FLOAT *val,
-    const CG_FLOAT *x,
-    CG_FLOAT *y)
+    const V_ELE *val,
+    const V_ELE *x,
+    V_ELE *y)
 {
   CG_UINT row = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (row >= numRows)
     return;
 
-  CG_FLOAT sum = 0.0;
+  V_ELE sum = 0.0;
   for (CG_UINT j = rowPtr[row]; j < rowPtr[row + 1]; j++) {
     sum += val[j] * x[colInd[j]];
   }
@@ -37,9 +37,9 @@ __global__ void kernel_spmv_crs(CG_UINT numRows,
 extern "C" void gpu_spmv_crs(CG_UINT numRows,
     const CG_UINT *rowPtr,
     const CG_UINT *colInd,
-    const CG_FLOAT *val,
-    const CG_FLOAT *x,
-    CG_FLOAT *y)
+    const V_ELE *val,
+    const V_ELE *x,
+    V_ELE *y)
 {
   int threads = 256;
   int blocks  = (numRows + threads - 1) / threads;
@@ -54,9 +54,9 @@ __global__ void kernel_spmmv_crs(CG_UINT numRows,
     CG_UINT numVecs,
     const CG_UINT *rowPtr,
     const CG_UINT *colInd,
-    const CG_FLOAT *val,
-    const CG_FLOAT *x,
-    CG_FLOAT *y)
+    const V_ELE *val,
+    const V_ELE *x,
+    V_ELE *y)
 {
   CG_UINT row = blockIdx.x * blockDim.x + threadIdx.x;
   CG_UINT vec = threadIdx.y;
@@ -64,7 +64,7 @@ __global__ void kernel_spmmv_crs(CG_UINT numRows,
   if (row >= numRows)
     return;
 
-  CG_FLOAT sum = 0.0;
+  V_ELE sum = 0.0;
   for (CG_UINT j = rowPtr[row]; j < rowPtr[row + 1]; j++) {
     CG_UINT col = colInd[j];
     sum += val[j] * x[col * numVecs + vec];
@@ -79,7 +79,7 @@ __global__ void kernel_spmmv_crs(CG_UINT numRows,
 /* ------------------------------------------------------------------ */
 
 #ifdef CRS
-extern "C" void gpu_spMVM(Matrix *m, const CG_FLOAT *x, CG_FLOAT *y)
+extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
 {
   int threads = 256;
   int blocks  = (m->nr + threads - 1) / threads;
