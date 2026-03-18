@@ -50,12 +50,12 @@ void ddot(const CG_UINT n,
   if (y == x) {
 #pragma omp parallel for reduction(+ : sum) schedule(static)
     for (int i = 0; i < n; i++) {
-      sum += conj(x[i]) * x[i];
+      sum += VCONJ(x[i]) * x[i];
     }
   } else {
 #pragma omp parallel for reduction(+ : sum) schedule(static)
     for (int i = 0; i < n; i++) {
-      sum += conj(x[i]) * y[i];
+      sum += VCONJ(x[i]) * y[i];
     }
   }
 #else

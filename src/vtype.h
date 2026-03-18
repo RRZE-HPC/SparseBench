@@ -21,6 +21,10 @@
 #define V_ELE thrust::complex<double>
 #define VCONST(r, i) thrust::complex<double>((r), (i))
 #endif
+#define VCONJ(z) thrust::conj(z)
+#define VREAL(z) (z).real()
+#define VIMAG(z) (z).imag()
+#define VABS(z) thrust::abs(z)
 
 #else
 /* C compilation context (.c files compiled by the host compiler). */
@@ -30,15 +34,24 @@
 #if PRECISION == 1
 #define V_ELE float _Complex
 #define VCONST(r, i) CMPLXF((r), (i))
+#define VCONJ(z) conjf(z)
+#define VREAL(z) crealf(z)
+#define VIMAG(z) cimagf(z)
+#define VABS(z) cabsf(z)
 #else
 #define V_ELE double _Complex
 #define VCONST(r, i) CMPLX((r), (i))
+#define VCONJ(z) conj(z)
+#define VREAL(z) creal(z)
+#define VIMAG(z) cimag(z)
+#define VABS(z) cabs(z)
 #endif
 
 #endif /* __NVCC__ */
 
 #else
 #define V_ELE CG_FLOAT
+#define VCONST(r, i) (r)
 #endif /* USE_COMPLEX */
 
 #endif /* __VTYPE_H_ */

@@ -1008,8 +1008,8 @@ void commMatrixDump(CommType *c, Matrix *m)
 #ifdef USE_COMPLEX
           printf("[%d]:(%.2f+%.2fi) ",
               colInd[rowEntry],
-              creal(val[rowEntry]),
-              cimag(val[rowEntry]));
+              VREAL(val[rowEntry]),
+              VIMAG(val[rowEntry]));
 #else
           printf("[%d]:%.2f ", colInd[rowEntry], val[rowEntry]);
 #endif
@@ -1070,7 +1070,7 @@ void commMatrixDump(CommType *c, Matrix *m)
   printf("val: ");
   for (int i = 0; i < m->nElems; ++i) {
 #ifdef USE_COMPLEX
-    printf("(%f+%fi), ", creal(m->val[i]), cimag(m->val[i]));
+    printf("(%f+%fi), ", VREAL(m->val[i]), VIMAG(m->val[i]));
 #else
     printf("%f, ", m->val[i]);
 #endif
@@ -1086,7 +1086,7 @@ void commVectorDump(CommType *c, V_ELE *v, CG_UINT size, char *name)
       FPRINTF(c->logFile, "Vector %s Rank %d of %d\n", name, c->rank, c->size);
       for (int j = 0; j < size; j++) {
 #ifdef USE_COMPLEX
-        FPRINTF(c->logFile, "\telement[%d] %f + %fi\n", j, creal(v[j]), cimag(v[j]));
+        FPRINTF(c->logFile, "\telement[%d] %f + %fi\n", j, VREAL(v[j]), VIMAG(v[j]));
 #else
         FPRINTF(c->logFile, "\telement[%d] %f\n", j, v[j]);
 #endif
@@ -1128,8 +1128,8 @@ void commGMatrixDump(CommType *c, GMatrix *m)
           FPRINTF(c->logFile,
               "[%d]:(%.2f+%.2fi) ",
               entries[rowEntry].col,
-              creal(entries[rowEntry].val),
-              cimag(entries[rowEntry].val));
+              VREAL(entries[rowEntry].val),
+              VIMAG(entries[rowEntry].val));
 #else
           FPRINTF(c->logFile, "[%d]:%.2f ", entries[rowEntry].col, entries[rowEntry].val);
 #endif

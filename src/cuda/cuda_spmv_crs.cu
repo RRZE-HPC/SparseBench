@@ -26,7 +26,7 @@ __global__ void kernel_spmv_crs(CG_UINT numRows,
   if (row >= numRows)
     return;
 
-  V_ELE sum = 0.0;
+  V_ELE sum = VCONST(0, 0);
   for (CG_UINT j = rowPtr[row]; j < rowPtr[row + 1]; j++) {
     sum += val[j] * x[colInd[j]];
   }
@@ -64,7 +64,7 @@ __global__ void kernel_spmmv_crs(CG_UINT numRows,
   if (row >= numRows)
     return;
 
-  V_ELE sum = 0.0;
+  V_ELE sum = VCONST(0, 0);
   for (CG_UINT j = rowPtr[row]; j < rowPtr[row + 1]; j++) {
     CG_UINT col = colInd[j];
     sum += val[j] * x[col * numVecs + vec];

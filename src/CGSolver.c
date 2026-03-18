@@ -62,7 +62,7 @@ static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
     for (CG_UINT j = 0; j < rowLen; ++j) {
       CG_UINT idx = chunkStart + j * C + chunkRow;
 #ifdef USE_COMPLEX
-      if (creal(val[idx]) != 0.0 || cimag(val[idx]) != 0.0) {
+      if (VREAL(val[idx]) != 0.0 || VIMAG(val[idx]) != 0.0) {
 #else
       if (val[idx] != 0.0) {
 #endif
@@ -92,7 +92,7 @@ void solverCheckResidual(CommType *c, V_ELE *x, V_ELE *xexact, CG_UINT n)
 
   for (int i = 0; i < n; i++) {
 #ifdef USE_COMPLEX
-    double diff = cabs(v1[i] - v2[i]);
+    double diff = VABS(v1[i] - v2[i]);
 #else
     double diff = fabs(v1[i] - v2[i]);
 #endif
@@ -193,7 +193,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 #endif
 
 #ifdef USE_COMPLEX
-  normr = sqrt(creal(rtrans));
+  normr = sqrt(VREAL(rtrans));
 #else
   normr = sqrt(rtrans);
 #endif
@@ -223,7 +223,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 #endif
     }
 #ifdef USE_COMPLEX
-    normr = sqrt(creal(rtrans));
+    normr = sqrt(VREAL(rtrans));
 #else
     normr = sqrt(rtrans);
 #endif

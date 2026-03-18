@@ -241,8 +241,8 @@ void MatrixPrint_impl(Matrix *m, FILE *fptr)
       CG_UINT col = colInd[idx];
       V_ELE v     = val[idx];
 #ifdef USE_COMPLEX
-      if (creal(v) != 0.0 || cimag(v) != 0.0) {
-        fprintf(fptr, " (%u, %.12g+%.12gi)", col, creal(v), cimag(v));
+      if (VREAL(v) != 0.0 || VIMAG(v) != 0.0) {
+        fprintf(fptr, " (%u, %.12g+%.12gi)", col, VREAL(v), VIMAG(v));
       }
 #else
       if (v != 0.0) {
@@ -284,7 +284,7 @@ void dumpMatrix(Matrix *m)
   do {                                                                                   \
     fprintf((fp), #field ": ");                                                          \
     for (size_t i = 0; i < (n); ++i) {                                                   \
-      fprintf((fp), "(%f+%fi), ", creal((obj)->field[i]), cimag((obj)->field[i]));       \
+      fprintf((fp), "(%f+%fi), ", VREAL((obj)->field[i]), VIMAG((obj)->field[i]));       \
     }                                                                                    \
     fprintf((fp), "\n");                                                                 \
   } while (0)

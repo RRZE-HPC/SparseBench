@@ -337,8 +337,8 @@ void GMatrixPrint_impl(GMatrix *m, FILE *fptr)
           "%u\t%u\t%g+%gi\n",
           row + m->startRow,
           m->entries[idx].col,
-          creal(m->entries[idx].val),
-          cimag(m->entries[idx].val));
+          VREAL(m->entries[idx].val),
+          VIMAG(m->entries[idx].val));
 #else
       fprintf(fptr,
           "%u\t%u\t%g\n",
@@ -361,7 +361,7 @@ void dumpVectorToFile(V_ELE *restrict y, CG_UINT numRows, FILE *reportedData)
   fprintf(reportedData, "vec = ");
   for (CG_UINT i = 0; i < numRows; i++) {
 #ifdef USE_COMPLEX
-    fprintf(reportedData, "(%lf+%lfi), ", creal(y[i]), cimag(y[i]));
+    fprintf(reportedData, "(%lf+%lfi), ", VREAL(y[i]), VIMAG(y[i]));
 #else
     fprintf(reportedData, "%lf, ", y[i]);
 #endif
@@ -383,7 +383,7 @@ extern void dumpDMatrix_impl(DMatrix *m, FILE *reportedData)
   fprintf(reportedData, "row order matrix = ");
   for (CG_UINT i = 0; i < m->nr * m->nc; i++) {
 #ifdef USE_COMPLEX
-    fprintf(reportedData, "(%lf+%lfi), ", creal(m->entries[i]), cimag(m->entries[i]));
+    fprintf(reportedData, "(%lf+%lfi), ", VREAL(m->entries[i]), VIMAG(m->entries[i]));
 #else
     fprintf(reportedData, "%lf, ", m->entries[i]);
 #endif

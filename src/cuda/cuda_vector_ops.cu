@@ -43,7 +43,7 @@ __global__ void kernel_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *pa
   CG_UINT tid = threadIdx.x;
   CG_UINT i   = blockIdx.x * blockDim.x + threadIdx.x;
 
-  sdata[tid]  = (i < n) ? x[i] * y[i] : 0.0;
+  sdata[tid]  = (i < n) ? VCONJ(x[i]) * y[i] : VCONST(0, 0);
   __syncthreads();
 
   for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
@@ -71,7 +71,7 @@ extern "C" void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *resul
   GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(Memcpy)(
       h_partial, d_partial, blocks * sizeof(V_ELE), gpuMemcpyDeviceToHost));
 
-  V_ELE sum = 0.0;
+  V_ELE sum = VCONST(0, 0);
   for (int i = 0; i < blocks; i++)
     sum += h_partial[i];
   *result = sum;
@@ -146,7 +146,7 @@ extern "C" void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *
   kernel_ddot<<<blocks, threads, threads * sizeof(V_ELE)>>>(n, x, y, partial);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
 
-  V_ELE sum = 0.0;
+  V_ELE sum = VCONST(0, 0);
   for (int i = 0; i < blocks; i++)
     sum += partial[i];
   *result = sum;
