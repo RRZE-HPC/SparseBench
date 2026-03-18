@@ -9,7 +9,7 @@
 
 #ifdef USE_COMPLEX
 
-#ifdef __NVCC__
+#if defined(__NVCC__) || defined(__HIPCC__)
 /* CUDA C++ compilation context (.cu files compiled by nvcc).
  * thrust::complex<T> has the same memory layout as C99 _Complex
  * and supports the same arithmetic operators in device code. */
@@ -47,7 +47,7 @@
 #define VABS(z) cabs(z)
 #endif
 
-#endif /* __NVCC__ */
+#endif /* __NVCC__ || __HIPCC__ */
 
 #else
 #define V_ELE CG_FLOAT
