@@ -41,9 +41,8 @@ extern "C" void gpu_spmv_crs(CG_UINT numRows,
     const V_ELE *x,
     V_ELE *y)
 {
-  int threads = 256;
-  int blocks  = (numRows + threads - 1) / threads;
-  kernel_spmv_crs<<<blocks, threads>>>(numRows, rowPtr, colInd, val, x, y);
+  int blocks  = (numRows + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+  kernel_spmv_crs<<<blocks, THREADS_PER_BLOCK>>>(numRows, rowPtr, colInd, val, x, y);
 }
 
 /* ------------------------------------------------------------------ */
@@ -80,18 +79,16 @@ __global__ void kernel_spmmv_crs(CG_UINT numRows,
 #ifdef CRS
 extern "C" void gpu_spMVM_nosync(Matrix *m, const V_ELE *x, V_ELE *y)
 {
-  int threads = 256;
-  int blocks  = (m->nr + threads - 1) / threads;
-  kernel_spmv_crs<<<blocks, threads>>>(m->nr, m->rowPtr, m->colInd, m->val, x, y);
+  int blocks  = (m->nr + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+  kernel_spmv_crs<<<blocks, THREADS_PER_BLOCK>>>(m->nr, m->rowPtr, m->colInd, m->val, x, y);
 }
 
 extern "C" void gpu_spMMVM_nosync(Matrix *m, const DMatrix *x, DMatrix *y)
 {
   CG_UINT numVecs = x->nc;
-  int threads_x   = 256;
-  int blocks_x    = (m->nr + threads_x - 1) / threads_x;
+  int blocks_x    = (m->nr + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
   dim3 grid(blocks_x);
-  dim3 block(threads_x, numVecs);
+  dim3 block(THREADS_PER_BLOCK, numVecs);
   kernel_spmmv_crs<<<grid, block>>>(
       m->nr, numVecs, m->rowPtr, m->colInd, m->val, x->entries, y->entries);
 }

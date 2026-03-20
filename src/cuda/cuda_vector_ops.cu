@@ -28,9 +28,8 @@ __global__ void kernel_waxpby(
 extern "C" void gpu_waxpby(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
 {
-  int threads = 256;
-  int blocks  = (n + threads - 1) / threads;
-  kernel_waxpby<<<blocks, threads>>>(n, alpha, x, beta, y, w);
+  int blocks  = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+  kernel_waxpby<<<blocks, THREADS_PER_BLOCK>>>(n, alpha, x, beta, y, w);
 }
 
 /* ------------------------------------------------------------------ */
@@ -38,33 +37,29 @@ extern "C" void gpu_waxpby(
 /* ------------------------------------------------------------------ */
 __global__ void kernel_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *partial)
 {
-  extern __shared__ V_ELE sdata[];
+  using block_reduce = cub::BlockReduce<V_ELE, THREADS_PER_BLOCK>;
+   __shared__ typename block_reduce::TempStorage tempstore;
 
   CG_UINT tid = threadIdx.x;
   CG_UINT i   = blockIdx.x * blockDim.x + threadIdx.x;
 
-  sdata[tid]  = (i < n) ? VCONJ(x[i]) * y[i] : VCONST(0, 0);
-  __syncthreads();
+  const V_ELE thread_data  = (i < n) ? VCONJ(x[i]) * y[i] : VCONST(0, 0);
+  // __syncthreads();
 
-  for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
-    if (tid < s)
-      sdata[tid] += sdata[tid + s];
-    __syncthreads();
-  }
+  auto blocksum = block_reduce(tempstore).Sum(thread_data);
 
   if (tid == 0)
-    partial[blockIdx.x] = sdata[0];
+    partial[blockIdx.x] = blocksum;
 }
 
 extern "C" void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
 {
-  int threads = 256;
-  int blocks  = (n + threads - 1) / threads;
+  int blocks  = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
   V_ELE *d_partial;
   GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(Malloc)(&d_partial, blocks * sizeof(V_ELE)));
 
-  kernel_ddot<<<blocks, threads, threads * sizeof(V_ELE)>>>(n, x, y, d_partial);
+  kernel_ddot<<<blocks, THREADS_PER_BLOCK>>>(n, x, y, d_partial);
 
   /* Final reduction on host (small array) */
   V_ELE *h_partial = (V_ELE *)malloc(blocks * sizeof(V_ELE));
@@ -123,9 +118,8 @@ extern "C" void gpu_free_managed(void *ptr)
 extern "C" void gpu_waxpby_nosync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
 {
-  int threads = 256;
-  int blocks  = (n + threads - 1) / threads;
-  kernel_waxpby<<<blocks, threads>>>(n, alpha, x, beta, y, w);
+  int blocks  = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+  kernel_waxpby<<<blocks, THREADS_PER_BLOCK>>>(n, alpha, x, beta, y, w);
 }
 
 extern "C" void gpu_waxpby_sync(
@@ -137,13 +131,12 @@ extern "C" void gpu_waxpby_sync(
 
 extern "C" void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
 {
-  int threads = 256;
-  int blocks  = (n + threads - 1) / threads;
+  int blocks  = (n + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
   V_ELE *partial;
   GPU_SAFE_CALL(gpuMallocManaged(&partial, blocks * sizeof(V_ELE)));
 
-  kernel_ddot<<<blocks, threads, threads * sizeof(V_ELE)>>>(n, x, y, partial);
+  kernel_ddot<<<blocks, THREADS_PER_BLOCK>>>(n, x, y, partial);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
 
   V_ELE sum = VCONST(0, 0);

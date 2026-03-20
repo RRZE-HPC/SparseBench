@@ -31,10 +31,13 @@
 /* --- Include the right runtime header ----------------------------- */
 #if defined(RUNTIME_BACKEND_IS_CUDA)
 #include <cuda_runtime.h>
+#include <cub/block/block_reduce.cuh>
 #define RUNTIME_BACKEND cuda
 #define ATTRIBUTE_BACKEND cuda
 #elif defined(RUNTIME_BACKEND_IS_HIP)
 #include <hip/hip_runtime.h>
+#include <hipcub/hipcub.hpp>
+namespace cub = hipcub;
 #define RUNTIME_BACKEND hip
 #define ATTRIBUTE_BACKEND hip
 #else
