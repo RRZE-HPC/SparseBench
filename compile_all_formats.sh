@@ -5,8 +5,13 @@
 # Total: 2 × 2 × 2 × 2 = 16 builds
 
 set -e  # Exit on error
-
-TOOLCHAIN="${TOOLCHAIN:-NVCC}"  # Fixed toolchain
+# Check if toolchain argument is provided
+if [ -z "$1" ]; then
+  echo "Error: Toolchain must be passed as the first argument possible (GCC, CLANG, ICX, NVCC, HIP)"
+  echo "Usage: $0 <TOOLCHAIN>"
+  exit 1
+fi
+TOOLCHAIN="${1}"  # Fixed toolchain
 BUILD_DIR="./builds"
 LOG_DIR="./compile_logs"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
