@@ -73,3 +73,7 @@ config.mk
 
 # python files
 __pycache__
+
+
+#compile test logs
+compile_logs

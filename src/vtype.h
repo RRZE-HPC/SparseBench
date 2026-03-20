@@ -17,8 +17,10 @@
 #if PRECISION == 1
 #define V_ELE thrust::complex<float>
 #define VCONST(r, i) thrust::complex<float>((r), (i))
+#define PRECISION_STRING "complex float"
 #else
 #define V_ELE thrust::complex<double>
+#define PRECISION_STRING "complex double"
 #define VCONST(r, i) thrust::complex<double>((r), (i))
 #endif
 #define VCONJ(z) thrust::conj(z)
@@ -33,6 +35,7 @@
 
 #if PRECISION == 1
 #define V_ELE float _Complex
+#define PRECISION_STRING "complex float"
 #define VCONST(r, i) CMPLXF((r), (i))
 #define VCONJ(z) conjf(z)
 #define VREAL(z) crealf(z)
@@ -40,6 +43,7 @@
 #define VABS(z) cabsf(z)
 #else
 #define V_ELE double _Complex
+#define PRECISION_STRING "complex double"
 #define VCONST(r, i) CMPLX((r), (i))
 #define VCONJ(z) conj(z)
 #define VREAL(z) creal(z)
@@ -52,6 +56,12 @@
 #else
 #define V_ELE CG_FLOAT
 #define VCONST(r, i) (r)
+#define VCONJ(z) (z)
+#if PRECISION == 1
+#define PRECISION_STRING "float"
+#else
+#define PRECISION_STRING "double"
+#endif
 #endif /* USE_COMPLEX */
 
 #endif /* __VTYPE_H_ */

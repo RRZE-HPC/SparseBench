@@ -47,11 +47,9 @@
 #if PRECISION == 1
 #define CG_FLOAT float
 #define MPI_FLOAT_TYPE MPI_FLOAT
-#define PRECISION_STRING "single"
 #else
 #define CG_FLOAT double
 #define MPI_FLOAT_TYPE MPI_DOUBLE
-#define PRECISION_STRING "double"
 #endif
 
 extern char *changeFileEnding(char *filename, char *newEnding);

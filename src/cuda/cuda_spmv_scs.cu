@@ -101,6 +101,7 @@ __global__ void kernel_spmmv_scs(CG_UINT nChunks,
 /*  Expects managed-memory pointers (allocated via gpu_allocate_managed) */
 /* ------------------------------------------------------------------ */
 
+#ifdef SCS
 extern "C" void gpu_spMVM_nosync(Matrix *m, const V_ELE *x, V_ELE *y)
 {
   dim3 grid(m->nChunks);
@@ -125,7 +126,6 @@ extern "C" void gpu_spMMVM_nosync(Matrix *m, const DMatrix *x, DMatrix *y)
       y->entries);
 }
 
-#ifdef SCS
 extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
 {
   gpu_spMVM_nosync(m, x, y);
