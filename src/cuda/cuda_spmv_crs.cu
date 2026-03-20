@@ -96,7 +96,6 @@ extern "C" void gpu_spMMVM_nosync(Matrix *m, const DMatrix *x, DMatrix *y)
       m->nr, numVecs, m->rowPtr, m->colInd, m->val, x->entries, y->entries);
 }
 
-#ifdef CRS
 extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
 {
   gpu_spMVM_nosync(m, x, y);
