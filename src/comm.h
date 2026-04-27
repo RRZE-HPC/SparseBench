@@ -5,10 +5,20 @@
 #ifndef __COMM_H_
 #define __COMM_H_
 #include "util.h"
+#include "vtype.h"
 #include <stdio.h>
 #include <stdlib.h>
 #if defined(_MPI)
 #include <mpi.h>
+#ifdef USE_COMPLEX
+#if PRECISION == 1
+#define MPI_V_ELE_TYPE MPI_C_FLOAT_COMPLEX
+#else
+#define MPI_V_ELE_TYPE MPI_C_DOUBLE_COMPLEX
+#endif
+#else
+#define MPI_V_ELE_TYPE MPI_FLOAT_TYPE
+#endif
 #endif
 
 #include "matrix.h"
@@ -39,7 +49,7 @@ typedef struct {
   int *destinations;
   int *sendCounts;
   int *sdispls;
-  CG_FLOAT *sendBuffer;
+  V_ELE *sendBuffer;
   MPI_Comm communicator;
 #endif
 } CommType;
@@ -52,9 +62,10 @@ extern void commPrintConfig(
     CommType *c, CG_UINT nr, CG_UINT nnz, CG_UINT startRow, CG_UINT stopRow);
 extern void commGMatrixDump(CommType *c, GMatrix *m);
 extern void commMatrixDump(CommType *c, Matrix *m);
-extern void commVectorDump(CommType *c, CG_FLOAT *v, CG_UINT size, char *name);
-extern void commExchange(CommType *c, CG_UINT numRows, CG_FLOAT *x);
+extern void commVectorDump(CommType *c, V_ELE *v, CG_UINT size, char *name);
+extern void commExchange(CommType *c, CG_UINT numRows, V_ELE *x);
 extern void commReduction(CG_FLOAT *v, int op);
+extern void commReductionV(V_ELE *v, int op);
 extern void commPrintBanner(CommType *c);
 extern void commAbort(CommType *c, char *msg);
 

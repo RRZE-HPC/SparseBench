@@ -4,6 +4,7 @@
  * license that can be found in the LICENSE file. */
 #include "matrix.h"
 #include "util.h"
+#include "vtype.h"
 #include <limits.h>
 #include <pthread.h>
 #include <sched.h>
@@ -160,8 +161,7 @@ static void buildElementsToSend(CommType *c, int startRow, int *extLocalToGlobal
     c->totalSendCount += c->sendCounts[i];
   }
 
-  c->sendBuffer =
-      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(CG_FLOAT));
+  c->sendBuffer = (V_ELE *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(V_ELE));
   MPI_Request request[c->outdegree];
   c->elementsToSend   = (int *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(int));
   int *elementsToSend = c->elementsToSend;
@@ -251,19 +251,21 @@ static void createMMEntryDatatype(MPI_Datatype *entryType)
 {
   MMEntry dummy;
   MPI_Aint baseAddress;
-  MPI_Aint displ[3];
+  MPI_Aint displ[4];
   MPI_Get_address(&dummy, &baseAddress);
   MPI_Get_address(&dummy.row, &displ[0]);
   MPI_Get_address(&dummy.col, &displ[1]);
   MPI_Get_address(&dummy.val, &displ[2]);
+  MPI_Get_address(&dummy.val_imag, &displ[3]);
 
   displ[0]              = MPI_Aint_diff(displ[0], baseAddress);
   displ[1]              = MPI_Aint_diff(displ[1], baseAddress);
   displ[2]              = MPI_Aint_diff(displ[2], baseAddress);
+  displ[3]              = MPI_Aint_diff(displ[3], baseAddress);
 
-  int blocklengths[3]   = { 1, 1, 1 };
-  MPI_Datatype types[3] = { MPI_INT, MPI_INT, MPI_DOUBLE };
-  MPI_Type_create_struct(3, blocklengths, displ, types, entryType);
+  int blocklengths[4]   = { 1, 1, 1, 1 };
+  MPI_Datatype types[4] = { MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE };
+  MPI_Type_create_struct(4, blocklengths, displ, types, entryType);
   MPI_Type_commit(entryType);
 }
 
@@ -698,6 +700,8 @@ void commDistributeMatrix(CommType *c, MMMatrix *m, MMMatrix *mLocal)
 #else
   mLocal->startRow = 0;
   mLocal->stopRow  = m->nr - 1;
+  mLocal->totalNr  = m->nr;
+  mLocal->totalNnz = m->nnz;
   mLocal->count    = m->count;
   mLocal->nr       = m->nr;
   mLocal->nnz      = m->nnz;
@@ -883,12 +887,12 @@ void commLocalization(CommType *c, GMatrix *m)
 #endif
 }
 
-void commExchange(CommType *c, CG_UINT numRows, CG_FLOAT *x)
+void commExchange(CommType *c, CG_UINT numRows, V_ELE *x)
 {
 #ifdef _MPI
-  CG_FLOAT *sendBuffer = c->sendBuffer;
-  CG_FLOAT *externals  = x + numRows;
-  int *elementsToSend  = c->elementsToSend;
+  V_ELE *sendBuffer   = c->sendBuffer;
+  V_ELE *externals    = x + numRows;
+  int *elementsToSend = c->elementsToSend;
 
 // Copy values for all ranks into send buffer
 #pragma omp parallel for
@@ -899,11 +903,11 @@ void commExchange(CommType *c, CG_UINT numRows, CG_FLOAT *x)
   MPI_Neighbor_alltoallv(sendBuffer,
       c->sendCounts,
       c->sdispls,
-      MPI_FLOAT_TYPE,
+      MPI_V_ELE_TYPE,
       externals,
       c->recvCounts,
       c->rdispls,
-      MPI_FLOAT_TYPE,
+      MPI_V_ELE_TYPE,
       c->communicator);
 
 #endif
@@ -916,6 +920,15 @@ void commReduction(CG_FLOAT *v, int op)
     MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_FLOAT_TYPE, MPI_MAX, MPI_COMM_WORLD);
   } else if (op == SUM) {
     MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_FLOAT_TYPE, MPI_SUM, MPI_COMM_WORLD);
+  }
+#endif
+}
+
+void commReductionV(V_ELE *v, int op)
+{
+#ifdef _MPI
+  if (op == SUM) {
+    MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_V_ELE_TYPE, MPI_SUM, MPI_COMM_WORLD);
   }
 #endif
 }
@@ -975,7 +988,7 @@ void commMatrixDump(CommType *c, Matrix *m)
   CG_UINT numRows = m->nr;
   CG_UINT *rowPtr = m->rowPtr;
   CG_UINT *colInd = m->colInd;
-  CG_FLOAT *val   = m->val;
+  V_ELE *val      = m->val;
 
   if (commIsMaster(c)) {
     printf("Matrix: %d total non zeroes, total number of rows %d\n",
@@ -992,7 +1005,14 @@ void commMatrixDump(CommType *c, Matrix *m)
 
         for (int rowEntry = (int)rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
             rowEntry++) {
+#ifdef USE_COMPLEX
+          printf("[%d]:(%.2f+%.2fi) ",
+              colInd[rowEntry],
+              VREAL(val[rowEntry]),
+              VIMAG(val[rowEntry]));
+#else
           printf("[%d]:%.2f ", colInd[rowEntry], val[rowEntry]);
+#endif
         }
 
         printf("\n");
@@ -1049,19 +1069,27 @@ void commMatrixDump(CommType *c, Matrix *m)
   printf("\n");
   printf("val: ");
   for (int i = 0; i < m->nElems; ++i) {
+#ifdef USE_COMPLEX
+    printf("(%f+%fi), ", VREAL(m->val[i]), VIMAG(m->val[i]));
+#else
     printf("%f, ", m->val[i]);
+#endif
   }
   printf("\n");
 #endif /* ifdef SCS */
 }
 
-void commVectorDump(CommType *c, CG_FLOAT *v, CG_UINT size, char *name)
+void commVectorDump(CommType *c, V_ELE *v, CG_UINT size, char *name)
 {
   for (int i = 0; i < c->size; i++) {
     if (i == c->rank) {
       FPRINTF(c->logFile, "Vector %s Rank %d of %d\n", name, c->rank, c->size);
       for (int j = 0; j < size; j++) {
+#ifdef USE_COMPLEX
+        FPRINTF(c->logFile, "\telement[%d] %f + %fi\n", j, VREAL(v[j]), VIMAG(v[j]));
+#else
         FPRINTF(c->logFile, "\telement[%d] %f\n", j, v[j]);
+#endif
       }
     }
 #ifdef _MPI
@@ -1096,7 +1124,15 @@ void commGMatrixDump(CommType *c, GMatrix *m)
 
         for (int rowEntry = (int)rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
             rowEntry++) {
+#ifdef USE_COMPLEX
+          FPRINTF(c->logFile,
+              "[%d]:(%.2f+%.2fi) ",
+              entries[rowEntry].col,
+              VREAL(entries[rowEntry].val),
+              VIMAG(entries[rowEntry].val));
+#else
           FPRINTF(c->logFile, "[%d]:%.2f ", entries[rowEntry].col, entries[rowEntry].val);
+#endif
         }
 
         FPRINTF(c->logFile, "\n");

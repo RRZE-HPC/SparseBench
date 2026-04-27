@@ -6,6 +6,7 @@
 #include "comm.h"
 #include "likwid-marker.h"
 #include "util.h"
+#include "vtype.h"
 #include <stddef.h>
 
 typedef struct {
@@ -17,10 +18,11 @@ typedef struct {
 double T[NUMREGIONS];
 
 static WorkType Regions[NUMREGIONS] = {
-  { "waxpby:  ", 3, 6 },
-  { "spMVM:   ", 0, 2 },
-  { "ddot:    ", 2, 4 },
-  { "comm:    ", 0, 0 }
+  { "waxpby:  ",  3, 6 },
+  { "spMVM:   ",  0, 2 },
+  { "spMMVM:   ", 5, 2 },
+  { "ddot:    ",  2, 4 },
+  { "comm:    ",  0, 0 }
 };
 
 void profilerInit(size_t *facFlops, size_t *facWords)
@@ -30,6 +32,7 @@ void profilerInit(size_t *facFlops, size_t *facWords)
   {
     LIKWID_MARKER_REGISTER("WAXPBY");
     LIKWID_MARKER_REGISTER("SPMVM");
+    LIKWID_MARKER_REGISTER("SPMMVM");
     LIKWID_MARKER_REGISTER("DDOT");
     LIKWID_MARKER_REGISTER("COMM");
   }
@@ -43,7 +46,7 @@ void profilerInit(size_t *facFlops, size_t *facWords)
   Regions[SPMVM].words = facWords[SPMVM];
 }
 
-void profilerPrint(CommType *c, int iterations)
+void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
 {
 
   if (c->size > 1) {
@@ -77,7 +80,8 @@ void profilerPrint(CommType *c, int iterations)
     if (commIsMaster(c)) {
       printf(HLINE);
       printf("Function   avg MB/s  avg MFlop/s  Walltime(s) min, max, avg\n");
-      for (int j = 0; j < NUMREGIONS - 1; j++) {
+      for (int s = 0; s < numSeq; s++) {
+        int j        = seq[s];
         double bytes = (double)Regions[j].words * iterations;
         double flops = (double)Regions[j].flops * iterations;
 
@@ -114,15 +118,16 @@ void profilerPrint(CommType *c, int iterations)
   } else {
     printf(HLINE);
     printf("Function   Rate(MB/s)  Rate(MFlop/s)  Walltime(s)\n");
-    for (int j = 0; j < NUMREGIONS - 1; j++) {
-      double bytes = (double)Regions[j].words * iterations;
-      double flops = (double)Regions[j].flops * iterations;
+    for (int j = 0; j < numSeq; j++) {
+      int id       = seq[j];
+      double bytes = (double)Regions[id].words * iterations;
+      double flops = (double)Regions[id].flops * iterations;
 
       printf("%s%11.2f %11.2f %11.2f\n",
-          Regions[j].label,
-          1.0E-06 * bytes / T[j],
-          1.0E-06 * flops / T[j],
-          T[j]);
+          Regions[id].label,
+          1.0E-06 * bytes / T[id],
+          1.0E-06 * flops / T[id],
+          T[id]);
     }
     printf(HLINE);
   }

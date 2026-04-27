@@ -14,9 +14,13 @@
 #include "profiler.h"
 #include "solver.h"
 #include "timing.h"
-#include "util.h"
+#include "vtype.h"
 
-static void initVectors(Matrix *m, CG_FLOAT *x, CG_FLOAT *b, CG_FLOAT *xexact)
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+#include "cuda/cuda_kernels.h"
+#endif
+
+static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
 {
 #ifdef CRS
   CG_UINT numRows = m->nr;
@@ -34,21 +38,64 @@ static void initVectors(Matrix *m, CG_FLOAT *x, CG_FLOAT *b, CG_FLOAT *xexact)
       b[rowID] = 1.0;
     }
   }
+#elif SCS
+  CG_UINT numRows       = m->nr;
+  CG_UINT C             = m->C;
+  CG_UINT *chunkPtr     = m->chunkPtr;
+  CG_UINT *chunkLens    = m->chunkLens;
+  CG_UINT *colInd       = m->colInd;
+  V_ELE *val            = m->val;
+  CG_UINT *oldToNewPerm = m->oldToNewPerm;
+
+  for (int rowID = 0; rowID < numRows; rowID++) {
+    x[rowID] = 0.0;
+
+    // Map original row to new row position in SCS format
+    CG_UINT newRow     = oldToNewPerm[rowID];
+    CG_UINT chunkIdx   = newRow / C;
+    CG_UINT chunkRow   = newRow % C;
+    CG_UINT chunkStart = chunkPtr[chunkIdx];
+    CG_UINT rowLen     = chunkLens[chunkIdx];
+
+    // Count actual non-zero values in this row
+    int nnzrow = 0;
+    for (CG_UINT j = 0; j < rowLen; ++j) {
+      CG_UINT idx = chunkStart + j * C + chunkRow;
+#ifdef USE_COMPLEX
+      if (VREAL(val[idx]) != 0.0 || VIMAG(val[idx]) != 0.0) {
+#else
+      if (val[idx] != 0.0) {
+#endif
+        nnzrow++;
+      }
+    }
+
+    if (xexact != NULL) {
+      b[rowID]      = 27.0 - ((CG_FLOAT)(nnzrow - 1));
+      xexact[rowID] = 1.0;
+    } else {
+      b[rowID] = 1.0;
+    }
+  }
 #endif
 }
 
-void solverCheckResidual(CommType *c, CG_FLOAT *x, CG_FLOAT *xexact, CG_UINT n)
+void solverCheckResidual(CommType *c, V_ELE *x, V_ELE *xexact, CG_UINT n)
 {
   if (xexact == NULL) {
     return;
   }
 
   CG_FLOAT residual = 0.0;
-  CG_FLOAT *v1      = x;
-  CG_FLOAT *v2      = xexact;
+  V_ELE *v1         = x;
+  V_ELE *v2         = xexact;
 
   for (int i = 0; i < n; i++) {
+#ifdef USE_COMPLEX
+    double diff = VABS(v1[i] - v2[i]);
+#else
     double diff = fabs(v1[i] - v2[i]);
+#endif
     if (diff > residual)
       residual = diff;
   }
@@ -62,28 +109,57 @@ void solverCheckResidual(CommType *c, CG_FLOAT *x, CG_FLOAT *xexact, CG_UINT n)
 
 int solveCG(CommType *comm, Parameter *param, Matrix *A)
 {
-  CG_FLOAT eps     = (CG_FLOAT)param->eps;
-  int itermax      = param->itermax;
+  CG_FLOAT eps      = (CG_FLOAT)param->eps;
+  int itermax       = param->itermax;
 
-  CG_UINT nrow     = A->nr;
-  CG_UINT ncol     = A->nc;
-  CG_FLOAT *r      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *p      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, ncol * sizeof(CG_FLOAT));
-  CG_FLOAT *Ap     = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *x      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *b      = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
-  CG_FLOAT *xexact = NULL;
+  CG_UINT nrow_base = A->nr;
+  CG_UINT ncol_base = A->nc;
+  V_ELE *r_base     = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *p_base     = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol_base * sizeof(V_ELE));
+#ifdef SCS
+  V_ELE *Ap_base = (V_ELE *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(V_ELE));
+#else
+  V_ELE *Ap_base = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+#endif
+  V_ELE *x_base      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *b_base      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+  V_ELE *xexact_base = NULL;
 
   if (strcmp(param->filename, "generate") == 0 ||
       strcmp(param->filename, "generate7P") == 0) {
-    xexact = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(CG_FLOAT));
+    xexact_base = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
   }
-  initVectors(A, x, b, xexact);
+
+  initVectors(A, x_base, b_base, xexact_base);
+
+  // Permute colInd and vectors to SCS ordering so no per-iteration
+  // permute_vector is needed inside the CG loop.
+#ifdef SCS
+  CG_UINT *oldToNewPerm = A->oldToNewPerm;
+  CG_UINT *newToOldPerm = A->newToOldPerm;
+  CG_UINT *colInd_scs   = A->colInd;
+  CG_UINT nElems_scs    = A->nElems;
+
+  // Permute b, x (and xexact) from original to SCS ordering
+  V_ELE *perm_tmp = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow_base * sizeof(V_ELE));
+
+  permute_vector(oldToNewPerm, b_base, perm_tmp, nrow_base);
+  memcpy(b_base, perm_tmp, nrow_base * sizeof(V_ELE));
+
+  permute_vector(oldToNewPerm, x_base, perm_tmp, nrow_base);
+  memcpy(x_base, perm_tmp, nrow_base * sizeof(V_ELE));
+
+  if (xexact_base != NULL) {
+    permute_vector(oldToNewPerm, xexact_base, perm_tmp, nrow_base);
+    memcpy(xexact_base, perm_tmp, nrow_base * sizeof(V_ELE));
+  }
+#endif
 
   CG_FLOAT normr  = 0.0;
-  CG_FLOAT rtrans = 0.0, oldrtrans = 0.0;
+  V_ELE rtrans    = 0.0;
+  V_ELE oldrtrans = 0.0;
 
-  int printFreq = itermax / 10;
+  int printFreq   = itermax / 10;
   if (printFreq > 50) {
     printFreq = 50;
   }
@@ -92,13 +168,35 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
   double timeStart, timeStop, ts;
 
+  CG_UINT nrow  = nrow_base;
+  V_ELE *r      = r_base;
+  V_ELE *p      = p_base;
+  V_ELE *Ap     = Ap_base;
+  V_ELE *x      = x_base;
+  V_ELE *b      = b_base;
+  V_ELE *xexact = xexact_base;
+
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, x, 0.0, x, p));
+  PROFILE(COMM, commExchange(comm, A->nr, p));
+
+  PROFILE(SPMVM, gpu_spMVM(A, p, Ap));
+  PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, b, -1.0, Ap, r));
+  PROFILE(DDOT, gpu_ddot_sync(nrow, r, r, &rtrans));
+#else
   PROFILE(WAXPBY, waxpby(nrow, 1.0, x, 0.0, x, p));
   PROFILE(COMM, commExchange(comm, A->nr, p));
+
   PROFILE(SPMVM, spMVM(A, p, Ap));
   PROFILE(WAXPBY, waxpby(nrow, 1.0, b, -1.0, Ap, r));
   PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
+#endif
 
+#ifdef USE_COMPLEX
+  normr = sqrt(VREAL(rtrans));
+#else
   normr = sqrt(rtrans);
+#endif
   if (commIsMaster(comm)) {
     printf("Initial Residual = %E\n", normr);
   }
@@ -107,26 +205,52 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   timeStart = getTimeStamp();
   for (k = 1; k < itermax && normr > eps; k++) {
     if (k == 1) {
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+      PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, r, 0.0, r, p));
+#else
       PROFILE(WAXPBY, waxpby(nrow, 1.0, r, 0.0, r, p));
+#endif
     } else {
       oldrtrans = rtrans;
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+      PROFILE(DDOT, gpu_ddot_sync(nrow, r, r, &rtrans));
+      V_ELE beta = rtrans / oldrtrans;
+      PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, r, beta, p, p));
+#else
       PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
-      double beta = rtrans / oldrtrans;
+      V_ELE beta = rtrans / oldrtrans;
       PROFILE(WAXPBY, waxpby(nrow, 1.0, r, beta, p, p));
+#endif
     }
+#ifdef USE_COMPLEX
+    normr = sqrt(VREAL(rtrans));
+#else
     normr = sqrt(rtrans);
+#endif
 
     if (commIsMaster(comm) && (k % printFreq == 0 || k + 1 == itermax)) {
       printf("Iteration = %d Residual = %E\n", k, normr);
     }
 
     PROFILE(COMM, commExchange(comm, A->nr, p));
+
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+    PROFILE(SPMVM, gpu_spMVM(A, p, Ap));
+
+    V_ELE alpha = 0.0;
+    PROFILE(DDOT, gpu_ddot_sync(nrow, p, Ap, &alpha));
+    alpha = rtrans / alpha;
+    PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, x, alpha, p, x));
+    PROFILE(WAXPBY, gpu_waxpby_sync(nrow, 1.0, r, -alpha, Ap, r));
+#else
     PROFILE(SPMVM, spMVM(A, p, Ap));
-    CG_FLOAT alpha = 0.0;
+
+    V_ELE alpha = 0.0;
     PROFILE(DDOT, ddot(nrow, p, Ap, &alpha));
     alpha = rtrans / alpha;
     PROFILE(WAXPBY, waxpby(nrow, 1.0, x, alpha, p, x));
     PROFILE(WAXPBY, waxpby(nrow, 1.0, r, -alpha, Ap, r));
+#endif
   }
   timeStop = getTimeStamp();
 
@@ -134,7 +258,17 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     printf("Solution performed %d iterations and took %.2fs\n", k, timeStop - timeStart);
   }
 
-  solverCheckResidual(comm, x, xexact, A->nr);
+#ifdef SCS
+
+  permute_vector(newToOldPerm, x, perm_tmp, nrow);
+  memcpy(x, perm_tmp, nrow * sizeof(V_ELE));
+
+  if (xexact != NULL) {
+    permute_vector(newToOldPerm, xexact, perm_tmp, nrow);
+    memcpy(xexact, perm_tmp, nrow * sizeof(V_ELE));
+  }
+  deallocate(perm_tmp);
+#endif
 
   return k;
 }

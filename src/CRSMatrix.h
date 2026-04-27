@@ -5,6 +5,7 @@
 #ifndef __CRSMATRIX_H_
 #define __CRSMATRIX_H_
 #include "util.h"
+#include "vtype.h"
 
 typedef struct {
   CG_UINT nr, nc, nnz; // number of rows, columns and non zeros
@@ -12,7 +13,7 @@ typedef struct {
   CG_UINT startRow, stopRow; // range of rows owned by current rank
   CG_UINT *rowPtr; // row Pointer
   CG_UINT *colInd; // colum Indices
-  CG_FLOAT *val; // matrix entries
+  V_ELE *val; // matrix entries
 } Matrix;
 
 #endif // __CRSMATRIX_H_

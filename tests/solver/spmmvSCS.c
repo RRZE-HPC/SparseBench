@@ -20,7 +20,14 @@
 #include "../../src/cuda/cuda_kernels.h"
 #endif
 
-int test_spmvSCS(void *args, const char *dataDir)
+void swap_DMatrix(DMatrix *x_perm, DMatrix *y_perm)
+{
+  DMatrix tmp = *x_perm;
+  *x_perm     = *y_perm;
+  *y_perm     = tmp;
+}
+
+int test_spmmvSCS(void *args, const char *dataDir)
 {
 
   int rank           = 0;
@@ -37,6 +44,8 @@ int test_spmvSCS(void *args, const char *dataDir)
     return 1;
   }
 
+  const int test_blockwidth = 3;
+
   // Read the directory entries
   struct dirent *entry;
   while ((entry = readdir(dir)) != NULL) {
@@ -49,7 +58,6 @@ int test_spmvSCS(void *args, const char *dataDir)
 
       Matrix A;
       Args *arguments         = (Args *)args;
-      int repeat_count        = arguments->run_count;
       char C_str[STR_LEN]     = "";
       char sigma_str[STR_LEN] = "";
 #ifdef SCS
@@ -58,6 +66,7 @@ int test_spmvSCS(void *args, const char *dataDir)
 #endif
       sprintf(C_str, "%d", arguments->C);
       sprintf(sigma_str, "%d", arguments->sigma);
+      int repeat_count = arguments->run_count;
 
       // String preprocessing
       FORMAT_AND_STRIP_VECTOR_FILE(entry)
@@ -66,7 +75,7 @@ int test_spmvSCS(void *args, const char *dataDir)
       char *pathToExpectedData = malloc(STR_LEN);
 
       char in_file_name[64];
-      snprintf(in_file_name, sizeof(in_file_name), "_spmv_x_%d.in", repeat_count);
+      snprintf(in_file_name, sizeof(in_file_name), "_spmmv_x_%d.in", repeat_count);
 
       BUILD_VECTOR_FILE_PATH(entry, "expected/", in_file_name, pathToExpectedData);
 
@@ -104,65 +113,76 @@ int test_spmvSCS(void *args, const char *dataDir)
         VALIDATE_MATRIX_FORMAT(matrixFormat);
         // A.matrixFormat = matrixFormat;
 
-        CG_FLOAT *x =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
-        CG_FLOAT *y =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+        // Use vectorSize (= nrPadded for SCS) so dimensions match
+        // permute_DMatrix requires src.nr == dst.nr
+        DMatrix x = { .nr = A.nc, .nc = test_blockwidth, .entries = NULL };
+        DMatrix y = { .nr = A.nr, .nc = test_blockwidth, .entries = NULL };
 
-        // Fix x = 1 for now
-        for (int i = 0; i < vectorSize; ++i) {
-          x[i] = (CG_FLOAT)1.0;
-          y[i] = (CG_FLOAT)0.0;
+        x.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(CG_FLOAT));
+        y.entries = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(CG_FLOAT));
+
+        // Initialize x: sequential values for real entries, 0 for padding
+        for (int i = 0; i < (x.nr * x.nc); ++i) {
+          x.entries[i] = (CG_FLOAT)i;
+        }
+        for (int i = 0; i < (y.nr * y.nc); ++i) {
+          y.entries[i] = (CG_FLOAT)0.0;
         }
 
+// NOTE : since we switch the vectors around mkaing them bigger is necessary to
+// prevent accesssing garbage data
 #ifdef SCS
+        DMatrix x_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
+        DMatrix y_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
 
-        CG_FLOAT *x_perm =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
-        CG_FLOAT *y_perm =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+        x_perm.entries = (CG_FLOAT *)allocate(
+            ARRAY_ALIGNMENT, x_perm.nr * x_perm.nc * sizeof(CG_FLOAT));
+        y_perm.entries = (CG_FLOAT *)allocate(
+            ARRAY_ALIGNMENT, y_perm.nr * y_perm.nc * sizeof(CG_FLOAT));
 
-        // Permute x into SCS ordering once (colInd already remapped)
-        permute_vector(A.oldToNewPerm, x, x_perm, A.nr);
+        // Zero-fill permuted vectors (essential for padded rows)
+        for (int i = 0; i < (x_perm.nr * x_perm.nc); ++i)
+          x_perm.entries[i] = (CG_FLOAT)0.0;
+        for (int i = 0; i < (y_perm.nr * y_perm.nc); ++i)
+          y_perm.entries[i] = (CG_FLOAT)0.0;
 
+        // Forward permutation: scatter x into SCS ordering
+        permute_DMatrix(A.oldToNewPerm, &x, &x_perm);
         for (size_t i = 0; i < repeat_count; i++) {
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-          gpu_spMVM(&A, x_perm, y_perm);
+          gpu_spMMVM(&A, &x_perm, &y_perm);
 #else
-          spMVM(&A, x_perm, y_perm);
+          spMMVM(&A, &x_perm, &y_perm);
 #endif
           if (i < repeat_count - 1) {
-            swap_ptrs(&x_perm, &y_perm);
+            swap_DMatrix(&x_perm, &y_perm);
           }
         }
-
-        // Unpermute y back to original ordering
-        permute_vector(A.newToOldPerm, y_perm, y, A.nr);
+        // Inverse permutation: gather y from SCS ordering back to original
+        permute_DMatrix(A.newToOldPerm, &y_perm, &y);
 #else
-
         for (size_t i = 0; i < repeat_count; i++) {
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-          gpu_spMVM(&A, x, y);
+          gpu_spMMVM(&A, &x, &y);
 #else
-          spMVM(&A, x, y);
+          spMMVM(&A, &x, &y);
 #endif
           if (i < repeat_count - 1) {
-            swap_ptrs(&x, &y);
+            swap_DMatrix(&x, &y);
           }
         }
 #endif
-
         // Dump to this external file
         char *pathToReportedData = malloc(STR_LEN);
         char out_file_name[64];
-        snprintf(out_file_name, sizeof(out_file_name), "_spmv_x_%d.out", repeat_count);
+        snprintf(out_file_name, sizeof(out_file_name), "_spmmv_x_%d.out", repeat_count);
         BUILD_MATRIX_FILE_PATH(
             entry, "reported/", out_file_name, C_str, sigma_str, pathToReportedData);
         FILE *reportedData = fopen(pathToReportedData, "w");
 
         printf("pathToReportedData = %s\n", pathToReportedData);
 
-        dumpVectorToFile(y, A.nr, reportedData);
+        dumpDMatrix_impl(&y, reportedData);
         fclose(reportedData);
 
         // If the expect and reported data differ in some way
@@ -170,15 +190,15 @@ int test_spmvSCS(void *args, const char *dataDir)
 
         // Free per-iteration allocations
         free(matrixFormat);
-
-        deallocate(x);
-        deallocate(y);
-#ifdef SCS
-        deallocate(x_perm);
-        deallocate(y_perm);
-#endif
         free(pathToReportedData);
 
+        deallocate(x.entries);
+        deallocate(y.entries);
+
+#ifdef SCS
+        deallocate(x_perm.entries);
+        deallocate(y_perm.entries);
+#endif
         if (diff_result) {
           fclose(fptr);
           free(pathToExpectedData);

@@ -19,6 +19,7 @@
 #include "solver.h"
 #include "timing.h"
 #include "util.h"
+#include "vtype.h"
 
 static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
 {
@@ -64,6 +65,9 @@ int main(int argc, char **argv)
   initParameter(&param);
   parseArguments(&comm, &param, argc, argv);
   commPrintBanner(&comm);
+  if (param.verbose > 0 && commIsMaster(&comm)) {
+    printParameter(&param);
+  }
 
   double ts;
   GMatrix m;
@@ -78,6 +82,10 @@ int main(int argc, char **argv)
   commLocalization(&comm, &m);
 
   Matrix sm;
+#if SCS
+  sm.C     = param.C;
+  sm.sigma = param.Sigma;
+#endif
   convertMatrix(&sm, &m);
   commBarrier();
   timeStop = getTimeStamp();
@@ -89,50 +97,96 @@ int main(int argc, char **argv)
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
 
+  // TODO : update the flops based on V_ELE type
   factorFlops[DDOT]   = m.totalNr;
   factorWords[DDOT]   = 3 * sizeof(CG_FLOAT) * m.totalNr / 2;
   factorFlops[WAXPBY] = m.totalNr;
   factorWords[WAXPBY] = 3 * sizeof(CG_FLOAT) * m.totalNr;
   factorFlops[SPMVM]  = m.totalNnz;
   factorWords[SPMVM]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
+  factorFlops[SPMMVM] = factorFlops[SPMVM] * param.blockwidth;
+  factorWords[SPMMVM] = factorWords[SPMVM] * param.blockwidth;
 
   profilerInit(factorFlops, factorWords);
+  int numSeq = 0;
+  int *seq   = NULL;
 
-  int k = 0;
+  int k      = 0;
   switch (BenchType) {
   case CG:
+    numSeq       = 3;
+    int seqCg[3] = { DDOT, WAXPBY, SPMVM };
+    seq          = seqCg;
     if (commIsMaster(&comm)) {
       printf("Test type: CG\n");
     }
     k = solveCG(&comm, &param, &sm);
     break;
   case SPMV:
+    numSeq          = 1;
+    int secSpmvm[1] = { SPMVM };
+    seq             = secSpmvm;
     if (commIsMaster(&comm)) {
       printf("Test type: SPMVM\n");
     }
     const int itermax = param.itermax;
-    CG_FLOAT *x       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(CG_FLOAT));
-    CG_FLOAT *y       = (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(CG_FLOAT));
+    V_ELE *x          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(V_ELE));
+    V_ELE *y          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(V_ELE));
 
     for (int i = 0; i < m.nr; i++) {
-      x[i] = (CG_FLOAT)1.0;
-      y[i] = (CG_FLOAT)1.0;
+      x[i] = 1.0;
+      y[i] = 1.0;
     }
 
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMVM, spMVM(&sm, x, y));
     }
     break;
+
+  case SPMMV: {
+    numSeq          = 1;
+    int secSpmmv[1] = { SPMMVM };
+    seq             = secSpmmv;
+    if (commIsMaster(&comm)) {
+      printf("Test type: SPMMVM\n");
+    }
+    int itermax = param.itermax;
+    DMatrix x   = { .nr = sm.nc, .nc = param.blockwidth, .entries = NULL };
+    DMatrix y   = { .nr = sm.nr, .nc = param.blockwidth, .entries = NULL };
+    x.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(V_ELE));
+    y.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(V_ELE));
+
+    for (int i = 0; i < x.nr * x.nc; i++) {
+      x.entries[i] = 1.0;
+    }
+    for (int i = 0; i < y.nr * y.nc; i++) {
+      y.entries[i] = 0.0;
+    }
+
+    for (k = 1; k < itermax; k++) {
+      PROFILE(SPMMVM, spMMVM(&sm, &x, &y));
+    }
+  } break;
+
   case GMRES:
     if (commIsMaster(&comm)) {
       printf("Test type: GMRES\n");
+      printf("GMRES not implemented yet\n");
     }
+    commAbort(&comm, "GMRES not implemented yet\n");
+    break;
 
+  case CHEBFD:
+    if (commIsMaster(&comm)) {
+      printf("Test type: CHEBFD\n");
+      printf("CHEBFD not implemented yet\n");
+    }
+    commAbort(&comm, "CHEBFD not implemented yet\n");
     break;
   default:;
   }
 
-  profilerPrint(&comm, k);
+  profilerPrint(&comm, seq, numSeq, k);
   profilerFinalize();
   commFinalize(&comm);
 

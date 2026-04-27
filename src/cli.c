@@ -39,10 +39,9 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
   int index;
   bool stop = false;
   int c;
-
   opterr = 0;
 
-  while ((c = getopt(argc, argv, "hc:t:f:m:x:y:z:i:e:")) != -1) {
+  while ((c = getopt(argc, argv, BASE_ARGS)) != -1) {
     switch (c) {
     case 'h':
       if (commIsMaster(comm)) {
@@ -69,6 +68,8 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
         BenchType = CG;
       } else if (strcmp(optarg, "spmv") == 0) {
         BenchType = SPMV;
+      } else if (strcmp(optarg, "spmmv") == 0) {
+        BenchType = SPMMV;
       } else if (strcmp(optarg, "gmres") == 0) {
         BenchType = GMRES;
       } else if (strcmp(optarg, "cheb") == 0) {
@@ -93,6 +94,20 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
     case 'e':
       param->eps = strtod(optarg, NULL);
       break;
+    case 'w':
+      param->blockwidth = (int)strtol(optarg, NULL, INT_BASE);
+      break;
+    case 'v':
+      param->verbose = (int)strtol(optarg, NULL, INT_BASE);
+      break;
+#ifdef SCS
+    case 'k':
+      param->C = (int)strtol(optarg, NULL, INT_BASE);
+      break;
+    case 's':
+      param->Sigma = (int)strtol(optarg, NULL, INT_BASE);
+      break;
+#endif
     case '?':
       if (optopt == 'c') {
         FPRINTF(stderr, "Option -%c requires an argument.\n", optopt);
