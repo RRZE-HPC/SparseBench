@@ -27,7 +27,7 @@ void initParameter(Parameter *param)
 
 void readParameter(Parameter *param, const char *filename)
 {
-  FILE *fp = fopen(filename, "r");
+  FILE *fp = fopen(filename, "re");
   char line[MAXLINE];
   int i;
 

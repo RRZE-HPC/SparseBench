@@ -1,7 +1,7 @@
 # Supported: GCC, CLANG, ICX, NVCC, HIP
-TOOLCHAIN ?= NVCC
+TOOLCHAIN ?= CLANG
 # Supported CRS, SCS, CCRS
-MTX_FMT ?= SCS
+MTX_FMT ?= CRS
 ENABLE_MPI ?= false
 ENABLE_OPENMP ?= false
 FLOAT_TYPE ?= DP # SP for float, DP for double
