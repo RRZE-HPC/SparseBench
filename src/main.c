@@ -104,8 +104,8 @@ int main(int argc, char **argv)
   factorWords[WAXPBY] = 3 * sizeof(CG_FLOAT) * m.totalNr;
   factorFlops[SPMVM]  = m.totalNnz;
   factorWords[SPMVM]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
-  factorFlops[SPMMV]  = factorFlops[SPMVM] * param.blockwidth;
-  factorWords[SPMMV]  = factorWords[SPMVM] * param.blockwidth;
+  factorFlops[SPMMVM] = factorFlops[SPMVM] * param.blockwidth;
+  factorWords[SPMMVM] = factorWords[SPMVM] * param.blockwidth;
 
   profilerInit(factorFlops, factorWords);
   int numSeq = 0;
@@ -124,7 +124,7 @@ int main(int argc, char **argv)
     break;
   case SPMV:
     numSeq          = 1;
-    int secSpmvm[1] = { SPMV };
+    int secSpmvm[1] = { SPMVM };
     seq             = secSpmvm;
     if (commIsMaster(&comm)) {
       printf("Test type: SPMVM\n");
@@ -145,7 +145,7 @@ int main(int argc, char **argv)
 
   case SPMMV: {
     numSeq          = 1;
-    int secSpmmv[1] = { SPMMV };
+    int secSpmmv[1] = { SPMMVM };
     seq             = secSpmmv;
     if (commIsMaster(&comm)) {
       printf("Test type: SPMMVM\n");

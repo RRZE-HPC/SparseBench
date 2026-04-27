@@ -80,7 +80,8 @@ void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
     if (commIsMaster(c)) {
       printf(HLINE);
       printf("Function   avg MB/s  avg MFlop/s  Walltime(s) min, max, avg\n");
-      for (int j = 0; j < NUMREGIONS - 1; j++) {
+      for (int s = 0; s < numSeq; s++) {
+        int j        = seq[s];
         double bytes = (double)Regions[j].words * iterations;
         double flops = (double)Regions[j].flops * iterations;
 
