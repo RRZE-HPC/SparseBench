@@ -17,6 +17,7 @@ typedef struct {
 
 double T[NUMREGIONS];
 
+//NOTE: this is currently for every benchmark iterations!
 static WorkType Regions[NUMREGIONS] = {
   { "waxpby:  ",  3, 6 },
   { "spMVM:   ",  0, 2 },
