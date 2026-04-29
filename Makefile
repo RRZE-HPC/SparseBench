@@ -25,6 +25,7 @@ $(error Stopping after creating config.mk - please review and run make again)
 endif
 include config.mk
 include $(MAKE_DIR)/include_$(TOOLCHAIN).mk
+include $(MAKE_DIR)/include_LIKWID.mk
 INCLUDES  += -I$(SRC_DIR)/includes -I$(BUILD_DIR)
 
 VPATH     = $(SRC_DIR)
