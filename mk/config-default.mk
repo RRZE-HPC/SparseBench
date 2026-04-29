@@ -2,7 +2,12 @@
 TOOLCHAIN ?= CLANG
 # Supported CRS, SCS, CCRS
 MTX_FMT ?= CRS
+# Enable LIKWID instrumentation (true or false)
+ENABLE_LIKWID ?= false
+# Enable MPI parallelization (true or false)
 ENABLE_MPI ?= false
+# Enable OpenMP shared memory parallelization (true or false)
+# Can be combined with MPI
 ENABLE_OPENMP ?= false
 FLOAT_TYPE ?= DP # SP for float, DP for double
 UINT_TYPE ?= U # U for unsigned int, ULL for unsigned long long int
