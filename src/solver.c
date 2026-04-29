@@ -22,17 +22,17 @@ void waxpby(const CG_UINT n,
     V_ELE *const w)
 {
   if (alpha == 1.0) {
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(OMP_SCHEDULE)
     for (int i = 0; i < n; i++) {
       w[i] = x[i] + beta * y[i];
     }
   } else if (beta == 1.0) {
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(OMP_SCHEDULE)
     for (int i = 0; i < n; i++) {
       w[i] = alpha * x[i] + y[i];
     }
   } else {
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(OMP_SCHEDULE)
     for (int i = 0; i < n; i++) {
       w[i] = alpha * x[i] + beta * y[i];
     }
@@ -48,24 +48,24 @@ void ddot(const CG_UINT n,
 
 #ifdef USE_COMPLEX
   if (y == x) {
-#pragma omp parallel for reduction(+ : sum) schedule(static)
+#pragma omp parallel for reduction(+ : sum) schedule(OMP_SCHEDULE)
     for (int i = 0; i < n; i++) {
       sum += VCONJ(x[i]) * x[i];
     }
   } else {
-#pragma omp parallel for reduction(+ : sum) schedule(static)
+#pragma omp parallel for reduction(+ : sum) schedule(OMP_SCHEDULE)
     for (int i = 0; i < n; i++) {
       sum += VCONJ(x[i]) * y[i];
     }
   }
 #else
   if (y == x) {
-#pragma omp parallel for reduction(+ : sum) schedule(static)
+#pragma omp parallel for reduction(+ : sum) schedule(OMP_SCHEDULE)
     for (int i = 0; i < n; i++) {
       sum += x[i] * x[i];
     }
   } else {
-#pragma omp parallel for reduction(+ : sum) schedule(static)
+#pragma omp parallel for reduction(+ : sum) schedule(OMP_SCHEDULE)
     for (int i = 0; i < n; i++) {
       sum += x[i] * y[i];
     }

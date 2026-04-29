@@ -26,6 +26,9 @@ static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
   CG_UINT numRows = m->nr;
   CG_UINT *rowPtr = m->rowPtr;
 
+  // Parallel init for NUMA first-touch — must use the same schedule the
+  // kernels use (OMP_SCHEDULE, kept as static for first-touch correctness).
+#pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int rowID = 0; rowID < numRows; rowID++) {
 
     int nnzrow = rowPtr[rowID + 1] - rowPtr[rowID];
@@ -47,6 +50,8 @@ static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
   V_ELE *val            = m->val;
   CG_UINT *oldToNewPerm = m->oldToNewPerm;
 
+  // Parallel init for NUMA first-touch — see CRS branch above.
+#pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int rowID = 0; rowID < numRows; rowID++) {
     x[rowID] = 0.0;
 

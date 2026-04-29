@@ -28,7 +28,10 @@ void convertMatrix(Matrix *sm, GMatrix *m)
   CG_UINT numRows = m->nr;
   CG_UINT *rowPtr = m->rowPtr;
 
-  // convert to CRS format
+  // Convert to CRS format. Parallel row loop with the same schedule the
+  // spMVM kernel uses, so val/colInd/rowPtr pages are first-touched on
+  // the NUMA node of the thread that will later read them.
+#pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int rowID = 0; rowID < numRows; rowID++) {
     sm->rowPtr[rowID] = m->rowPtr[rowID];
 

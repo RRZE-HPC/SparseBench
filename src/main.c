@@ -133,8 +133,13 @@ int main(int argc, char **argv)
     V_ELE *x          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(V_ELE));
     V_ELE *y          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(V_ELE));
 
-    for (int i = 0; i < m.nr; i++) {
+    // Parallel init for NUMA first-touch — must match spMVM's schedule.
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+    for (int i = 0; i < m.nc; i++) {
       x[i] = 1.0;
+    }
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+    for (int i = 0; i < m.nr; i++) {
       y[i] = 1.0;
     }
 
@@ -156,9 +161,12 @@ int main(int argc, char **argv)
     x.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(V_ELE));
     y.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(V_ELE));
 
+    // Parallel init for NUMA first-touch — must match spMMVM's schedule.
+#pragma omp parallel for schedule(OMP_SCHEDULE)
     for (int i = 0; i < x.nr * x.nc; i++) {
       x.entries[i] = 1.0;
     }
+#pragma omp parallel for schedule(OMP_SCHEDULE)
     for (int i = 0; i < y.nr * y.nc; i++) {
       y.entries[i] = 0.0;
     }

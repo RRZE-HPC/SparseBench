@@ -10,6 +10,11 @@ USE_COMPLEX_ELEMENTS ?= false
 SELL_CHUNK_VALUE ?= 64
 SELL_SIGMA_VALUE ?= 64
 NUM_VEC ?= 10
+# Schedule used by every #pragma omp parallel for in src/. Override at build
+# time with `make OMP_SCHEDULE=...`.  Keep `static` for NUMA first-touch
+# correctness — dynamic/guided break the requirement that init loops touch
+# the same pages the kernels later read.
+OMP_SCHEDULE ?= static
 # GPU architecture (only used when TOOLCHAIN=NVCC or HIP)
 # # NVCC: 
 #       -gencode=arch=compute_80,code=sm_80 # for A100
@@ -24,7 +29,7 @@ CUDA_ARCH ?= -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=s
 HIP_ARCH  ?= gfx1030,gfx942
 #Feature options
 OPTIONS +=  -DARRAY_ALIGNMENT=64
-OPTIONS +=  -DOMP_SCHEDULE=static
+OPTIONS +=  -DOMP_SCHEDULE=$(OMP_SCHEDULE)
 #OPTIONS +=  -DVERBOSE
 #OPTIONS +=  -DVERBOSE_AFFINITY
 #OPTIONS +=  -DVERBOSE_DATASIZE
