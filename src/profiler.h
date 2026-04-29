@@ -5,6 +5,7 @@
 #ifndef __PROFILER_H_
 #define __PROFILER_H_
 #include "comm.h"
+#include "likwid-marker.h"
 #include <stddef.h>
 
 #ifdef LIKWID_PERFMON
