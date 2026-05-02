@@ -35,9 +35,10 @@ extern int BenchType;
   "  -i <int>   Number of solver iterations. Default 150.\n"                             \
   "  -w <int>   Width of block vector for SpMMV\n"                                       \
   "  -v         Enable verbose output\n"                                                 \
-  "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
+  "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"                           \
+  "  -d <int>   GPU device index (multi-GPU nodes). Default 0.\n"
 
-#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:v:"
+#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:v:d:"
 
 #ifdef SCS
 

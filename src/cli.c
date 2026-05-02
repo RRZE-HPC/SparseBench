@@ -100,6 +100,9 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
     case 'v':
       param->verbose = (int)strtol(optarg, NULL, INT_BASE);
       break;
+    case 'd':
+      param->device = (int)strtol(optarg, NULL, INT_BASE);
+      break;
 #ifdef SCS
     case 'k':
       param->C = (int)strtol(optarg, NULL, INT_BASE);

@@ -23,6 +23,7 @@ void initParameter(Parameter *param)
   param->Sigma = SELL_SIGMA;
 #endif
   param->verbose = 0;
+  param->device  = 0;
 }
 
 void readParameter(Parameter *param, const char *filename)
@@ -83,4 +84,5 @@ void printParameter(Parameter *param)
   printf("\tSell sigma: %d\n", param->Sigma);
 #endif
   printf("\tVerbose Level: %d\n", param->verbose);
+  printf("\tGPU device index: %d\n", param->device);
 }

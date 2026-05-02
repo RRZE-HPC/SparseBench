@@ -21,6 +21,10 @@
 #include "util.h"
 #include "vtype.h"
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+#include "cuda_kernels.h"
+#endif
+
 static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
 {
   if (strcmp(p->filename, "generate") == 0) {
@@ -64,6 +68,9 @@ int main(int argc, char **argv)
   commInit(&comm, argc, argv);
   initParameter(&param);
   parseArguments(&comm, &param, argc, argv);
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  gpu_init(param.device);
+#endif
   commPrintBanner(&comm);
   if (param.verbose > 0 && commIsMaster(&comm)) {
     printParameter(&param);
@@ -196,6 +203,9 @@ int main(int argc, char **argv)
 
   profilerPrint(&comm, seq, numSeq, k);
   profilerFinalize();
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  gpu_finalize();
+#endif
   commFinalize(&comm);
 
   return EXIT_SUCCESS;

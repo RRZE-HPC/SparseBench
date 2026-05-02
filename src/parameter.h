@@ -16,6 +16,7 @@ typedef struct {
 #endif
   int blockwidth;
   int verbose;
+  int device;
 } Parameter;
 
 void initParameter(Parameter *);
