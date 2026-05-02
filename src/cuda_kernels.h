@@ -5,8 +5,8 @@
 #ifndef __GPU_KERNELS_H_
 #define __GPU_KERNELS_H_
 
-#include "../matrix.h"
-#include "../util.h"
+#include "matrix.h"
+#include "util.h"
 
 #ifdef __cplusplus
 extern "C" {

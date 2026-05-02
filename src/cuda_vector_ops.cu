@@ -8,10 +8,11 @@
  * Each kernel lives in its own .cu file for easy extensibility —
  * add new kernels by creating additional .cu files in src/cuda/.
  */
-#include "cuda_kernels.h"
-#include "gpu_backend.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "cuda_kernels.h"
+#include "gpu_backend.h"
 
 /* ------------------------------------------------------------------ */
 /*  waxpby:  w = alpha*x + beta*y                                    */
