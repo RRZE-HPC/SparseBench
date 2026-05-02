@@ -9,7 +9,7 @@
 
 #include "allocate.h"
 #ifdef _GPU
-#include "cuda/cuda_kernels.h"
+#include "cuda_kernels.h"
 #endif
 
 void *allocate(size_t alignment, size_t bytesize)

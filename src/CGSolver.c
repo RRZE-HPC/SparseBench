@@ -17,7 +17,7 @@
 #include "vtype.h"
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-#include "cuda/cuda_kernels.h"
+#include "cuda_kernels.h"
 #endif
 
 static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
