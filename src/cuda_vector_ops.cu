@@ -57,28 +57,66 @@ __global__ void kernel_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *pa
     partial[blockIdx.x] = sdata[0];
 }
 
+/* Final stage: collapse the per-block partials into a single scalar
+ * entirely on the device, so the host side only has to copy back
+ * sizeof(V_ELE) bytes per ddot. */
+__global__ void kernel_ddot_finalize(CG_UINT n, const V_ELE *partial, V_ELE *result)
+{
+  extern __shared__ V_ELE sfin[];
+
+  CG_UINT tid = threadIdx.x;
+  V_ELE v     = VCONST(0, 0);
+  for (CG_UINT i = tid; i < n; i += blockDim.x) {
+    v += partial[i];
+  }
+  sfin[tid] = v;
+  __syncthreads();
+
+  for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (tid < s)
+      sfin[tid] += sfin[tid + s];
+    __syncthreads();
+  }
+
+  if (tid == 0)
+    *result = sfin[0];
+}
+
+/* Persistent scratch for ddot — sized lazily on first / largest call,
+ * freed in gpu_finalize(). Plain device memory (not managed) so there
+ * is no per-call page migration and no per-call alloc/free overhead. */
+static V_ELE *g_ddot_partial    = NULL;
+static size_t g_ddot_partial_cap = 0; /* capacity in elements */
+static V_ELE *g_ddot_result_d   = NULL;
+
+static void ensure_ddot_scratch(size_t blocks)
+{
+  if (blocks > g_ddot_partial_cap) {
+    if (g_ddot_partial != NULL) {
+      GPU_SAFE_CALL(gpuFree(g_ddot_partial));
+    }
+    GPU_SAFE_CALL(gpuMalloc((void **)&g_ddot_partial, blocks * sizeof(V_ELE)));
+    g_ddot_partial_cap = blocks;
+  }
+  if (g_ddot_result_d == NULL) {
+    GPU_SAFE_CALL(gpuMalloc((void **)&g_ddot_result_d, sizeof(V_ELE)));
+  }
+}
+
 extern "C" void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
 {
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;
 
-  V_ELE *d_partial;
-  GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(Malloc)(&d_partial, blocks * sizeof(V_ELE)));
+  ensure_ddot_scratch((size_t)blocks);
 
-  kernel_ddot<<<blocks, threads, threads * sizeof(V_ELE)>>>(n, x, y, d_partial);
+  kernel_ddot<<<blocks, threads, threads * sizeof(V_ELE)>>>(n, x, y, g_ddot_partial);
 
-  /* Final reduction on host (small array) */
-  V_ELE *h_partial = (V_ELE *)malloc(blocks * sizeof(V_ELE));
-  GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(Memcpy)(
-      h_partial, d_partial, blocks * sizeof(V_ELE), gpuMemcpyDeviceToHost));
+  int finalize_threads = 256;
+  kernel_ddot_finalize<<<1, finalize_threads, finalize_threads * sizeof(V_ELE)>>>(
+      blocks, g_ddot_partial, g_ddot_result_d);
 
-  V_ELE sum = VCONST(0, 0);
-  for (int i = 0; i < blocks; i++)
-    sum += h_partial[i];
-  *result = sum;
-
-  free(h_partial);
-  GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(Free)(d_partial));
+  GPU_SAFE_CALL(gpuMemcpy(result, g_ddot_result_d, sizeof(V_ELE), gpuMemcpyDeviceToHost));
 }
 
 /* ------------------------------------------------------------------ */
@@ -99,6 +137,15 @@ extern "C" void gpu_init(int device)
 
 extern "C" void gpu_finalize(void)
 {
+  if (g_ddot_partial != NULL) {
+    GPU_SAFE_CALL(gpuFree(g_ddot_partial));
+    g_ddot_partial     = NULL;
+    g_ddot_partial_cap = 0;
+  }
+  if (g_ddot_result_d != NULL) {
+    GPU_SAFE_CALL(gpuFree(g_ddot_result_d));
+    g_ddot_result_d = NULL;
+  }
   GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(DeviceReset)());
 }
 
@@ -119,7 +166,6 @@ extern "C" void gpu_free_managed(void *ptr)
 
 /* ------------------------------------------------------------------ */
 /*  Synchronous wrappers — behave like CPU kernels                    */
-/*  Use managed memory pointers; call DeviceSynchronize after launch  */
 /* ------------------------------------------------------------------ */
 extern "C" void gpu_waxpby_nosync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
@@ -141,16 +187,15 @@ extern "C" void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;
 
-  V_ELE *partial;
-  GPU_SAFE_CALL(gpuMallocManaged(&partial, blocks * sizeof(V_ELE)));
+  ensure_ddot_scratch((size_t)blocks);
 
-  kernel_ddot<<<blocks, threads, threads * sizeof(V_ELE)>>>(n, x, y, partial);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
+  kernel_ddot<<<blocks, threads, threads * sizeof(V_ELE)>>>(n, x, y, g_ddot_partial);
 
-  V_ELE sum = VCONST(0, 0);
-  for (int i = 0; i < blocks; i++)
-    sum += partial[i];
-  *result = sum;
+  int finalize_threads = 256;
+  kernel_ddot_finalize<<<1, finalize_threads, finalize_threads * sizeof(V_ELE)>>>(
+      blocks, g_ddot_partial, g_ddot_result_d);
 
-  GPU_SAFE_CALL(gpuFree(partial));
+  /* gpuMemcpy is synchronous w.r.t. the host, so it both waits for the
+   * kernels above and delivers the scalar — no separate DeviceSynchronize. */
+  GPU_SAFE_CALL(gpuMemcpy(result, g_ddot_result_d, sizeof(V_ELE), gpuMemcpyDeviceToHost));
 }
