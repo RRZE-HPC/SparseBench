@@ -7,7 +7,6 @@
 TARGET	   = sparseBench-$(MTX_FMT)-$(TOOLCHAIN)
 BUILD_DIR  = ./build/$(MTX_FMT)-$(TOOLCHAIN)
 SRC_DIR    = ./src
-CUDA_DIR   = ./src/cuda
 MAKE_DIR   = ./mk
 Q         ?= @
 
@@ -31,18 +30,16 @@ INCLUDES  += -I$(SRC_DIR)/includes -I$(BUILD_DIR)
 VPATH     = $(SRC_DIR)
 ASM       = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.s,$(wildcard $(SRC_DIR)/*.c))
 OBJ       = $(filter-out $(BUILD_DIR)/matrix-%, $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o,$(wildcard $(SRC_DIR)/*.c)))
-SRC       = $(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/*.c $(CUDA_DIR)/*.h $(CUDA_DIR)/*.cu)
+SRC       = $(wildcard $(SRC_DIR)/*.h $(SRC_DIR)/*.c)
 CPPFLAGS := $(CPPFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES)
 
-# GPU kernel objects (when TOOLCHAIN=NVCC or HIP)
-CUDA_SRC  = $(wildcard $(CUDA_DIR)/*.cu)
-CUDA_OBJ  = $(patsubst $(CUDA_DIR)/%.cu, $(BUILD_DIR)/cuda_%.o, $(CUDA_SRC))
 ifneq (,$(filter $(TOOLCHAIN),NVCC HIP))
   CPPFLAGS += -D_GPU
-  ALL_OBJ   = $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o $(CUDA_OBJ)
-else
-  ALL_OBJ   = $(OBJ) $(BUILD_DIR)/matrix-$(MTX_FMT).o
+  OBJ   += $(patsubst $(SRC_DIR)/%.cu, $(BUILD_DIR)/%.o, $(wildcard $(SRC_DIR)/*.cu))
 endif
+
+  OBJ   +=  $(BUILD_DIR)/matrix-$(MTX_FMT).o
+
 c := ,
 clist = $(subst $(eval) ,$c,$(strip $1))
 
@@ -52,16 +49,16 @@ CompileFlags:
   Compiler: clang
 endef
 
-${TARGET}: $(BUILD_DIR) .clangd $(ALL_OBJ)
+${TARGET}: $(BUILD_DIR) .clangd $(OBJ)
 	$(info ===>  LINKING  $(TARGET))
-	$(Q)${LD} ${LFLAGS} -o $(TARGET) $(ALL_OBJ) $(LIBS)
+	$(Q)${LD} ${LFLAGS} -o $(TARGET) $(OBJ) $(LIBS)
 
 $(BUILD_DIR)/%.o:  %.c $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
 	$(info ===>  COMPILE  $@)
 	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
 	$(Q)$(CC) $(CPPFLAGS) -MT $(@:.d=.o) -MM  $< > $(BUILD_DIR)/$*.d
 
-$(BUILD_DIR)/cuda_%.o: $(CUDA_DIR)/%.cu $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
+$(BUILD_DIR)/%.o: %.cu $(MAKE_DIR)/include_$(TOOLCHAIN).mk config.mk
 	$(info ===>  COMPILE CUDA  $@)
 	$(NVCC) -c $(NVCCFLAGS) $(DEFINES) $(OPTIONS) $(INCLUDES) $< -o $@
 
