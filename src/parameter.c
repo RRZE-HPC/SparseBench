@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "parameter.h"
+#include <math.h>
 #define MAXLINE 4096
 
 void initParameter(Parameter *param)
@@ -24,6 +25,18 @@ void initParameter(Parameter *param)
 #endif
   param->verbose = 0;
   param->device  = 0;
+  // NTS : if spectrum bounds unpassed Gershgorin is used
+  // NTS : lancozs kern mu=2 used by paper
+  param->cheb.a           = 0.0;
+  param->cheb.b           = 0.0;
+  param->cheb.lam_lo      = 0.0;
+  param->cheb.lam_hi      = 0.0;
+  param->cheb.Np          = 0;
+  param->cheb.NS          = 0;
+  param->cheb.kernel      = 3;
+  param->cheb.mu          = 2; // from paper
+  param->cheb.have_bounds = 0;
+  param->cheb.have_target = 0;
 }
 
 void readParameter(Parameter *param, const char *filename)
@@ -42,26 +55,36 @@ void readParameter(Parameter *param, const char *filename)
     fgets(line, MAXLINE, fp);
     for (i = 0; line[i] != '\0' && line[i] != '#'; i++)
       ;
-    line[i]   = '\0';
+    line[i] = '\0';
 
-    char *tok = strtok(line, " ");
-    char *val = strtok(NULL, " ");
+    /* Delimiter set includes \n/\r so that values parsed from a line read by
+     * fgets do not retain a trailing newline (which would break later strcmp
+     * on string params such as `filename`). */
+    char *tok = strtok(line, " \t\r\n");
+    char *val = strtok(NULL, " \t\r\n");
 
-#define PARSE_PARAM(p, f)                                                                \
-  if (strncmp(tok, #p, sizeof(#p) / sizeof(#p[0]) - 1) == 0) {                           \
-    param->p = f(val);                                                                   \
+#define PARSE_KEY(key, target, conv, ...)                                                \
+  if (strcmp(tok, key) == 0) {                                                           \
+    target = conv(val);                                                                  \
+    __VA_ARGS__;                                                                         \
   }
-#define PARSE_STRING(p) PARSE_PARAM(p, strdup)
-#define PARSE_INT(p) PARSE_PARAM(p, atoi)
-#define PARSE_REAL(p) PARSE_PARAM(p, atof)
 
     if (tok != NULL && val != NULL) {
-      PARSE_STRING(filename);
-      PARSE_INT(nx);
-      PARSE_INT(ny);
-      PARSE_INT(nz);
-      PARSE_INT(itermax);
-      PARSE_REAL(eps);
+      PARSE_KEY("filename", param->filename, strdup);
+      PARSE_KEY("nx", param->nx, atoi);
+      PARSE_KEY("ny", param->ny, atoi);
+      PARSE_KEY("nz", param->nz, atoi);
+      PARSE_KEY("itermax", param->itermax, atoi);
+      PARSE_KEY("eps", param->eps, atof);
+      // NTS : `cheb_` prefix, populating the nested struct
+      PARSE_KEY("cheb_a", param->cheb.a, atof, param->cheb.have_bounds = 1);
+      PARSE_KEY("cheb_b", param->cheb.b, atof, param->cheb.have_bounds = 1);
+      PARSE_KEY("cheb_lam_lo", param->cheb.lam_lo, atof, param->cheb.have_target = 1);
+      PARSE_KEY("cheb_lam_hi", param->cheb.lam_hi, atof, param->cheb.have_target = 1);
+      PARSE_KEY("cheb_Np", param->cheb.Np, atoi);
+      PARSE_KEY("cheb_NS", param->cheb.NS, atoi);
+      PARSE_KEY("cheb_kernel", param->cheb.kernel, atoi);
+      PARSE_KEY("cheb_mu", param->cheb.mu, atoi);
     }
   }
 
@@ -85,4 +108,12 @@ void printParameter(Parameter *param)
 #endif
   printf("\tVerbose Level: %d\n", param->verbose);
   printf("\tGPU device index: %d\n", param->device);
+  printf("ChebFD parameters:\n");
+  printf("\tspectrum [a,b]: %g, %g%s\n",
+      param->cheb.a,
+      param->cheb.b,
+      param->cheb.have_bounds ? "" : " (auto: Gershgorin)");
+  printf("\ttarget interval: [%g, %g]\n", param->cheb.lam_lo, param->cheb.lam_hi);
+  printf("\tNp / NS: %d / %d\n", param->cheb.Np, param->cheb.NS);
+  printf("\tkernel / mu: %d / %d\n", param->cheb.kernel, param->cheb.mu);
 }

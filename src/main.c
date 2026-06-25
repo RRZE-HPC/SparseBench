@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "allocate.h"
+#include "chebFDSolver.h"
 #include "cli.h"
 #include "comm.h"
 #include "matrix.h"
@@ -24,6 +25,14 @@
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
 #include "cuda_kernels.h"
 #endif
+
+void omp_init(V_ELE *data_ptr, size_t elem_count, V_ELE value)
+{
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (int i = 0; i < elem_count; i++) {
+    data_ptr[i] = 1.0;
+  }
+}
 
 static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
 {
@@ -141,14 +150,8 @@ int main(int argc, char **argv)
     V_ELE *y          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(V_ELE));
 
     // Parallel init for NUMA first-touch — must match spMVM's schedule.
-#pragma omp parallel for schedule(OMP_SCHEDULE)
-    for (int i = 0; i < m.nc; i++) {
-      x[i] = 1.0;
-    }
-#pragma omp parallel for schedule(OMP_SCHEDULE)
-    for (int i = 0; i < m.nr; i++) {
-      y[i] = 1.0;
-    }
+    omp_init(x, m.nc, 1.0);
+    omp_init(y, m.nr, 0.0);
 
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMVM, spMVM(&sm, x, y));
@@ -194,9 +197,14 @@ int main(int argc, char **argv)
   case CHEBFD:
     if (commIsMaster(&comm)) {
       printf("Test type: CHEBFD\n");
-      printf("CHEBFD not implemented yet\n");
     }
-    commAbort(&comm, "CHEBFD not implemented yet\n");
+    {
+      numSeq           = 1;
+      int seqChebfd[1] = { SPMVM };
+      seq              = seqChebfd;
+      int found        = solveChebFD(&comm, &param, &sm);
+      k                = found > 0 ? found : 0;
+    }
     break;
   default:;
   }
