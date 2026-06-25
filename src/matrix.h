@@ -33,10 +33,10 @@ typedef struct {
 } Entry;
 
 typedef struct {
-  CG_UINT nr, nc, nnz; // number of rows, columns and non zeros
+  CG_UINT nr, nc, nnz;       // number of rows, columns and non zeros
   CG_UINT totalNr, totalNnz; // number of total rows and non zeros
   CG_UINT startRow, stopRow; // range of rows owned by current rank
-  CG_UINT *rowPtr; // row Pointer
+  CG_UINT *rowPtr;           // row Pointer
   Entry *entries;
 } GMatrix;
 

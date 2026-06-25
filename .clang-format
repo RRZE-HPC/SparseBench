@@ -1,6 +1,6 @@
 BasedOnStyle: WebKit
 ReflowComments: Never
-AlignTrailingComments: false
+AlignTrailingComments: true
 PointerAlignment: Right
 AlignOperands: Align
 ColumnLimit: 90
