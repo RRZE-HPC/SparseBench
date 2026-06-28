@@ -10,6 +10,21 @@
 #include "vtype.h"
 
 extern int solveCG(CommType *comm, Parameter *param, Matrix *m);
+
+typedef struct {
+  V_ELE *r;
+  V_ELE *p;
+  V_ELE *ap;
+  V_ELE *x;
+  V_ELE *b;
+  V_ELE *xexact;
+  V_ELE *permTmp;
+} CGData;
+
+// centralized methods to allocate and deallocate
+extern void allocCGData(CGData *d, Matrix *m, bool useXexact);
+extern void freeCGData(CGData *d);
+
 // extern void solverCheckResidual(Solver* s, Comm* c);
 extern void spMVM(Matrix *m, const V_ELE *restrict x, V_ELE *restrict y);
 extern void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y);

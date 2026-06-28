@@ -53,6 +53,13 @@ static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
 
       commDistributeMatrix(c, &mm, &mmLocal);
       matrixConvertfromMM(&mmLocal, m);
+      // In the 1-rank build mmLocal.entries aliases mm.entries freeing local is enough
+      freeMMMatrix(&mmLocal);
+#ifdef _MPI
+      if (commIsMaster(c)) {
+        freeMMMatrix(&mm);
+      }
+#endif
     } else if (strcmp(dot, ".bmx") == 0) {
 #ifdef _MPI
       if (commIsMaster(c)) {
@@ -124,50 +131,64 @@ int main(int argc, char **argv)
   factorWords[SPMMVM] = factorWords[SPMVM] * param.blockwidth;
 
   profilerInit(factorFlops, factorWords);
-  int numSeq = 0;
-  int *seq   = NULL;
 
-  int k      = 0;
+  // previously using stack local stored data resulting in undefine behaviour
+  int seqCg[3]     = { DDOT, WAXPBY, SPMVM };
+  int seqSpmv[1]   = { SPMVM };
+  int seqSpmmv[1]  = { SPMMVM };
+  int seqChebfd[1] = { SPMVM };
+
+  int numSeq       = 0;
+  int *seq         = NULL;
+
+  // SCS spMVM/spMMVM has padded rows so update accordingly
+#ifdef SCS
+  CG_UINT vecSize = sm.nrPadded;
+#else
+  CG_UINT vecSize = sm.nr;
+#endif
+
+  int k = 0;
   switch (BenchType) {
   case CG:
-    numSeq       = 3;
-    int seqCg[3] = { DDOT, WAXPBY, SPMVM };
-    seq          = seqCg;
+    numSeq = 3;
+    seq    = seqCg;
     if (commIsMaster(&comm)) {
       printf("Test type: CG\n");
     }
     k = solveCG(&comm, &param, &sm);
     break;
-  case SPMV:
-    numSeq          = 1;
-    int secSpmvm[1] = { SPMVM };
-    seq             = secSpmvm;
+
+  case SPMV: {
+    numSeq = 1;
+    seq    = seqSpmv;
     if (commIsMaster(&comm)) {
       printf("Test type: SPMVM\n");
     }
     const int itermax = param.itermax;
-    V_ELE *x          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nc * sizeof(V_ELE));
-    V_ELE *y          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m.nr * sizeof(V_ELE));
+    V_ELE *x          = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecSize * sizeof(V_ELE));
+    V_ELE *y          = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecSize * sizeof(V_ELE));
 
     // Parallel init for NUMA first-touch — must match spMVM's schedule.
-    omp_init(x, m.nc, 1.0);
-    omp_init(y, m.nr, 0.0);
+    omp_init(x, vecSize, 1.0);
+    omp_init(y, vecSize, 0.0);
 
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMVM, spMVM(&sm, x, y));
     }
-    break;
+    deallocate(x);
+    deallocate(y);
+  } break;
 
   case SPMMV: {
-    numSeq          = 1;
-    int secSpmmv[1] = { SPMMVM };
-    seq             = secSpmmv;
+    numSeq = 1;
+    seq    = seqSpmmv;
     if (commIsMaster(&comm)) {
       printf("Test type: SPMMVM\n");
     }
     int itermax = param.itermax;
-    DMatrix x   = { .nr = sm.nc, .nc = param.blockwidth, .entries = NULL };
-    DMatrix y   = { .nr = sm.nr, .nc = param.blockwidth, .entries = NULL };
+    DMatrix x   = { .nr = vecSize, .nc = param.blockwidth, .entries = NULL };
+    DMatrix y   = { .nr = vecSize, .nc = param.blockwidth, .entries = NULL };
     x.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(V_ELE));
     y.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(V_ELE));
 
@@ -184,6 +205,8 @@ int main(int argc, char **argv)
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMMVM, spMMVM(&sm, &x, &y));
     }
+    deallocate(x.entries);
+    deallocate(y.entries);
   } break;
 
   case GMRES:
@@ -194,18 +217,17 @@ int main(int argc, char **argv)
     commAbort(&comm, "GMRES not implemented yet\n");
     break;
 
-  case CHEBFD:
+  case CHEBFD: {
     if (commIsMaster(&comm)) {
       printf("Test type: CHEBFD\n");
     }
-    {
-      numSeq           = 1;
-      int seqChebfd[1] = { SPMVM };
-      seq              = seqChebfd;
-      int found        = solveChebFD(&comm, &param, &sm);
-      k                = found > 0 ? found : 0;
-    }
+    numSeq    = 1;
+    seq       = seqChebfd;
+    int found = solveChebFD(&comm, &param, &sm);
+    k         = found > 0 ? found : 0;
     break;
+  }
+
   default:;
   }
 
@@ -215,6 +237,9 @@ int main(int argc, char **argv)
   gpu_finalize();
 #endif
   commFinalize(&comm);
+
+  freeMatrix(&sm);
+  freeGMatrix(&m);
 
   return EXIT_SUCCESS;
 }

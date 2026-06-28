@@ -278,6 +278,17 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
   }
 }
 
+void freeGMatrix(GMatrix *m)
+{
+  deallocate(m->rowPtr);
+  deallocate(m->entries);
+}
+
+void freeMMMatrix(MMMatrix *m)
+{
+  deallocate(m->entries);
+}
+
 void MMMatrixPrintToFile(MMMatrix *m, char *filename)
 {
   FILE *fptr;

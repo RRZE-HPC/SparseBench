@@ -12,7 +12,7 @@ typedef struct {
   CG_UINT totalNr, totalNnz; // number of total rows and non zeros
   CG_UINT startRow, stopRow; // range of rows owned by current rank
   CG_UINT *rowPtr;           // row Pointer
-  CG_UINT *colInd;           // colum Indices
+  CG_UINT *colInd;           // column Indices
   V_ELE *val;                // matrix entries
 } Matrix;
 

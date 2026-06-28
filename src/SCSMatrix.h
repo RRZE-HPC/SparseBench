@@ -15,7 +15,7 @@ typedef struct {
   CG_UINT nr, nc, nnz;       // number of rows, columns and non zeros
   CG_UINT totalNr, totalNnz; // number of total rows and non zeros
   CG_UINT startRow, stopRow; // range of rows owned by current rank
-  CG_UINT *colInd;           // colum Indices
+  CG_UINT *colInd;           // column Indices
   V_ELE *val;                // matrix entries
   CG_UINT C, sigma;          // chunk height and sorting scope
   CG_UINT nrPadded;          // number of rows with SCS padding,

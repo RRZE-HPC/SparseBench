@@ -68,6 +68,15 @@ extern void matrixGenerate(
 
 extern void convertMatrix(Matrix *m, GMatrix *im);
 
+// sizes of the nnz, nr etc must be already set so matrix specific allocation
+// and deallocation can be centralized
+extern void allocMatrix(Matrix *m);
+extern void freeMatrix(Matrix *m);
+
+// Free the CRS and MMmatrix style
+extern void freeGMatrix(GMatrix *m);
+extern void freeMMMatrix(MMMatrix *m);
+
 extern void MMMatrixPrintToFile(MMMatrix *m, char *filename);
 extern void MMMatrixPrint(MMMatrix *m);
 extern void MMMatrixPrint_impl(MMMatrix *m, FILE *fptr);

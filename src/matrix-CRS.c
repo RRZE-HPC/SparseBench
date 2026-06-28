@@ -9,19 +9,34 @@
 #include "allocate.h"
 #include "matrix.h"
 
+/* Allocate every format-specific array of m in one place. Assumes the size
+ * scalars (nr, nnz) are already set on m. Pairs with freeMatrix. */
+void allocMatrix(Matrix *m)
+{
+  m->rowPtr = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
+  m->colInd = (CG_UINT *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(CG_UINT));
+  m->val    = (V_ELE *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(V_ELE));
+}
+
+/* Free the arrays allocated by allocMatrix. */
+void freeMatrix(Matrix *m)
+{
+  deallocate(m->rowPtr);
+  deallocate(m->colInd);
+  deallocate(m->val);
+}
+
 void convertMatrix(Matrix *sm, GMatrix *m)
 {
-  sm->startRow    = m->startRow;
-  sm->stopRow     = m->stopRow;
-  sm->totalNr     = m->totalNr;
-  sm->totalNnz    = m->totalNnz;
-  sm->nr          = m->nr;
-  sm->nc          = m->nc;
-  sm->nnz         = m->nnz;
+  sm->startRow = m->startRow;
+  sm->stopRow  = m->stopRow;
+  sm->totalNr  = m->totalNr;
+  sm->totalNnz = m->totalNnz;
+  sm->nr       = m->nr;
+  sm->nc       = m->nc;
+  sm->nnz      = m->nnz;
 
-  sm->rowPtr      = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
-  sm->colInd      = (CG_UINT *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(CG_UINT));
-  sm->val         = (V_ELE *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(V_ELE));
+  allocMatrix(sm);
 
   Entry *entries  = m->entries;
 

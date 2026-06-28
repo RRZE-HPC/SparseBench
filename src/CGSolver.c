@@ -135,22 +135,19 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   int itermax  = param->itermax;
 
   CG_UINT nrow = A->nr;
-  CG_UINT ncol = A->nc;
-  V_ELE *r     = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-  V_ELE *p     = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol * sizeof(V_ELE));
-#ifdef SCS
-  V_ELE *ap = (V_ELE *)allocate(ARRAY_ALIGNMENT, A->nrPadded * sizeof(V_ELE));
-#else
-  V_ELE *ap = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-#endif
-  V_ELE *x      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-  V_ELE *b      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-  V_ELE *xexact = NULL;
 
-  if (strcmp(param->filename, "generate") == 0 ||
-      strcmp(param->filename, "generate7P") == 0) {
-    xexact = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-  }
+  bool useXexact = (strcmp(param->filename, "generate") == 0 ||
+                    strcmp(param->filename, "generate7P") == 0);
+
+  CGData d;
+  allocCGData(&d, A, useXexact);
+
+  V_ELE *r      = d.r;
+  V_ELE *p      = d.p;
+  V_ELE *ap     = d.ap;
+  V_ELE *x      = d.x;
+  V_ELE *b      = d.b;
+  V_ELE *xexact = d.xexact;
 
   initVectors(A, x, b, xexact);
 
@@ -159,12 +156,9 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 #ifdef SCS
   CG_UINT *oldToNewPerm = A->oldToNewPerm;
   CG_UINT *newToOldPerm = A->newToOldPerm;
-  CG_UINT *colIndScs    = A->colInd;
-  CG_UINT nElemsScs     = A->nElems;
+  V_ELE *permTmp        = d.permTmp;
 
   // Permute b, x (and xexact) from original to SCS ordering
-  V_ELE *permTmp = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-
   permute_vector(oldToNewPerm, b, permTmp, nrow);
   memcpy(b, permTmp, nrow * sizeof(V_ELE));
 
@@ -242,8 +236,49 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     permute_vector(newToOldPerm, xexact, permTmp, nrow);
     memcpy(xexact, permTmp, nrow * sizeof(V_ELE));
   }
-  deallocate(permTmp);
 #endif
 
+  freeCGData(&d);
+
   return k;
+}
+
+// NTS : makes allocation and dellocation centralized so that we dont 
+// allocate any data during the iterations 
+void allocCGData(CGData *d, Matrix *m, bool useXexact)
+{
+  CG_UINT nrow = m->nr;
+  CG_UINT ncol = m->nc;
+
+  d->r  = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+  d->p  = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol * sizeof(V_ELE));
+#ifdef SCS
+  d->ap = (V_ELE *)allocate(ARRAY_ALIGNMENT, m->nrPadded * sizeof(V_ELE));
+#else
+  d->ap = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+#endif
+  d->x = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+  d->b = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+
+  d->xexact = NULL;
+  if (useXexact) {
+    d->xexact = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+  }
+
+#ifdef SCS
+  d->permTmp = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+#else
+  d->permTmp = NULL;
+#endif
+}
+
+void freeCGData(CGData *d)
+{
+  deallocate(d->r);
+  deallocate(d->p);
+  deallocate(d->ap);
+  deallocate(d->x);
+  deallocate(d->b);
+  deallocate(d->xexact);
+  deallocate(d->permTmp);
 }
