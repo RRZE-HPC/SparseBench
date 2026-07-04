@@ -131,10 +131,10 @@ static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
 
 int solveCG(CommType *comm, Parameter *param, Matrix *A)
 {
-  CG_FLOAT eps = (CG_FLOAT)param->eps;
-  int itermax  = param->itermax;
+  CG_FLOAT eps   = (CG_FLOAT)param->eps;
+  int itermax    = param->itermax;
 
-  CG_UINT nrow = A->nr;
+  CG_UINT nrow   = A->nr;
 
   bool useXexact = (strcmp(param->filename, "generate") == 0 ||
                     strcmp(param->filename, "generate7P") == 0);
@@ -243,22 +243,22 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   return k;
 }
 
-// NTS : makes allocation and dellocation centralized so that we dont 
-// allocate any data during the iterations 
+// NTS : makes allocation and dellocation centralized so that we dont
+// allocate any data during the iterations
 void allocCGData(CGData *d, Matrix *m, bool useXexact)
 {
   CG_UINT nrow = m->nr;
   CG_UINT ncol = m->nc;
 
-  d->r  = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-  d->p  = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol * sizeof(V_ELE));
+  d->r         = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+  d->p         = (V_ELE *)allocate(ARRAY_ALIGNMENT, ncol * sizeof(V_ELE));
 #ifdef SCS
   d->ap = (V_ELE *)allocate(ARRAY_ALIGNMENT, m->nrPadded * sizeof(V_ELE));
 #else
   d->ap = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
 #endif
-  d->x = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
-  d->b = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+  d->x      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
+  d->b      = (V_ELE *)allocate(ARRAY_ALIGNMENT, nrow * sizeof(V_ELE));
 
   d->xexact = NULL;
   if (useXexact) {

@@ -43,7 +43,7 @@ static CG_UINT maxRowLenInChunk(
   return maxLength;
 }
 
-// Allocates the required matrix 
+// Allocates the required matrix
 void allocMatrix(Matrix *m)
 {
   m->chunkLens = (CG_UINT *)allocate(ARRAY_ALIGNMENT, m->nChunks * sizeof(CG_UINT));
@@ -54,7 +54,7 @@ void allocMatrix(Matrix *m)
   m->val          = (V_ELE *)allocate(ARRAY_ALIGNMENT, m->nElems * sizeof(V_ELE));
 }
 
-// free the allocated data from allocnatrix 
+// free the allocated data from allocnatrix
 void freeMatrix(Matrix *m)
 {
   deallocate(m->chunkLens);
