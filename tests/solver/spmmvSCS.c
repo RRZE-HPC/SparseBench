@@ -129,8 +129,8 @@ int test_spmmvSCS(void *args, const char *dataDir)
           y.entries[i] = (CG_FLOAT)0.0;
         }
 
-// NOTE : since we switch the vectors around mkaing them bigger is necessary to
-// prevent accesssing garbage data
+// NOTE : since we switch the vectors around making them bigger is necessary to
+// prevent accessing garbage data
 #ifdef SCS
         DMatrix x_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
         DMatrix y_perm = { .nr = vectorSize, .nc = test_blockwidth, .entries = NULL };
