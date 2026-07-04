@@ -7,12 +7,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 int test_convertSCS(void *args, const char *dataDir)
 {
 
+  /* TODO: validate under _MPI — single-rank only; no commInit/commDistributeMatrix (full matrix on one process). */
   int rank = 0;
   int size = 1;
+
+  // Ensure the directory for reported outputs exists (its contents are
+  // gitignored, so it is absent on a fresh clone and fopen(...,"w") would
+  // return NULL, causing a segfault in dumpMatrix_impl).
+  char *pathToReportedDir = malloc(strlen(dataDir) + strlen("reported/") + 1);
+  strcpy(pathToReportedDir, dataDir);
+  strcat(pathToReportedDir, "reported/");
+  mkdir(pathToReportedDir, 0775);
+  free(pathToReportedDir);
 
   // Open the directory
   char *pathToMatrices = malloc(strlen(dataDir) + strlen("testMatrices/") + 1);
@@ -33,7 +45,7 @@ int test_convertSCS(void *args, const char *dataDir)
       strcpy(pathToMatrix, pathToMatrices);
       strcat(pathToMatrix, entry->d_name);
 
-      Matrix A; // thsi is the crs/sell matrix
+      Matrix A; // this is the crs/sell matrix
       Args *arguments = (Args *)args;
       A.C             = arguments->C;
       A.sigma         = arguments->sigma;
@@ -71,6 +83,14 @@ int test_convertSCS(void *args, const char *dataDir)
         BUILD_MATRIX_FILE_PATH(
             entry, "reported/", ".out", C_str, sigma_str, pathToReportedData);
         FILE *reportedData = fopen(pathToReportedData, "w");
+        if (reportedData == NULL) {
+          perror("Error opening reported data file");
+          free(pathToReportedData);
+          free(pathToExpectedData);
+          free(pathToMatrix);
+          closedir(dir);
+          return 1;
+        }
 
         dumpMatrix_impl(&A, reportedData);
         fclose(reportedData);
@@ -85,7 +105,8 @@ int test_convertSCS(void *args, const char *dataDir)
           return 1;
         }
       }
-      fclose(fptr);
+      if (fptr)
+        fclose(fptr);
       free(pathToExpectedData);
       free(pathToMatrix);
     }
