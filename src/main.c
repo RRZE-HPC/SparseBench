@@ -132,7 +132,7 @@ int main(int argc, char **argv)
 
   profilerInit(factorFlops, factorWords);
 
-  // previously using stack local stored data resulting in undefine behaviour
+  // previously using stack local stored data resulting in undefined behaviour
   int seqCg[3]     = { DDOT, WAXPBY, SPMVM };
   int seqSpmv[1]   = { SPMVM };
   int seqSpmmv[1]  = { SPMMVM };
@@ -220,6 +220,11 @@ int main(int argc, char **argv)
   case CHEBFD: {
     if (commIsMaster(&comm)) {
       printf("Test type: CHEBFD\n");
+      #if defined(_MPI)
+        printf("CURRENTLY CHEB FD doesn't support MPI\n");
+        commFinalize(&comm);
+        return -1;
+      #endif
     }
     numSeq    = 1;
     seq       = seqChebfd;
