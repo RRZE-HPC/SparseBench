@@ -1,0 +1,11 @@
+# ChebFD param file test
+filename generate7P
+nx 6
+ny 6
+nz 6
+cheb_lam_lo 25
+cheb_lam_hi 32
+cheb_Np 150
+cheb_NS 2000
+eps 1e-6
+itermax 30
