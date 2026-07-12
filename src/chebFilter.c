@@ -3,6 +3,7 @@
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include "chebFilter.h"
+#include "allocate.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -101,11 +102,7 @@ int chebFilterInit(ChebFilter *f,
   double theta_lo = acos(xi_lo);
   double theta_hi = acos(xi_hi);
 
-  f->gc           = (double *)malloc((size_t)(Np + 1) * sizeof(double));
-  if (f->gc == NULL) {
-    fprintf(stderr, "chebFilterInit: allocation of %d coeffs failed\n", Np + 1);
-    return -1;
-  }
+  f->gc = (double *)allocate(ARRAY_ALIGNMENT, (size_t)(Np + 1) * sizeof(double));
 
   /* Window Chebyshev moments c_n of the indicator on [xi_lo, xi_hi]:
    *   c_0 = (theta_lo - theta_hi) / pi
@@ -124,8 +121,7 @@ int chebFilterInit(ChebFilter *f,
 void chebFilterFree(ChebFilter *f)
 {
   if (f != NULL && f->gc != NULL) {
-    free(f->gc);
-    f->gc = NULL;
+    deallocate(f->gc);
   }
 }
 
