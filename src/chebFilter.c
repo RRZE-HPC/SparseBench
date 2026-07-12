@@ -101,7 +101,7 @@ int chebFilterInit(ChebFilter *f,
   double theta_lo = acos(xi_lo);
   double theta_hi = acos(xi_hi);
 
-  f->gc       = (double *)malloc((size_t)(Np + 1) * sizeof(double));
+  f->gc           = (double *)malloc((size_t)(Np + 1) * sizeof(double));
   if (f->gc == NULL) {
     fprintf(stderr, "chebFilterInit: allocation of %d coeffs failed\n", Np + 1);
     return -1;

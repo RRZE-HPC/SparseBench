@@ -220,11 +220,11 @@ int main(int argc, char **argv)
   case CHEBFD: {
     if (commIsMaster(&comm)) {
       printf("Test type: CHEBFD\n");
-      #if defined(_MPI)
-        printf("CURRENTLY CHEB FD doesn't support MPI\n");
-        commFinalize(&comm);
-        return -1;
-      #endif
+#if defined(_MPI)
+      printf("CURRENTLY CHEB FD doesn't support MPI\n");
+      commFinalize(&comm);
+      return -1;
+#endif
     }
     numSeq    = 1;
     seq       = seqChebfd;

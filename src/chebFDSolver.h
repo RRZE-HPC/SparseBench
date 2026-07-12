@@ -5,8 +5,8 @@
 #ifndef __CHEBFDSOLVER_H_
 #define __CHEBFDSOLVER_H_
 
-#include "matrix.h"
 #include "comm.h"
+#include "matrix.h"
 #include "parameter.h"
 
 extern int solveChebFD(CommType *comm, Parameter *param, Matrix *A);
@@ -15,13 +15,13 @@ extern int solveChebFD(CommType *comm, Parameter *param, Matrix *A);
 extern void gershgorinBounds(CommType *comm, Matrix *A, double *a_out, double *b_out);
 
 // Centralized allocation for ChebFD work buffers so nothing is allocated
-// during the iterations. 
+// during the iterations.
 typedef struct {
-  DMatrix Y;   // search vectors block (vecRows x NS)
-  DMatrix AY;  // A*Y block (vecRows x NS)
-  DMatrix u;   // block scratch
-  DMatrix w;   // block scratch
-  DMatrix tmp; // block scratch
+  DMatrix Y;    // search vectors block (vecRows x NS)
+  DMatrix AY;   // A*Y block (vecRows x NS)
+  DMatrix u;    // block scratch
+  DMatrix w;    // block scratch
+  DMatrix tmp;  // block scratch
   V_ELE *vbuf;  // single Ritz vector (nr)
   V_ELE *avbuf; // single A*Ritz vector (nr)
   double *H;

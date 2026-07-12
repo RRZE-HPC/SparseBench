@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "matrix.h"
 #include "allocate.h"
 #include "chebFilter.h"
 #include "denseJacobi.h"
@@ -119,11 +118,7 @@ void gershgorinBounds(CommType *comm, Matrix *A, double *a_out, double *b_out)
  * seeded by k (and the rank) so the result is reproducible. Rows [0,nr) are
  * filled; padding rows [nr,vecRows) (SCS) are zeroed. Serial xorshift32 — the
  * state carries across rows, so no omp (the old per-vector loop was racy). */
-static void randomInitBlock(CommType *comm,
-    CG_UINT nr,
-    CG_UINT vecRows,
-    V_ELE *e,
-    int nv)
+static void randomInitBlock(CommType *comm, CG_UINT nr, CG_UINT vecRows, V_ELE *e, int nv)
 {
   for (int k = 0; k < nv; k++) {
     unsigned int state =
@@ -132,7 +127,7 @@ static void randomInitBlock(CommType *comm,
       state ^= state << 13;
       state ^= state >> 17;
       state ^= state << 5;
-      double rv   = (double)state / 4294967295.0 * 2.0 - 1.0;
+      double rv     = (double)state / 4294967295.0 * 2.0 - 1.0;
       e[r * nv + k] = (V_ELE)rv;
     }
   }
@@ -148,20 +143,16 @@ static void randomInitBlock(CommType *comm,
  * X/U/W/TMP are DMatrix blocks of width X->nc; elementwise steps run over the
  * contiguous vecRows*nc prefix (block is row-major packed at stride nc). No
  * halo exchange — ChebFD is single-process only. */
-static void applyFilter(Matrix *A,
-    ChebFilter *f,
-    DMatrix *X,
-    DMatrix *U,
-    DMatrix *W,
-    DMatrix *TMP)
+static void applyFilter(
+    Matrix *A, ChebFilter *f, DMatrix *X, DMatrix *U, DMatrix *W, DMatrix *TMP)
 {
   V_ELE alpha = (V_ELE)f->alpha;
   V_ELE beta  = (V_ELE)f->beta;
   double *gc  = f->gc;
   int Np      = f->Np;
 
-  int nv    = (int)X->nc;
-  CG_UINT n = X->nr * (CG_UINT)nv;
+  int nv      = (int)X->nc;
+  CG_UINT n   = X->nr * (CG_UINT)nv;
   U->nc = W->nc = TMP->nc = nv;
 
   /* u = (alpha H + beta) x = T_1(H) x */
@@ -180,13 +171,23 @@ static void applyFilter(Matrix *A,
 
   /* Remaining recurrence steps. Invariant: U = T_{n-2}, W = T_{n-1}. */
   for (int nn = 3; nn <= Np; nn++) {
-    spMMVM(A, W, TMP);                                    /* tmp = H w            */
-    waxpby(n, alpha, TMP->entries, beta, W->entries, TMP->entries);            /* tmp = (aH+b) w */
-    waxpby(n, (V_ELE)2.0, TMP->entries, (V_ELE)(-1.0), U->entries, U->entries);/* U = 2 tmp - U = T_n */
-    DMatrix *t = U;                                       /* U <- T_{n-1}, W <- T_n */
+    spMMVM(A, W, TMP); /* tmp = H w            */
+    waxpby(n, alpha, TMP->entries, beta, W->entries, TMP->entries); /* tmp = (aH+b) w */
+    waxpby(n,
+        (V_ELE)2.0,
+        TMP->entries,
+        (V_ELE)(-1.0),
+        U->entries,
+        U->entries); /* U = 2 tmp - U = T_n */
+    DMatrix *t = U;  /* U <- T_{n-1}, W <- T_n */
     U          = W;
     W          = t;
-    waxpby(n, (V_ELE)1.0, X->entries, (V_ELE)gc[nn], W->entries, X->entries); /* x += gc[nn] T_n */
+    waxpby(n,
+        (V_ELE)1.0,
+        X->entries,
+        (V_ELE)gc[nn],
+        W->entries,
+        X->entries); /* x += gc[nn] T_n */
   }
 }
 
@@ -303,7 +304,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     chebFilterPrint(&f);
   }
 
-  // work-space setup 
+  // work-space setup
   double tol    = param->eps > 0.0 ? param->eps : 1e-8;
   int maxiter   = param->itermax > 0 ? param->itermax : 50;
   CG_UINT nr    = A->nr;
@@ -381,7 +382,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
           inint);
     }
 
-    // Alg. 3.1, Step 8 : convergence check. 
+    // Alg. 3.1, Step 8 : convergence check.
     NT_found         = 0;
     double maxres    = 0.0;
     double minres_in = 1e30;
@@ -480,32 +481,32 @@ void allocChebData(ChebData *d, Matrix *m, int NS)
 
   /* All DMatrix blocks are stored row-major (vecRows x NS). The active width
    * (.nc) is shrunk during iterations; storage stays NS-wide. */
-  d->Y.nr    = vecRows;
-  d->Y.nc    = NS;
-  d->Y.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
+  d->Y.nr        = vecRows;
+  d->Y.nc        = NS;
+  d->Y.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
 
-  d->AY.nr    = vecRows;
-  d->AY.nc    = NS;
-  d->AY.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
+  d->AY.nr       = vecRows;
+  d->AY.nc       = NS;
+  d->AY.entries  = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
 
-  d->u.nr    = vecRows;
-  d->u.nc    = NS;
-  d->u.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
+  d->u.nr        = vecRows;
+  d->u.nc        = NS;
+  d->u.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
 
-  d->w.nr    = vecRows;
-  d->w.nc    = NS;
-  d->w.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
+  d->w.nr        = vecRows;
+  d->w.nc        = NS;
+  d->w.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
 
-  d->tmp.nr    = vecRows;
-  d->tmp.nc    = NS;
+  d->tmp.nr      = vecRows;
+  d->tmp.nc      = NS;
   d->tmp.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
 
-  d->vbuf  = (V_ELE *)allocate(ARRAY_ALIGNMENT, nr * sizeof(V_ELE));
-  d->avbuf = (V_ELE *)allocate(ARRAY_ALIGNMENT, nr * sizeof(V_ELE));
+  d->vbuf        = (V_ELE *)allocate(ARRAY_ALIGNMENT, nr * sizeof(V_ELE));
+  d->avbuf       = (V_ELE *)allocate(ARRAY_ALIGNMENT, nr * sizeof(V_ELE));
 
-  d->H    = (double *)allocate(ARRAY_ALIGNMENT, NS * NS * sizeof(double));
-  d->eval = (double *)allocate(ARRAY_ALIGNMENT, NS * sizeof(double));
-  d->evec = (double *)allocate(ARRAY_ALIGNMENT, NS * NS * sizeof(double));
+  d->H           = (double *)allocate(ARRAY_ALIGNMENT, NS * NS * sizeof(double));
+  d->eval        = (double *)allocate(ARRAY_ALIGNMENT, NS * sizeof(double));
+  d->evec        = (double *)allocate(ARRAY_ALIGNMENT, NS * NS * sizeof(double));
 }
 
 void freeChebData(ChebData *d)
