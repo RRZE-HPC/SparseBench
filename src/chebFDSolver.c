@@ -230,11 +230,9 @@ static int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
     }
     m++;
   }
-  /* Repack accepted columns from stride nc to stride m (forward in place:
-   * dest index r*m+i <= src index r*nc+i, and all earlier writes stay below
-   * the current source, so no source is clobbered before being read). */
-  for (int i = 0; i < m; i++) {
-    for (CG_UINT r = 0; r < nr; r++) {
+  // Repack accepted columns from stride nc to stride m.
+  for (CG_UINT r = 0; r < nr; r++) {
+    for (int i = 0; i < m; i++) {
       e[r * m + i] = e[r * nc + i];
     }
   }
