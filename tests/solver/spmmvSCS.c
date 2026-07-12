@@ -199,6 +199,11 @@ int test_spmmvSCS(void *args, const char *dataDir)
         deallocate(x_perm.entries);
         deallocate(y_perm.entries);
 #endif
+
+        freeMatrix(&A);
+        freeGMatrix(&gm);
+        freeMMMatrix(&m);
+
         if (diff_result) {
           fclose(fptr);
           free(pathToExpectedData);

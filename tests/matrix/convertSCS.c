@@ -88,6 +88,9 @@ int test_convertSCS(void *args, const char *dataDir)
           free(pathToReportedData);
           free(pathToExpectedData);
           free(pathToMatrix);
+          freeMatrix(&A);
+          freeGMatrix(&gm);
+          freeMMMatrix(&m);
           closedir(dir);
           return 1;
         }
@@ -100,10 +103,17 @@ int test_convertSCS(void *args, const char *dataDir)
           free(pathToReportedData);
           free(pathToExpectedData);
           free(pathToMatrix);
+          freeMatrix(&A);
+          freeGMatrix(&gm);
+          freeMMMatrix(&m);
 
           closedir(dir);
           return 1;
         }
+
+        freeMatrix(&A);
+        freeGMatrix(&gm);
+        freeMMMatrix(&m);
       }
       if (fptr)
         fclose(fptr);

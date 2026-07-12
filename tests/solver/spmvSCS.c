@@ -179,6 +179,10 @@ int test_spmvSCS(void *args, const char *dataDir)
 #endif
         free(pathToReportedData);
 
+        freeMatrix(&A);
+        freeGMatrix(&gm);
+        freeMMMatrix(&m);
+
         if (diff_result) {
           fclose(fptr);
           free(pathToExpectedData);

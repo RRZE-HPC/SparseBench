@@ -182,9 +182,8 @@ int chebFDGershgorinTests(int argc, char **argv)
       failedMatrices++;
     }
 
-    deallocate(gm.rowPtr);
-    deallocate(gm.entries);
-    deallocate(mm.entries);
+    freeGMatrix(&gm);
+    freeMMMatrix(&mm);
   }
   closedir(dir);
 
