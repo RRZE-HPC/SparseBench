@@ -35,6 +35,8 @@ void initParameter(Parameter *param)
   param->cheb.NS          = 0;
   param->cheb.kernel      = 3;
   param->cheb.mu          = 2; // from paper
+  param->cheb.have_a      = 0;
+  param->cheb.have_b      = 0;
   param->cheb.have_bounds = 0;
   param->cheb.have_target = 0;
 }
@@ -77,8 +79,8 @@ void readParameter(Parameter *param, const char *filename)
       PARSE_KEY("itermax", param->itermax, atoi);
       PARSE_KEY("eps", param->eps, atof);
       // NTS : `cheb_` prefix, populating the nested struct
-      PARSE_KEY("cheb_a", param->cheb.a, atof, param->cheb.have_bounds = 1);
-      PARSE_KEY("cheb_b", param->cheb.b, atof, param->cheb.have_bounds = 1);
+      PARSE_KEY("cheb_a", param->cheb.a, atof, param->cheb.have_a = 1);
+      PARSE_KEY("cheb_b", param->cheb.b, atof, param->cheb.have_b = 1);
       PARSE_KEY("cheb_lam_lo", param->cheb.lam_lo, atof, param->cheb.have_target = 1);
       PARSE_KEY("cheb_lam_hi", param->cheb.lam_hi, atof, param->cheb.have_target = 1);
       PARSE_KEY("cheb_Np", param->cheb.Np, atoi);
@@ -87,6 +89,18 @@ void readParameter(Parameter *param, const char *filename)
       PARSE_KEY("cheb_mu", param->cheb.mu, atoi);
     }
   }
+
+  // cheb_a and cheb_b must be supplied together; exactly one silently
+  // enables user-bounds mode with the other left at its 0.0 default,
+  // disabling the Gershgorin spectrum fallback.
+  if (param->cheb.have_a != param->cheb.have_b) {
+    fprintf(stderr,
+        "Error: 'cheb_a' and 'cheb_b' must be supplied together "
+        "(both or neither). Supplying only one silently disables the "
+        "Gershgorin spectrum fallback.\n");
+    exit(EXIT_FAILURE);
+  }
+  param->cheb.have_bounds = param->cheb.have_a;
 
   fclose(fp);
 }
