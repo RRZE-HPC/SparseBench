@@ -30,7 +30,7 @@ void omp_init(V_ELE *data_ptr, size_t elem_count, V_ELE value)
 {
 #pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int i = 0; i < elem_count; i++) {
-    data_ptr[i] = 1.0;
+    data_ptr[i] = value;
   }
 }
 
@@ -220,12 +220,14 @@ int main(int argc, char **argv)
   case CHEBFD: {
     if (commIsMaster(&comm)) {
       printf("Test type: CHEBFD\n");
-#if defined(_MPI)
-      printf("CURRENTLY CHEB FD doesn't support MPI\n");
-      commFinalize(&comm);
-      return -1;
-#endif
     }
+#if defined(_MPI)
+    if (commIsMaster(&comm)) {
+      printf("CURRENTLY CHEB FD doesn't support MPI\n");
+    }
+    commFinalize(&comm);
+    return -1;
+#endif
     numSeq    = 1;
     seq       = seqChebfd;
     int found = solveChebFD(&comm, &param, &sm);
