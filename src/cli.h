@@ -25,7 +25,7 @@ extern int BenchType;
   "  -f <parameter file>   Load options from a parameter file\n"                         \
   "  -m <MM matrix>   Load a matrix market file\n"                                       \
   "  -t <bench type>   Benchmark type, can be cg, spmv, spmmv, cheb or gmres. "          \
-  "Default "                                                                             \
+  "Default cg\n"                                                                         \
   "  -x <int>   Size in x for generated matrix, ignored if MM file is "                  \
   "loaded. Default 100.\n"                                                               \
   "  -y <int>   Size in y for generated matrix, ignored if MM file is "                  \
