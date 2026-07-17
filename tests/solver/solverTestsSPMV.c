@@ -1,13 +1,12 @@
-
 #include "../common.h"
-#include "convertSCS.h"
+#include "spmvSCS.h"
 
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int matrixTests(int argc, char **argv)
+int solverTestsSPMV(int argc, char **argv)
 {
   // Hard-code data directory
   char *dataDir = malloc(8);
@@ -24,12 +23,12 @@ int matrixTests(int argc, char **argv)
   // Get the directory path from the command line argument
   // const char *dataDir = argv[1];
 
-  Test tests[C_SIGMA_MAX * C_SIGMA_MAX] = { };
+  Test tests[REP_COUNT * C_SIGMA_MAX * C_SIGMA_MAX] = { };
 
-  int num_tests                         = sizeof(tests) / sizeof(tests[0]);
-  int passed                            = 0;
+  int num_tests                                     = sizeof(tests) / sizeof(tests[0]);
+  int passed                                        = 0;
 
-  Args **args                           = (Args **)malloc(num_tests * sizeof(Args *));
+  Args **args = (Args **)malloc(num_tests * sizeof(Args *));
   for (int i = 0; i < num_tests; ++i) {
     args[i] = (Args *)malloc(sizeof(Args));
     if (!args[i]) {
@@ -40,18 +39,20 @@ int matrixTests(int argc, char **argv)
 
   // Manually assign one configuration per test
   int idx = 0;
-  for (int c = 1; c <= C_SIGMA_MAX; c++) {
+  for (int i = 1; i <= 3; ++i) {
     for (int sigma = 1; sigma <= C_SIGMA_MAX; sigma++) {
-      char buff[64];
-      snprintf(buff, sizeof(buff), "convertSell-%d-%d", c, sigma);
-      tests[idx] = (Test) { "", test_convertSCS };
-      strcpy(tests[idx].name, buff);
-      SET_ARGS(idx, c, sigma, 0); // Test i
-      ++idx;
+      for (int c = 1; c <= C_SIGMA_MAX; c++) {
+        char buff[64];
+        snprintf(buff, sizeof(buff), "SpMV_%d Sell-%d-%d", i, c, sigma);
+        tests[idx] = (Test) { "", test_spmvSCS };
+        strcpy(tests[idx].name, buff);
+        SET_ARGS(idx, c, sigma, i); // Test idx, c, sigma, repeat
+        ++idx;
+      }
     }
   }
 
-  printf("Running %d Matrix tests:\n", num_tests);
+  printf("Running %d Solver tests:\n", num_tests);
   for (int i = 0; i < num_tests; ++i) {
     printf("[%-2d/%-2d] %-20s ... \n", i + 1, num_tests, tests[i].name);
     fflush(stdout);
@@ -64,7 +65,7 @@ int matrixTests(int argc, char **argv)
     }
   }
 
-  printf("\nSummary: %d/%d Matrix tests passed.\n", passed, num_tests);
+  printf("\nSummary: %d/%d Solver SPMV tests passed.\n", passed, num_tests);
 
   free(dataDir);
   free(args);

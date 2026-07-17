@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <errno.h>
@@ -8,9 +8,16 @@
 #include <stdlib.h>
 
 #include "allocate.h"
+#ifdef _GPU
+#include "cuda/cuda_kernels.h"
+#endif
 
 void *allocate(size_t alignment, size_t bytesize)
 {
+#ifdef _GPU
+  (void)alignment;
+  return gpu_allocate_managed(bytesize);
+#else
   int errorCode;
   void *ptr;
 
@@ -33,4 +40,14 @@ void *allocate(size_t alignment, size_t bytesize)
   }
 
   return ptr;
+#endif
+}
+
+extern void deallocate(void *ptr)
+{
+#ifdef _GPU
+  gpu_free_managed(ptr);
+#else
+  free(ptr);
+#endif
 }

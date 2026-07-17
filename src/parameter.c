@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <stdio.h>
@@ -11,17 +11,23 @@
 
 void initParameter(Parameter *param)
 {
-  param->filename = "generate";
-  param->nx       = 100;
-  param->ny       = 100;
-  param->nz       = 100;
-  param->itermax  = 150;
-  param->eps      = 0.0;
+  param->filename   = "generate";
+  param->nx         = 100;
+  param->ny         = 100;
+  param->nz         = 100;
+  param->itermax    = 150;
+  param->eps        = 0.0;
+  param->blockwidth = NUMVEC;
+#ifdef SCS
+  param->C     = SELL_CHUNK;
+  param->Sigma = SELL_SIGMA;
+#endif
+  param->verbose = 0;
 }
 
 void readParameter(Parameter *param, const char *filename)
 {
-  FILE *fp = fopen(filename, "r");
+  FILE *fp = fopen(filename, "re");
   char line[MAXLINE];
   int i;
 
@@ -64,8 +70,17 @@ void readParameter(Parameter *param, const char *filename)
 void printParameter(Parameter *param)
 {
   printf("Parameters\n");
-  // printf("\tN rows: %d, Non zeroes: %d,\n", param->nx, param->ny, param->nz);
   printf("Iterative solver parameters:\n");
+  printf("\tfile name: %s\n", param->filename);
+  printf("\tnx: %d\n", param->nx);
+  printf("\tny: %d\n", param->ny);
+  printf("\tnz: %d\n", param->nz);
   printf("\tMax iterations: %d\n", param->itermax);
   printf("\tepsilon (stopping tolerance) : %f\n", param->eps);
+  printf("\tBlock width: %d\n", param->blockwidth);
+#ifdef SCS
+  printf("\tSell chunk: %d\n", param->C);
+  printf("\tSell sigma: %d\n", param->Sigma);
+#endif
+  printf("\tVerbose Level: %d\n", param->verbose);
 }

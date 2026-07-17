@@ -1,11 +1,12 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include "profiler.h"
 #include "comm.h"
 #include "likwid-marker.h"
 #include "util.h"
+#include "vtype.h"
 #include <stddef.h>
 
 typedef struct {
@@ -16,9 +17,11 @@ typedef struct {
 
 double T[NUMREGIONS];
 
+//NOTE: this is currently for every benchmark iterations!
 static WorkType Regions[NUMREGIONS] = {
   { "waxpby:  ", 3, 6 },
   { "spMVM:   ", 0, 2 },
+  { "spMMVM:  ", 5, 2 },
   { "spMVM_l: ", 0, 2 },
   { "spMVM_e: ", 0, 2 },
   { "ddot:    ", 2, 4 },
@@ -32,6 +35,7 @@ void profilerInit(size_t *facFlops, size_t *facWords)
   {
     LIKWID_MARKER_REGISTER("WAXPBY");
     LIKWID_MARKER_REGISTER("SPMVM");
+    LIKWID_MARKER_REGISTER("SPMMVM");
     LIKWID_MARKER_REGISTER("SPMVM_LOCAL");
     LIKWID_MARKER_REGISTER("SPMVM_EXT");
     LIKWID_MARKER_REGISTER("DDOT");
@@ -49,7 +53,7 @@ void profilerInit(size_t *facFlops, size_t *facWords)
   Regions[SPMVM_EXT].words = facWords[SPMVM_EXT];
 }
 
-void profilerPrint(CommType *c, int iterations)
+void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
 {
 
   if (c->size > 1) {
@@ -83,7 +87,8 @@ void profilerPrint(CommType *c, int iterations)
     if (commIsMaster(c)) {
       printf(HLINE);
       printf("Function   avg MB/s  avg MFlop/s  Walltime(s) min, max, avg\n");
-      for (int j = 0; j < NUMREGIONS - 1; j++) {
+      for (int s = 0; s < numSeq; s++) {
+        int j        = seq[s];
         double bytes = (double)Regions[j].words * iterations;
         double flops = (double)Regions[j].flops * iterations;
 
@@ -120,15 +125,16 @@ void profilerPrint(CommType *c, int iterations)
   } else {
     printf(HLINE);
     printf("Function   Rate(MB/s)  Rate(MFlop/s)  Walltime(s)\n");
-    for (int j = 0; j < NUMREGIONS - 1; j++) {
-      double bytes = (double)Regions[j].words * iterations;
-      double flops = (double)Regions[j].flops * iterations;
+    for (int j = 0; j < numSeq; j++) {
+      int id       = seq[j];
+      double bytes = (double)Regions[id].words * iterations;
+      double flops = (double)Regions[id].flops * iterations;
 
       printf("%s%11.2f %11.2f %11.2f\n",
-          Regions[j].label,
-          1.0E-06 * bytes / T[j],
-          1.0E-06 * flops / T[j],
-          T[j]);
+          Regions[id].label,
+          1.0E-06 * bytes / T[id],
+          1.0E-06 * flops / T[id],
+          T[id]);
     }
     printf(HLINE);
   }

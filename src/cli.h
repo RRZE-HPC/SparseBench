@@ -11,10 +11,13 @@
 #include "comm.h"
 #include "parameter.h"
 
-typedef enum { CG = 0, SPMV, GMRES, CHEBFD, NUMTYPES } BenchEnumType;
+typedef enum { CG = 0, SPMV, SPMMV, GMRES, CHEBFD, NUMTYPES } BenchEnumType;
 extern int BenchType;
 
-#define HELPTEXT                                                                         \
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+#define HELPTEXT_BASE                                                                    \
   "Usage: sparseBench [options]\n\n"                                                     \
   "Options:\n"                                                                           \
   "  -h         Show this help text\n"                                                   \
@@ -30,7 +33,29 @@ extern int BenchType;
   "  -z <int>   Size in z for generated matrix, ignored if MM file is "                  \
   "loaded. Default 100.\n"                                                               \
   "  -i <int>   Number of solver iterations. Default 150.\n"                             \
+  "  -w <int>   Width of block vector for SpMMV\n"                                       \
+  "  -v         Enable verbose output\n"                                                 \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"
+
+#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:v:"
+
+#ifdef SCS
+
+#define BASE_ARGS BASE_ARGS_COMMON "k:s:"
+// clang-format off
+#define HELPTEXT                                                                         \
+  HELPTEXT_BASE                                                                          \
+  "  -k <int>  Chunk size value for SELL-c-sigma. Default " STR(SELL_CHUNK) ".\n"        \
+  "  -s <int>  Sigma size value for SELL-c-sigma. Default " STR(SELL_SIGMA) ".\n"
+
+#else
+
+#define BASE_ARGS BASE_ARGS_COMMON
+#define HELPTEXT HELPTEXT_BASE
+
+#endif
+
+// clang-format on
 
 extern void parseArguments(CommType *, Parameter *, int, char **);
 

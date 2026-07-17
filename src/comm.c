@@ -1,9 +1,10 @@
 /* Copyright (C) NHR@FAU, Universit Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include "matrix.h"
 #include "util.h"
+#include "vtype.h"
 #include <limits.h>
 #include <pthread.h>
 #include <sched.h>
@@ -103,7 +104,6 @@ static void reorderExternals(
     bucketOffset[bucketIdx]++;
   }
 
-  // Update externalOwningRank for new ordering
   for (int i = 0; i < extCount; i++) {
     extOwningRank[i] = newExtOwningRank[i];
   }
@@ -145,7 +145,6 @@ static void localizeMatrix(
   CG_UINT startRow = A->startRow;
   CG_UINT stopRow  = A->stopRow;
 
-  // map column ids in the matrix to the new local index
   for (int i = 0; i < numRows; i++) {
     for (int j = (int)rowPtr[i]; j < rowPtr[i + 1]; j++) {
       CG_UINT curIndex = entries[j].col;
@@ -230,11 +229,11 @@ static void reorderMatrixForOverlap(GMatrix *A, CG_UINT numRows)
  * This function exchanges external element lists between ranks to determine which local
  * elements each rank needs to send. The result is the elementsToSend array, which maps
  * to local row indices that will be packed into the send buffer during each exchange.
- * 
+ *
  * @param[in,out] c Communication structure to populate with send information
  * @param startRow First global row index owned by this rank
  * @param extLocalToGlobalReordered Global column indices needed by this rank (reordered)
- * 
+ *
  * Algorithm:
  * 1. Allocate send buffer and elementsToSend array
  * 2. Post non-blocking receives from all destination ranks (they will send the global
@@ -246,8 +245,6 @@ static void reorderMatrixForOverlap(GMatrix *A, CG_UINT numRows)
  * 
  * Result: c->elementsToSend[totalSendCount] contains local row indices to pack for sending,
  * organized by destination rank using c->sdispls and c->sendCounts
- * 
- * Complexity: O(totalSendCount)
  */
 static void buildElementsToSend(CommType *c, int startRow, int *extLocalToGlobalReordered)
 {
@@ -256,8 +253,7 @@ static void buildElementsToSend(CommType *c, int startRow, int *extLocalToGlobal
     c->totalSendCount += c->sendCounts[i];
   }
 
-  c->sendBuffer =
-      (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(CG_FLOAT));
+  c->sendBuffer = (V_ELE *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(V_ELE));
   MPI_Request request[c->outdegree];
   c->elementsToSend   = (int *)allocate(ARRAY_ALIGNMENT, c->totalSendCount * sizeof(int));
   int *elementsToSend = c->elementsToSend;
@@ -296,7 +292,6 @@ static void buildElementsToSend(CommType *c, int startRow, int *extLocalToGlobal
   MPI_Waitall(c->outdegree, request, MPI_STATUSES_IGNORE);
   MPI_Waitall(c->indegree, send_request, MPI_STATUSES_IGNORE);
 
-  // map global indices to local indices
   for (int i = 0; i < c->totalSendCount; i++) {
     elementsToSend[i] -= startRow;
   }
@@ -351,19 +346,21 @@ static void createMMEntryDatatype(MPI_Datatype *entryType)
 {
   MMEntry dummy;
   MPI_Aint baseAddress;
-  MPI_Aint displ[3];
+  MPI_Aint displ[4];
   MPI_Get_address(&dummy, &baseAddress);
   MPI_Get_address(&dummy.row, &displ[0]);
   MPI_Get_address(&dummy.col, &displ[1]);
   MPI_Get_address(&dummy.val, &displ[2]);
+  MPI_Get_address(&dummy.val_imag, &displ[3]);
 
   displ[0]              = MPI_Aint_diff(displ[0], baseAddress);
   displ[1]              = MPI_Aint_diff(displ[1], baseAddress);
   displ[2]              = MPI_Aint_diff(displ[2], baseAddress);
+  displ[3]              = MPI_Aint_diff(displ[3], baseAddress);
 
-  int blocklengths[3]   = { 1, 1, 1 };
-  MPI_Datatype types[3] = { MPI_INT, MPI_INT, MPI_DOUBLE };
-  MPI_Type_create_struct(3, blocklengths, displ, types, entryType);
+  int blocklengths[4]   = { 1, 1, 1, 1 };
+  MPI_Datatype types[4] = { MPI_INT, MPI_INT, MPI_DOUBLE, MPI_DOUBLE };
+  MPI_Type_create_struct(4, blocklengths, displ, types, entryType);
   MPI_Type_commit(entryType);
 }
 
@@ -500,11 +497,11 @@ static int findExternalIndex(int key, const int *extLocalToGlobal, int extCount)
 
 /**
  * @brief Determine which rank owns each external element.
- * 
+ *
  * This function uses an MPI_Allgather to obtain each rank's starting row offset, then
  * determines ownership for each external element by finding which rank's range contains
  * the global index. It also counts how many elements are needed from each source rank.
- * 
+ *
  * @param c Communication structure
  * @param startRow First global row owned by this rank
  * @param extLocalToGlobal Array mapping external index → global column index
@@ -513,7 +510,7 @@ static int findExternalIndex(int key, const int *extLocalToGlobal, int extCount)
  *                                (-1 if no communication, else count)
  * @param[out] extOwningRank Array mapping external index → owning MPI rank
  * @return Number of distinct source ranks (in-degree of communication graph)
- * 
+ *
  * Algorithm:
  * 1. Use MPI_Allgather to collect startRow from all ranks
  * 2. For each external element:
@@ -521,8 +518,6 @@ static int findExternalIndex(int key, const int *extLocalToGlobal, int extCount)
  *    - Record owner in extOwningRank
  *    - Update recvFromNeighbors count for that rank
  * 3. Count distinct source ranks
- * 
- * Complexity: O(extCount × log(numRanks))
  */
 static int findExternalOwningRanks(CommType *c,
     const int startRow,
@@ -573,24 +568,22 @@ static int findExternalOwningRanks(CommType *c,
 
 /**
  * @brief Create MPI distributed graph topology with known incoming edges.
- * 
+ *
  * This function sets up the MPI communication topology by specifying which ranks this
  * rank needs to receive from (sources). The MPI topology will automatically determine
  * the reverse direction (which ranks need data from us). Edge weights communicate the
  * message sizes (number of elements to receive from each source).
- * 
+ *
  * @param[in,out] c Communication structure; c->communicator will be set
  * @param sourceCount Number of source ranks (in-degree)
  * @param recvFromNeighbors Array tracking receive counts from each rank
- * 
+ *
  * Algorithm:
  * 1. Build arrays of source ranks and weights from recvFromNeighbors
  * 2. Create incoming edge arrays (degrees=1, destinations=this rank)
  * 3. Call MPI_Dist_graph_create to establish the topology
- * 
+ *
  * Result: c->communicator is initialized with the distributed graph topology
- * 
- * Complexity: O(sourceCount)
  */
 static void setupTopology(
     CommType *c, const int sourceCount, const int *recvFromNeighbors)
@@ -602,7 +595,6 @@ static void setupTopology(
   int cursor = 0;
   int size   = c->size;
 
-  // setup source nodes and element counts
   for (int i = 0; i < size; i++) {
     if (recvFromNeighbors[i] > 0) {
       sources[cursor]   = i;
@@ -610,7 +602,6 @@ static void setupTopology(
     }
   }
 
-  // setup incoming edges
   for (int i = 0; i < sourceCount; i++) {
     degrees[i]      = 1;
     destinations[i] = c->rank;
@@ -629,13 +620,13 @@ static void setupTopology(
 
 /**
  * @brief Retrieve the complete communication topology from MPI.
- * 
+ *
  * After the distributed graph topology is created, this function queries it to get
  * both the incoming and outgoing communication pattern. This includes source/destination
  * rank IDs and message counts in each direction.
- * 
+ *
  * @param[in,out] c Communication structure to populate with topology information
- * 
+ *
  * Algorithm:
  * 1. Call MPI_Dist_graph_neighbors_count to get in-degree and out-degree
  * 2. Allocate arrays for sources, destinations, and counts
@@ -648,8 +639,6 @@ static void setupTopology(
  * - destinations[outdegree]: Ranks we send to
  * - sendCounts[outdegree]: Elements to send to each destination
  * - rdispls, sdispls: Displacement arrays (allocated but not yet set)
- * 
- * Complexity: O(indegree + outdegree)
  */
 static void retrieveTopology(CommType *c)
 {
@@ -682,6 +671,60 @@ static void retrieveTopology(CommType *c)
 
 #endif //MPI
 
+/**
+ * @brief Print application banner and configuration information.
+ *
+ * Prints the application banner along with matrix format, precision, and
+ * integer type configuration. This is typically called once at startup.
+ */
+static void printConfigInfo(void)
+{
+  printf(BANNER "\n");
+  printf("Using %s matrix format, %s precision floats and integer type %s\n\n",
+      FMT,
+      PRECISION_STRING,
+      UINT_STRING);
+}
+
+#if defined(VERBOSE_AFFINITY) && defined(_OPENMP)
+/**
+ * @brief Print detailed thread affinity information.
+ *
+ * Prints detailed information about which CPU core each thread is running on,
+ * along with process and thread IDs. This function should be called from within
+ * an OpenMP parallel region with a critical section to avoid garbled output.
+ * 
+ * @param rank MPI rank of this process
+ * @param host Hostname where the process is running
+ * @param masterPid Process ID of the master thread
+ */
+static void printAffinityInfo(int rank, const char *host, pid_t masterPid)
+{
+  printf("Rank %d Thread %d running on Node %s core %d with pid %d and tid %d\n",
+      rank,
+      omp_get_thread_num(),
+      host,
+      sched_getcpu(),
+      masterPid,
+      gettid());
+  affinity_getmask();
+}
+#endif
+
+/**
+ * @brief Print startup banner with system and configuration information.
+ *
+ * This function prints a comprehensive startup banner that includes:
+ * - Application banner and compile-time configuration
+ * - MPI rank information (if running with multiple processes)
+ * - OpenMP thread count (if compiled with OpenMP support)
+ * - Per-process hostname and PID information
+ * - Detailed affinity information (if VERBOSE_AFFINITY is enabled)
+ *
+ * The output is synchronized across MPI ranks to ensure readable output.
+ *
+ * @param c Communication structure containing rank and size information
+ */
 void commPrintBanner(CommType *c)
 {
   int rank = c->rank;
@@ -693,23 +736,25 @@ void commPrintBanner(CommType *c)
     snprintf(host, sizeof(host), "unknown");
   }
 
-  if (c->size > 1) {
-    if (commIsMaster(c)) {
-      printf(BANNER "\n");
-      printf("Using %s matrix format, %s precision floats and integer type %s\n\n",
-          FMT,
-          PRECISION_STRING,
-          UINT_STRING);
-      printf("MPI parallel using %d ranks\n", c->size);
-#ifdef _OPENMP
-#pragma omp parallel
-      {
-#pragma omp single
-        printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
-      }
-#endif
+  // Print banner and configuration (master only in MPI mode, or always in single-process mode)
+  if (commIsMaster(c)) {
+    printConfigInfo();
+
+    if (size > 1) {
+      printf("MPI parallel using %d ranks\n", size);
+    } else {
+      printf("Running with only one process!\n");
     }
+
+#ifdef _OPENMP
+    printf("OpenMP enabled using %d threads\n", omp_get_max_threads());
+#endif
+  }
+
+  // In MPI mode, synchronize and print per-rank information
+  if (size > 1) {
     commBarrier();
+
     for (int i = 0; i < size; i++) {
       if (i == rank) {
         printf("Process with rank %d running on Node %s with pid %d\n",
@@ -718,59 +763,31 @@ void commPrintBanner(CommType *c)
             masterPid);
       }
 
-#ifdef VERBOSE_AFFINITY
-#ifdef _OPENMP
+#if defined(VERBOSE_AFFINITY) && defined(_OPENMP)
 #pragma omp parallel
       {
 #pragma omp critical
         {
-          printf("Rank %d Thread %d running on Node %s core %d with pid %d "
-                 "and tid "
-                 "%d\n",
-              rank,
-              omp_get_thread_num(),
-              host,
-              sched_getcpu(),
-              master_pid,
-              gettid());
-          affinity_getmask();
+          printAffinityInfo(rank, host, masterPid);
         }
-#endif
       }
-#endif //VERBOSE_AFFINITY
+#endif
+
+      commBarrier();
     }
-    commBarrier();
-  } else {
-    printf(BANNER "\n");
-    printf("Using %s matrix format, %s precision floats and integer type %s\n\n",
-        FMT,
-        PRECISION_STRING,
-        UINT_STRING);
-    printf("Running with only one process!\n");
-#ifdef _OPENMP
+  }
+#if defined(VERBOSE_AFFINITY) && defined(_OPENMP)
+  // In single-process mode, print affinity info if requested
+  else {
 #pragma omp parallel
     {
-#pragma omp single
-      printf("OpenMP enabled using %d threads\n", omp_get_num_threads());
-
-#ifdef VERBOSE_AFFINITY
 #pragma omp critical
       {
-        printf("Rank %d Thread %d running on Node %s core %d with pid %d "
-               "and tid "
-               "%d\n",
-            rank,
-            omp_get_thread_num(),
-            host,
-            sched_getcpu(),
-            master_pid,
-            gettid());
-        affinity_getmask();
+        printAffinityInfo(rank, host, masterPid);
       }
-#endif
     }
-#endif //_OPENMP
   }
+#endif
 }
 
 void commDistributeMatrix(CommType *c, MMMatrix *m, MMMatrix *mLocal)
@@ -845,13 +862,14 @@ void commDistributeMatrix(CommType *c, MMMatrix *m, MMMatrix *mLocal)
 #else
   mLocal->startRow = 0;
   mLocal->stopRow  = m->nr - 1;
+  mLocal->totalNr  = m->nr;
+  mLocal->totalNnz = m->nnz;
   mLocal->count    = m->count;
   mLocal->nr       = m->nr;
   mLocal->nnz      = m->nnz;
   mLocal->entries  = m->entries;
 #endif /* ifdef _MPI */
 }
-
 
 /**
  * @brief Transform distributed matrix to enable efficient single-exchange communication.
@@ -882,7 +900,7 @@ void commDistributeMatrix(CommType *c, MMMatrix *m, MMMatrix *mLocal)
  * **Four-Step Algorithm:**
  * 
  * 1. **Identify Externals**: Scan matrix to find all column indices referencing non-local
- *    rows. Build extLocalToGlobal mapping and extLookup binary search tree.
+ *    rows. Build extLocalToGlobal mapping (collect, sort, deduplicate).
  * 
  * 2. **Build Communication Topology**: Determine which ranks own the external elements
  *    (sources we receive from). Use MPI_Dist_graph_create to establish topology, which
@@ -957,12 +975,12 @@ void commLocalization(CommType *c, GMatrix *m)
   int *recvFromNeighbors = (int *)allocate(ARRAY_ALIGNMENT, size * sizeof(int));
 
   // Find which rank owns each external and count how many we need from each source
-  int sourceCount        = findExternalOwningRanks(
+  int sourceCount = findExternalOwningRanks(
       c, (int)m->startRow, extLocalToGlobal, extCount, recvFromNeighbors, extOwningRank);
-  
+
   // Create MPI distributed graph with incoming edges (sources + receive counts)
   setupTopology(c, sourceCount, recvFromNeighbors);
-  
+
   // Query the topology to get both incoming and outgoing communication pattern
   retrieveTopology(c);
 
@@ -1034,12 +1052,12 @@ void commLocalization(CommType *c, GMatrix *m)
 #endif
 }
 
-void commExchange(CommType *c, CG_UINT numRows, CG_FLOAT *x)
+void commExchange(CommType *c, CG_UINT numRows, V_ELE *x)
 {
 #ifdef _MPI
-  CG_FLOAT *sendBuffer = c->sendBuffer;
-  CG_FLOAT *externals  = x + numRows;
-  int *elementsToSend  = c->elementsToSend;
+  V_ELE *sendBuffer   = c->sendBuffer;
+  V_ELE *externals    = x + numRows;
+  int *elementsToSend = c->elementsToSend;
 
 // Copy values for all ranks into send buffer
 #pragma omp parallel for
@@ -1050,11 +1068,11 @@ void commExchange(CommType *c, CG_UINT numRows, CG_FLOAT *x)
   MPI_Neighbor_alltoallv(sendBuffer,
       c->sendCounts,
       c->sdispls,
-      MPI_FLOAT_TYPE,
+      MPI_V_ELE_TYPE,
       externals,
       c->recvCounts,
       c->rdispls,
-      MPI_FLOAT_TYPE,
+      MPI_V_ELE_TYPE,
       c->communicator);
 
 #endif
@@ -1072,11 +1090,11 @@ void commExchange(CommType *c, CG_UINT numRows, CG_FLOAT *x)
  *               received values written to x[numRows..numRows+extCount-1])
  * @param req    MPI request handle (output; passed to commExchangeEnd)
  */
-void commExchangeBegin(CommType *c, CG_UINT numRows, CG_FLOAT *x, MPI_Request *req)
+void commExchangeBegin(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req)
 {
 #ifdef _MPI
-  CG_FLOAT *sendBuffer = c->sendBuffer;
-  int *elementsToSend  = c->elementsToSend;
+  V_ELE *sendBuffer   = c->sendBuffer;
+  int *elementsToSend = c->elementsToSend;
 
   #pragma omp parallel for
   for (int i = 0; i < c->totalSendCount; i++) {
@@ -1086,11 +1104,11 @@ void commExchangeBegin(CommType *c, CG_UINT numRows, CG_FLOAT *x, MPI_Request *r
   MPI_Ineighbor_alltoallv(sendBuffer,
       c->sendCounts,
       c->sdispls,
-      MPI_FLOAT_TYPE,
+      MPI_V_ELE_TYPE,
       x + numRows,
       c->recvCounts,
       c->rdispls,
-      MPI_FLOAT_TYPE,
+      MPI_V_ELE_TYPE,
       c->communicator,
       req);
 #endif
@@ -1107,7 +1125,7 @@ void commExchangeBegin(CommType *c, CG_UINT numRows, CG_FLOAT *x, MPI_Request *r
  * @param x      Vector (externals region written by the exchange)
  * @param req    MPI request from commExchangeBegin
  */
-void commExchangeEnd(CommType *c, CG_UINT numRows, CG_FLOAT *x, MPI_Request *req)
+void commExchangeEnd(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req)
 {
 #ifdef _MPI
   MPI_Wait(req, MPI_STATUSES_IGNORE);
@@ -1121,6 +1139,15 @@ void commReduction(CG_FLOAT *v, int op)
     MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_FLOAT_TYPE, MPI_MAX, MPI_COMM_WORLD);
   } else if (op == SUM) {
     MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_FLOAT_TYPE, MPI_SUM, MPI_COMM_WORLD);
+  }
+#endif
+}
+
+void commReductionV(V_ELE *v, int op)
+{
+#ifdef _MPI
+  if (op == SUM) {
+    MPI_Allreduce(MPI_IN_PLACE, v, 1, MPI_V_ELE_TYPE, MPI_SUM, MPI_COMM_WORLD);
   }
 #endif
 }
@@ -1180,7 +1207,7 @@ void commMatrixDump(CommType *c, Matrix *m)
   CG_UINT numRows = m->nr;
   CG_UINT *rowPtr = m->rowPtr;
   CG_UINT *colInd = m->colInd;
-  CG_FLOAT *val   = m->val;
+  V_ELE *val      = m->val;
 
   if (commIsMaster(c)) {
     printf("Matrix: %d total non zeroes, total number of rows %d\n",
@@ -1197,7 +1224,14 @@ void commMatrixDump(CommType *c, Matrix *m)
 
         for (int rowEntry = (int)rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
             rowEntry++) {
+#ifdef USE_COMPLEX
+          printf("[%d]:(%.2f+%.2fi) ",
+              colInd[rowEntry],
+              VREAL(val[rowEntry]),
+              VIMAG(val[rowEntry]));
+#else
           printf("[%d]:%.2f ", colInd[rowEntry], val[rowEntry]);
+#endif
         }
 
         printf("\n");
@@ -1254,19 +1288,27 @@ void commMatrixDump(CommType *c, Matrix *m)
   printf("\n");
   printf("val: ");
   for (int i = 0; i < m->nElems; ++i) {
+#ifdef USE_COMPLEX
+    printf("(%f+%fi), ", VREAL(m->val[i]), VIMAG(m->val[i]));
+#else
     printf("%f, ", m->val[i]);
+#endif
   }
   printf("\n");
 #endif /* ifdef SCS */
 }
 
-void commVectorDump(CommType *c, CG_FLOAT *v, CG_UINT size, char *name)
+void commVectorDump(CommType *c, V_ELE *v, CG_UINT size, char *name)
 {
   for (int i = 0; i < c->size; i++) {
     if (i == c->rank) {
       FPRINTF(c->logFile, "Vector %s Rank %d of %d\n", name, c->rank, c->size);
       for (int j = 0; j < size; j++) {
+#ifdef USE_COMPLEX
+        FPRINTF(c->logFile, "\telement[%d] %f + %fi\n", j, VREAL(v[j]), VIMAG(v[j]));
+#else
         FPRINTF(c->logFile, "\telement[%d] %f\n", j, v[j]);
+#endif
       }
     }
 #ifdef _MPI
@@ -1301,7 +1343,15 @@ void commGMatrixDump(CommType *c, GMatrix *m)
 
         for (int rowEntry = (int)rowPtr[rowID]; rowEntry < rowPtr[rowID + 1];
             rowEntry++) {
+#ifdef USE_COMPLEX
+          FPRINTF(c->logFile,
+              "[%d]:(%.2f+%.2fi) ",
+              entries[rowEntry].col,
+              VREAL(entries[rowEntry].val),
+              VIMAG(entries[rowEntry].val));
+#else
           FPRINTF(c->logFile, "[%d]:%.2f ", entries[rowEntry].col, entries[rowEntry].val);
+#endif
         }
 
         FPRINTF(c->logFile, "\n");

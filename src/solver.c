@@ -1,5 +1,5 @@
 /* Copyright (C) NHR@FAU, University Erlangen-Nuremberg.
- * All rights reserved. This file is part of CG-Bench.
+ * All rights reserved. This file is part of SparseBench.
  * Use of this source code is governed by a MIT style
  * license that can be found in the LICENSE file. */
 #include <math.h>
@@ -12,13 +12,14 @@
 #include "comm.h"
 #include "solver.h"
 #include "util.h"
+#include "vtype.h"
 
 void waxpby(const CG_UINT n,
-    const CG_FLOAT alpha,
-    const CG_FLOAT *restrict x,
-    const CG_FLOAT beta,
-    const CG_FLOAT *restrict y,
-    CG_FLOAT *const w)
+    const V_ELE alpha,
+    const V_ELE *restrict x,
+    const V_ELE beta,
+    const V_ELE *restrict y,
+    V_ELE *const w)
 {
   if (alpha == 1.0) {
 #pragma omp parallel for schedule(static)
@@ -39,12 +40,25 @@ void waxpby(const CG_UINT n,
 }
 
 void ddot(const CG_UINT n,
-    const CG_FLOAT *restrict x,
-    const CG_FLOAT *restrict y,
-    CG_FLOAT *restrict result)
+    const V_ELE *restrict x,
+    const V_ELE *restrict y,
+    V_ELE *restrict result)
 {
-  CG_FLOAT sum = 0.0;
+  V_ELE sum = 0.0;
 
+#ifdef USE_COMPLEX
+  if (y == x) {
+#pragma omp parallel for reduction(+ : sum) schedule(static)
+    for (int i = 0; i < n; i++) {
+      sum += VCONJ(x[i]) * x[i];
+    }
+  } else {
+#pragma omp parallel for reduction(+ : sum) schedule(static)
+    for (int i = 0; i < n; i++) {
+      sum += VCONJ(x[i]) * y[i];
+    }
+  }
+#else
   if (y == x) {
 #pragma omp parallel for reduction(+ : sum) schedule(static)
     for (int i = 0; i < n; i++) {
@@ -56,7 +70,8 @@ void ddot(const CG_UINT n,
       sum += x[i] * y[i];
     }
   }
+#endif
 
-  commReduction(&sum, SUM);
+  commReductionV(&sum, SUM);
   *result = sum;
 }
