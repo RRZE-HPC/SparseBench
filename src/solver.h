@@ -10,6 +10,7 @@
 #include "vtype.h"
 
 extern int solveCG(CommType *comm, Parameter *param, Matrix *m);
+extern int solveGMRES(CommType *comm, Parameter *param, Matrix *m);
 // extern void solverCheckResidual(Solver* s, Comm* c);
 extern void spMVM(Matrix *m, const V_ELE *restrict x, V_ELE *restrict y);
 extern void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y);

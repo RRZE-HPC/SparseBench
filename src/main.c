@@ -184,11 +184,13 @@ int main(int argc, char **argv)
   } break;
 
   case GMRES:
+    numSeq          = 3;
+    int seqGmres[3] = { DDOT, WAXPBY, SPMVM };
+    seq             = seqGmres;
     if (commIsMaster(&comm)) {
       printf("Test type: GMRES\n");
-      printf("GMRES not implemented yet\n");
     }
-    commAbort(&comm, "GMRES not implemented yet\n");
+    k = solveGMRES(&comm, &param, &sm);
     break;
 
   case CHEBFD:

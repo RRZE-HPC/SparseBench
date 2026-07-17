@@ -15,6 +15,7 @@ typedef struct {
   int Sigma;
 #endif
   int blockwidth;
+  int restart;
   int verbose;
   int device;
 } Parameter;

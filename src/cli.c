@@ -97,6 +97,9 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
     case 'w':
       param->blockwidth = (int)strtol(optarg, NULL, INT_BASE);
       break;
+    case 'r':
+      param->restart = (int)strtol(optarg, NULL, INT_BASE);
+      break;
     case 'v':
       param->verbose = (int)strtol(optarg, NULL, INT_BASE);
       break;

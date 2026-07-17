@@ -36,9 +36,10 @@ extern int BenchType;
   "  -w <int>   Width of block vector for SpMMV\n"                                       \
   "  -v         Enable verbose output\n"                                                 \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"                           \
+  "  -r <int>   GMRES restart dimension. Default 30.\n"                                  \
   "  -d <int>   GPU device index (multi-GPU nodes). Default 0.\n"
 
-#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:v:d:"
+#define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:r:v:d:"
 
 #ifdef SCS
 
