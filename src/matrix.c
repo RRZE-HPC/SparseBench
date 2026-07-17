@@ -114,6 +114,7 @@ void matrixGenerate(GMatrix *m, Parameter *p, int rank, int size, bool use_7pt_s
   m->nr       = local_nrow;
   m->nc       = local_nrow;
   m->nnz      = local_nnz;
+  m->rowLocalEnd = NULL;  // Will be set by reorderMatrixForOverlap after localization
 }
 
 void MMMatrixRead(MMMatrix *m, char *filename)
@@ -234,6 +235,7 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
   m->nnz          = mm->nnz;
   m->entries      = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
   m->rowPtr       = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
+  m->rowLocalEnd  = NULL;  // Will be set by reorderMatrixForOverlap after localization
 
   int *valsPerRow = (int *)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(int));
 

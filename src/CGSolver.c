@@ -93,8 +93,17 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   double timeStart, timeStop, ts;
 
   PROFILE(WAXPBY, waxpby(nrow, 1.0, x, 0.0, x, p));
-  PROFILE(COMM, commExchange(comm, A->nr, p));
+#if defined(_MPI)
+  {
+    MPI_Request req;
+    PROFILE(COMM, commExchangeBegin(comm, A->nr, p, &req));
+    PROFILE(SPMVM_LOCAL, spMVM_local(A, p, Ap));
+    PROFILE(COMM, commExchangeEnd(comm, A->nr, p, &req));
+    PROFILE(SPMVM_EXT, spMVM_external(A, p, Ap));
+  }
+#else
   PROFILE(SPMVM, spMVM(A, p, Ap));
+#endif
   PROFILE(WAXPBY, waxpby(nrow, 1.0, b, -1.0, Ap, r));
   PROFILE(DDOT, ddot(nrow, r, r, &rtrans));
 
@@ -120,8 +129,15 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
       printf("Iteration = %d Residual = %E\n", k, normr);
     }
 
-    PROFILE(COMM, commExchange(comm, A->nr, p));
+#if defined(_MPI)
+    MPI_Request req;
+    PROFILE(COMM, commExchangeBegin(comm, A->nr, p, &req));
+    PROFILE(SPMVM_LOCAL, spMVM_local(A, p, Ap));
+    PROFILE(COMM, commExchangeEnd(comm, A->nr, p, &req));
+    PROFILE(SPMVM_EXT, spMVM_external(A, p, Ap));
+#else
     PROFILE(SPMVM, spMVM(A, p, Ap));
+#endif
     CG_FLOAT alpha = 0.0;
     PROFILE(DDOT, ddot(nrow, p, Ap, &alpha));
     alpha = rtrans / alpha;

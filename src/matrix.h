@@ -31,6 +31,7 @@ typedef struct {
   CG_UINT totalNr, totalNnz; // number of total rows and non zeros
   CG_UINT startRow, stopRow; // range of rows owned by current rank
   CG_UINT *rowPtr; // row Pointer
+  CG_UINT *rowLocalEnd; // first colInd index of external entries in each row (enables split SpMV)
   Entry *entries;
 } GMatrix;
 
@@ -55,5 +56,8 @@ extern void matrixGenerate(
     GMatrix *m, Parameter *p, int rank, int size, bool use_7pt_stencil);
 
 extern void convertMatrix(Matrix *m, GMatrix *im);
+extern void spMVM(Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y);
+extern void spMVM_local(const Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y);
+extern void spMVM_external(const Matrix *m, const CG_FLOAT *restrict x, CG_FLOAT *restrict y);
 
 #endif // __MATRIX_H_

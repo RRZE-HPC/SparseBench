@@ -11,7 +11,8 @@ typedef struct {
   CG_UINT totalNr, totalNnz; // number of total rows and non zeros
   CG_UINT startRow, stopRow; // range of rows owned by current rank
   CG_UINT *rowPtr; // row Pointer
-  CG_UINT *colInd; // colum Indices
+  CG_UINT *rowLocalEnd; // first colInd index of external entries in each row (enables split SpMV)
+  CG_UINT *colInd; // column Indices
   CG_FLOAT *val; // matrix entries
 } Matrix;
 

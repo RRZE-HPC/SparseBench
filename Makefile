@@ -24,7 +24,7 @@ $(error Stopping after creating config.mk - please review and run make again)
 endif
 include config.mk
 include $(MAKE_DIR)/include_$(TOOLCHAIN).mk
-INCLUDES  += -I$(SRC_DIR)/includes -I$(BUILD_DIR)
+INCLUDES  += -I$(SRC_DIR) -I$(BUILD_DIR)
 
 VPATH     = $(SRC_DIR)
 ASM       = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.s,$(wildcard $(SRC_DIR)/*.c))

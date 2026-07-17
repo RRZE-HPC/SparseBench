@@ -95,6 +95,10 @@ int main(int argc, char **argv)
   factorWords[WAXPBY] = 3 * sizeof(CG_FLOAT) * m.totalNr;
   factorFlops[SPMVM]  = m.totalNnz;
   factorWords[SPMVM]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
+  factorFlops[SPMVM_LOCAL]  = m.totalNnz;
+  factorWords[SPMVM_LOCAL]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
+  factorFlops[SPMVM_EXT]    = m.totalNnz;
+  factorWords[SPMVM_EXT]    = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
 
   profilerInit(factorFlops, factorWords);
 

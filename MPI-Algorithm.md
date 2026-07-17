@@ -76,12 +76,9 @@ in the local matrix partition.
 **Variables:**
 
 - `extCount` (int): Total number of unique external elements required by this rank
-- `extLookup` (Bstree*): Binary search tree for O(log n) lookup to check if a global
-  column index has already been identified as external. Maps global column index → 
-  position in extLocalToGlobal array
-- `extLocalToGlobal` (int[MAX_EXTERNAL]): Maps from zero-based external index → 
-  global column index. This is the initial ordering as externals are encountered
-  during the matrix scan.
+- `extLocalToGlobal` (int*, dynamically allocated): Maps from zero-based external index →
+  global column index. After identification, the array is sorted and deduplicated
+  (sorted ascending) to enable binary search lookups during localization.
 
 ### Step 2: Build Distributed Graph Topology
 
@@ -139,10 +136,10 @@ and cache-friendly memory access patterns.
 2. **Remap matrix column indices:**
    - For each matrix entry:
      - If column references a local row: convert to zero-based local index (col - startRow)
-     - If column references an external: use `extLookup` to find external index, then
-       use `extLocalIndex[external_idx]` to get the new local RHS index
+     - If column references an external: binary search `extLocalToGlobal` to find
+       external index, then use `extLocalIndex[external_idx]` to get the new local RHS index
 
-**Complexity:** O(extCount² / numRanks_avg) for reordering + O(nnz_local × log(extCount))
+**Complexity:** O(indegree + extCount) for reordering + O(nnz_local × log(extCount))
 for matrix remapping
 
 **Why reordering is necessary:** Without reordering, externals from different ranks would

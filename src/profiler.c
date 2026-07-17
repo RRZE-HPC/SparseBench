@@ -19,6 +19,8 @@ double T[NUMREGIONS];
 static WorkType Regions[NUMREGIONS] = {
   { "waxpby:  ", 3, 6 },
   { "spMVM:   ", 0, 2 },
+  { "spMVM_l: ", 0, 2 },
+  { "spMVM_e: ", 0, 2 },
   { "ddot:    ", 2, 4 },
   { "comm:    ", 0, 0 }
 };
@@ -30,6 +32,8 @@ void profilerInit(size_t *facFlops, size_t *facWords)
   {
     LIKWID_MARKER_REGISTER("WAXPBY");
     LIKWID_MARKER_REGISTER("SPMVM");
+    LIKWID_MARKER_REGISTER("SPMVM_LOCAL");
+    LIKWID_MARKER_REGISTER("SPMVM_EXT");
     LIKWID_MARKER_REGISTER("DDOT");
     LIKWID_MARKER_REGISTER("COMM");
   }
@@ -41,6 +45,8 @@ void profilerInit(size_t *facFlops, size_t *facWords)
   }
 
   Regions[SPMVM].words = facWords[SPMVM];
+  Regions[SPMVM_LOCAL].words = facWords[SPMVM_LOCAL];
+  Regions[SPMVM_EXT].words = facWords[SPMVM_EXT];
 }
 
 void profilerPrint(CommType *c, int iterations)

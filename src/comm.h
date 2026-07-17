@@ -13,8 +13,6 @@
 
 #include "matrix.h"
 
-#define MAX_EXTERNAL 6000000
-
 #define BANNER                                                                           \
   "/ _\\_ __   __ _ _ __ ___  ___  / __\\ ___ _ __   ___| |__  \n"                       \
   "\\ \\| '_ \\ / _` | '__/ __|/ _ \\/__\\/// _ \\ '_ \\ / __| '_ \\ \n"                 \
@@ -54,6 +52,10 @@ extern void commGMatrixDump(CommType *c, GMatrix *m);
 extern void commMatrixDump(CommType *c, Matrix *m);
 extern void commVectorDump(CommType *c, CG_FLOAT *v, CG_UINT size, char *name);
 extern void commExchange(CommType *c, CG_UINT numRows, CG_FLOAT *x);
+#if defined(_MPI)
+extern void commExchangeBegin(CommType *c, CG_UINT numRows, CG_FLOAT *x, MPI_Request *req);
+extern void commExchangeEnd(CommType *c, CG_UINT numRows, CG_FLOAT *x, MPI_Request *req);
+#endif
 extern void commReduction(CG_FLOAT *v, int op);
 extern void commPrintBanner(CommType *c);
 extern void commAbort(CommType *c, char *msg);
