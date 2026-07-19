@@ -202,35 +202,30 @@ static int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
   for (int k = 0; k < nc; k++) {
     for (int pass = 0; pass < 2; pass++) {
       for (int j = 0; j < m; j++) {
-        V_ELE coef = (V_ELE)0.0;
-        for (CG_UINT r = 0; r < nr; r++) {
-          coef += e[r * nc + k] * e[r * nc + j];
-        }
-        for (CG_UINT r = 0; r < nr; r++) {
-          e[r * nc + k] -= coef * e[r * nc + j];
-        }
+        /* coef = e[:,k]·e[:,j] ; e[:,k] -= coef*e[:,j]  (columns at stride nc) */
+        V_ELE coef;
+        ddot_stride(nr, &e[k], nc, &e[j], nc, &coef);
+        waxpby_stride(nr, (V_ELE)1.0, &e[k], nc, (V_ELE)(-coef), &e[j], nc, &e[k], nc);
       }
     }
-    V_ELE nrm2 = (V_ELE)0.0;
-    for (CG_UINT r = 0; r < nr; r++) {
-      nrm2 += e[r * nc + k] * e[r * nc + k];
-    }
+    V_ELE nrm2;
+    ddot_stride(nr, &e[k], nc, &e[k], nc, &nrm2);
     double nrm = sqrt((double)nrm2);
     if (nrm < tol) {
       continue; /* linearly dependent -> drop */
     }
     V_ELE inv = (V_ELE)(1.0 / nrm);
-    for (CG_UINT r = 0; r < nr; r++) {
-      e[r * nc + k] *= inv;
-    }
+    /* e[:,k] *= inv ; if compacting, e[:,m] = e[:,k] */
+    waxpby_stride(nr, inv, &e[k], nc, (V_ELE)0.0, &e[k], nc, &e[k], nc);
     if (m != k) {
-      for (CG_UINT r = 0; r < nr; r++) {
-        e[r * nc + m] = e[r * nc + k];
-      }
+      waxpby_stride(nr, (V_ELE)1.0, &e[k], nc, (V_ELE)0.0, &e[k], nc, &e[m], nc);
     }
     m++;
   }
-  // Repack accepted columns from stride nc to stride m.
+  /* Repack accepted columns from stride nc to stride m. Kept as an explicit
+   * row-wise loop: column-wise via the strided primitives would alias
+   * (narrowing stride in place), and this is a layout transform, not a
+   * dot/axpy kernel. */
   for (CG_UINT r = 0; r < nr; r++) {
     for (int i = 0; i < m; i++) {
       e[r * m + i] = e[r * nc + i];
@@ -356,10 +351,9 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     V_ELE *AYe = AY->entries;
     for (int i = 0; i < m; i++) {
       for (int j = i; j < m; j++) {
-        V_ELE h = (V_ELE)0.0;
-        for (CG_UINT r = 0; r < nr; r++) {
-          h += Ye[r * m + i] * AYe[r * m + j];
-        }
+        /* H[i,j] = Y[:,i]·AY[:,j]  (columns at stride m) */
+        V_ELE h;
+        ddot_stride(nr, &Ye[i], m, &AYe[j], m, &h);
         double hv    = (double)h;
         H[i * m + j] = hv;
         H[j * m + i] = hv;
@@ -388,17 +382,18 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
       if (eval[k] < lam_lo || eval[k] > lam_hi) {
         continue;
       }
-      for (CG_UINT r = 0; r < nr; r++) {
-        CG_UINT row = r * (CG_UINT)m;
-        V_ELE vk    = (V_ELE)0.0;
-        V_ELE avk   = (V_ELE)0.0;
-        for (int j = 0; j < m; j++) {
-          V_ELE ej = (V_ELE)evec[j * m + k];
-          vk += ej * Ye[row + j];
-          avk += ej * AYe[row + j];
-        }
-        vbuf[r]  = vk;
-        avbuf[r] = avk;
+      /* vbuf = Y·evec[:,k], avbuf = AY·evec[:,k]: dense GEMV accumulated
+       * column-wise so each primitive spans all nr rows (good granularity)
+       * instead of length-m per-row dots that would fork-join per row.
+       * Summation order (j ascending) is preserved, so results are
+       * bit-identical to the prior per-row form. */
+      V_ELE e0 = (V_ELE)evec[k]; /* evec[0*m + k] */
+      waxpby_stride(nr, e0, &Ye[0], m, (V_ELE)0.0, &Ye[0], m, vbuf, 1);
+      waxpby_stride(nr, e0, &AYe[0], m, (V_ELE)0.0, &AYe[0], m, avbuf, 1);
+      for (int j = 1; j < m; j++) {
+        V_ELE ej = (V_ELE)evec[(CG_UINT)j * m + k];
+        waxpby_stride(nr, (V_ELE)1.0, vbuf, 1, ej, &Ye[j], m, vbuf, 1);
+        waxpby_stride(nr, (V_ELE)1.0, avbuf, 1, ej, &AYe[j], m, avbuf, 1);
       }
       /* r = Av_k - eval_k v_k ; ||r|| */
       waxpby(nr, (V_ELE)1.0, avbuf, (V_ELE)(-eval[k]), vbuf, avbuf);

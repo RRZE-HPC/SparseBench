@@ -75,3 +75,35 @@ void ddot(const CG_UINT n,
   commReductionV(&sum, SUM);
   *result = sum;
 }
+
+void waxpby_stride(const CG_UINT n,
+    const V_ELE alpha,
+    const V_ELE *restrict x,
+    const CG_UINT incx,
+    const V_ELE beta,
+    const V_ELE *restrict y,
+    const CG_UINT incy,
+    V_ELE *restrict w,
+    const CG_UINT incw)
+{
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (CG_UINT i = 0; i < n; i++) {
+    w[i * incw] = alpha * x[i * incx] + beta * y[i * incy];
+  }
+}
+
+void ddot_stride(const CG_UINT n,
+    const V_ELE *restrict x,
+    const CG_UINT incx,
+    const V_ELE *restrict y,
+    const CG_UINT incy,
+    V_ELE *restrict result)
+{
+  V_ELE sum = 0.0;
+#pragma omp parallel for reduction(+ : sum) schedule(OMP_SCHEDULE)
+  for (CG_UINT i = 0; i < n; i++) {
+    sum += x[i * incx] * y[i * incy];
+  }
+  commReductionV(&sum, SUM);
+  *result = sum;
+}

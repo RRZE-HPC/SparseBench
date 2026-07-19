@@ -140,6 +140,7 @@ int main(int argc, char **argv)
 
   int numSeq       = 0;
   int *seq         = NULL;
+  int rc           = EXIT_SUCCESS;
 
   // SCS spMVM/spMMVM has padded rows so update accordingly
 #ifdef SCS
@@ -225,8 +226,10 @@ int main(int argc, char **argv)
     if (commIsMaster(&comm)) {
       printf("CURRENTLY CHEB FD doesn't support MPI\n");
     }
-    commFinalize(&comm);
-    return -1;
+    // Fall through to the shared cleanup tail (free sm/m, finalize
+    // GPU/LIKWID/comm); skip solveChebFD and the profiler report.
+    rc = EXIT_FAILURE;
+    break;
 #endif
     numSeq    = 1;
     seq       = seqChebfd;
@@ -238,7 +241,10 @@ int main(int argc, char **argv)
   default:;
   }
 
-  profilerPrint(&comm, seq, numSeq, k);
+  // Skip the profiler on the CHEBFD/MPI bail: no PROFILE regionssymmetry.
+  if (rc == EXIT_SUCCESS) {
+    profilerPrint(&comm, seq, numSeq, k);
+  }
   profilerFinalize();
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
   gpu_finalize();
@@ -248,5 +254,5 @@ int main(int argc, char **argv)
   freeMatrix(&sm);
   freeGMatrix(&m);
 
-  return EXIT_SUCCESS;
+  return rc;
 }

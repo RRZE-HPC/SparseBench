@@ -40,4 +40,24 @@ extern void ddot(const CG_UINT n,
     const V_ELE *restrict e,
     const V_ELE *restrict y,
     V_ELE *restrict result);
+
+/* Strided variants for dense-block ops (e.g. ChebFD columns/rows of row-major
+ * DMatrix blocks). The stride-1 ddot/waxpby above stay the hot path for
+ * contiguous vectors (CG, applyFilter). */
+extern void waxpby_stride(const CG_UINT n,
+    const V_ELE alpha,
+    const V_ELE *restrict x,
+    const CG_UINT incx,
+    const V_ELE beta,
+    const V_ELE *restrict y,
+    const CG_UINT incy,
+    V_ELE *restrict w,
+    const CG_UINT incw);
+
+extern void ddot_stride(const CG_UINT n,
+    const V_ELE *restrict x,
+    const CG_UINT incx,
+    const V_ELE *restrict y,
+    const CG_UINT incy,
+    V_ELE *restrict result);
 #endif // __SOLVER_H_
