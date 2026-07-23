@@ -1,11 +1,9 @@
-import os
 import sys
 from pathlib import Path
 from scipy.sparse import csr_array
 from scipy.io import mmread
 import numpy as np
 from scs_matrix import scsMatrix
-from itertools import count
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_OUT_DIR = SCRIPT_DIR / ".." / "data" / "expected"
