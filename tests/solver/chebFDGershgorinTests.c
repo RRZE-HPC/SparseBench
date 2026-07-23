@@ -6,16 +6,17 @@
 #include "../common.h"
 
 #include <dirent.h>
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Reference Gershgorin bounds computed from the GMatrix produced by matrixConvertfromMM 
+// Reference Gershgorin bounds computed from the GMatrix produced by matrixConvertfromMM
 static void gershgorinRef(const GMatrix *g, double *a_out, double *b_out)
 {
-  double lo = 1e30; // TODO : cant find DBL_MAX AND MIN so work around for now 
-  double hi = -1e30;
+  double lo = DBL_MAX;
+  double hi = -DBL_MAX;
   for (CG_UINT i = 0; i < g->nr; i++) {
     double diag = 0.0;
     double off  = 0.0;
@@ -50,7 +51,7 @@ static int buildConfigs(GershConfig *cfgs, int max)
   static const CG_UINT sigmaVals[] = { 1, 4 };
   for (int ci = 0; ci < (int)(sizeof(cVals) / sizeof(cVals[0])) && n < max; ci++) {
     for (int si = 0; si < (int)(sizeof(sigmaVals) / sizeof(sigmaVals[0])) && n < max;
-         si++) {
+        si++) {
       cfgs[n].C     = cVals[ci];
       cfgs[n].sigma = sigmaVals[si];
       snprintf(cfgs[n].label,
@@ -67,7 +68,7 @@ static int buildConfigs(GershConfig *cfgs, int max)
     cfgs[0].C     = 0;
     cfgs[0].sigma = 0;
     snprintf(cfgs[0].label, sizeof(cfgs[0].label), "row");
-    n              = 1;
+    n = 1;
   }
 #endif
   return n;
@@ -86,7 +87,7 @@ static int checkMatrix(const GMatrix *gm,
   const double tolA = 1e-5 * (1.0 + fabs(refA));
   const double tolB = 1e-5 * (1.0 + fabs(refB));
 
-  int fails = 0;
+  int fails         = 0;
   for (int ci = 0; ci < nConfigs; ci++) {
     Matrix A;
     memset(&A, 0, sizeof(A));

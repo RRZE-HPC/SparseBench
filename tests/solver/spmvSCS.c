@@ -159,6 +159,11 @@ int test_spmvSCS(void *args, const char *dataDir)
         BUILD_MATRIX_FILE_PATH(
             entry, "reported/", out_file_name, C_str, sigma_str, pathToReportedData);
         FILE *reportedData = fopen(pathToReportedData, "w");
+        if (reportedData == NULL) {
+          perror("Error opening reported data file");
+          printf("pathToReportedData = %s\n", pathToReportedData);
+          exit(EXIT_FAILURE);
+        }
 
         printf("pathToReportedData = %s\n", pathToReportedData);
 

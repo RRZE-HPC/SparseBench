@@ -87,8 +87,8 @@ typedef struct {
 static inline void swap_ptrs(V_ELE **x_perm, V_ELE **y_perm)
 {
   V_ELE *tmp = *x_perm;
-  *x_perm       = *y_perm;
-  *y_perm       = tmp;
+  *x_perm    = *y_perm;
+  *y_perm    = tmp;
 }
 
 static int diff_files(const char *expectedData, const char *reportedData)

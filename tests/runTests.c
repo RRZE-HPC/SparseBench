@@ -2,12 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #ifdef SCS
 #include "matrix/matrixTests.h"
 #endif
+#include "solver/chebFDGershgorinTests.h"
 #include "solver/solverTestsSPMMV.h"
 #include "solver/solverTestsSPMV.h"
-#include "solver/chebFDGershgorinTests.h"
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
 #include "../src/cuda/cuda_kernels.h"
@@ -25,6 +27,9 @@ int main(int argc, char **argv)
   return -1;
 #endif
 
+  // since tests needs a reported folder it made sense to centralize it here
+  mkdir("./data", 0775);
+  mkdir("./data/reported", 0775);
 
 #ifdef SCS
   matrixTests(argc, argv);

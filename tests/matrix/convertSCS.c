@@ -7,8 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 int test_convertSCS(void *args, const char *dataDir)
 {
@@ -16,15 +14,6 @@ int test_convertSCS(void *args, const char *dataDir)
   /* TODO: validate under _MPI — single-rank only; no commInit/commDistributeMatrix (full matrix on one process). */
   int rank = 0;
   int size = 1;
-
-  // Ensure the directory for reported outputs exists (its contents are
-  // gitignored, so it is absent on a fresh clone and fopen(...,"w") would
-  // return NULL, causing a segfault in dumpMatrix_impl).
-  char *pathToReportedDir = malloc(strlen(dataDir) + strlen("reported/") + 1);
-  strcpy(pathToReportedDir, dataDir);
-  strcat(pathToReportedDir, "reported/");
-  mkdir(pathToReportedDir, 0775);
-  free(pathToReportedDir);
 
   // Open the directory
   char *pathToMatrices = malloc(strlen(dataDir) + strlen("testMatrices/") + 1);
@@ -91,6 +80,8 @@ int test_convertSCS(void *args, const char *dataDir)
           freeMatrix(&A);
           freeGMatrix(&gm);
           freeMMMatrix(&m);
+          fclose(fptr);
+          free(pathToMatrices);
           closedir(dir);
           return 1;
         }
@@ -106,7 +97,8 @@ int test_convertSCS(void *args, const char *dataDir)
           freeMatrix(&A);
           freeGMatrix(&gm);
           freeMMMatrix(&m);
-
+          fclose(fptr);
+          free(pathToMatrices);
           closedir(dir);
           return 1;
         }
