@@ -31,9 +31,26 @@ OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u 
 # Always leave debugging flag on
 CFLAGS=-g -O0 $(OPENMP) $(DEFINES)
 
-.PHONY: all clean prebuild
+# Expected-data generation (Python; requires scipy + numpy)
+PYTHON  ?= python3
+GEN_DIR  = test_case_generator
+MATRICES = $(wildcard data/testMatrices/*.mtx)
+
+.PHONY: all clean prebuild run prerun
 
 all: $(TARGET)
+
+# Build (if needed) and run the test suite.
+run: all
+	./$(TARGET)
+
+# generate the expected test data from the reference matrices  
+# Output is written to data/expected/ by the script.
+prerun:
+	@for m in $(MATRICES) ; do \
+		echo "Generating expected data for $$m" ; \
+		$(PYTHON) $(GEN_DIR)/testfile_generators.py "$$m" ; \
+	done
 
 prebuild:
 	@make -sC ../
