@@ -30,6 +30,13 @@ static void writeBinMatrix(CommType *c, char *filename)
   commDistributeMatrix(c, &mm, &mmLocal);
   matrixConvertfromMM(&mmLocal, &m);
   matrixBinWrite(&m, c, changeFileEnding(filename, ".bmx"));
+
+  // Mirror initMatrix's cleanup
+  freeMMMatrix(&mmLocal);
+  if (commIsMaster(c)) {
+    freeMMMatrix(&mm);
+  }
+  freeGMatrix(&m);
 }
 #endif
 
