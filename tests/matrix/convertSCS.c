@@ -23,6 +23,7 @@ int test_convertSCS(void *args, const char *dataDir)
   DIR *dir = opendir(pathToMatrices);
   if (dir == NULL) {
     perror("Error opening directory");
+    free(pathToMatrices);
     return 1;
   }
 
@@ -103,6 +104,7 @@ int test_convertSCS(void *args, const char *dataDir)
           return 1;
         }
 
+        free(pathToReportedData);
         freeMatrix(&A);
         freeGMatrix(&gm);
         freeMMMatrix(&m);
