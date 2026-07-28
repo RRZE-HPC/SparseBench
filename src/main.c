@@ -29,7 +29,7 @@
 void omp_init(V_ELE *data_ptr, size_t elem_count, V_ELE value)
 {
 #pragma omp parallel for schedule(OMP_SCHEDULE)
-  for (int i = 0; i < elem_count; i++) {
+  for (size_t i = 0; i < elem_count; i++) {
     data_ptr[i] = value;
   }
 }
@@ -42,7 +42,9 @@ static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
     matrixGenerate(m, p, c->rank, c->size, true);
   } else {
     char *dot = strrchr(p->filename, '.');
-    if (strcmp(dot, ".mtx") == 0) {
+    if (dot == NULL) {
+      commAbort(c, "Unknown matrix file format (filename has no extension)!\n");
+    } else if (strcmp(dot, ".mtx") == 0) {
       MMMatrix mm;
       MMMatrix mmLocal;
 
@@ -67,11 +69,12 @@ static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
       }
       matrixBinRead(m, c, p->filename);
 #else
-      printf("Binary matrix files are only supported with MPI!\n");
-      exit(EXIT_SUCCESS);
+      // Like the sibling arms: an input this build cannot read is a failure, so
+      // it must not exit 0 and let a driver record the run as successful.
+      commAbort(c, "Binary matrix files are only supported with MPI!\n");
 #endif
     } else {
-      printf("Unknown matrix file format!\n");
+      commAbort(c, "Unknown matrix file format!\n");
     }
   }
 }
@@ -133,20 +136,22 @@ int main(int argc, char **argv)
   profilerInit(factorFlops, factorWords);
 
   // previously using stack local stored data resulting in undefined behaviour
-  int seqCg[3]     = { DDOT, WAXPBY, SPMVM };
-  int seqSpmv[1]   = { SPMVM };
-  int seqSpmmv[1]  = { SPMMVM };
-  int seqChebfd[1] = { SPMVM };
+  int seqCg[3]    = { DDOT, WAXPBY, SPMVM };
+  int seqSpmv[1]  = { SPMVM };
+  int seqSpmmv[1] = { SPMMVM };
 
-  int numSeq       = 0;
-  int *seq         = NULL;
-  int rc           = EXIT_SUCCESS;
+  int numSeq      = 0;
+  int *seq        = NULL;
+  int rc          = EXIT_SUCCESS;
 
-  // SCS spMVM/spMMVM has padded rows so update accordingly
+  // input vectors must span nc.
+  // Output vectors must span nr padded
 #ifdef SCS
-  CG_UINT vecSize = sm.nrPadded;
+  CG_UINT inSize  = MAX(sm.nc, sm.nrPadded);
+  CG_UINT outSize = sm.nrPadded;
 #else
-  CG_UINT vecSize = sm.nr;
+  CG_UINT inSize  = sm.nc;
+  CG_UINT outSize = sm.nr;
 #endif
 
   int k = 0;
@@ -167,12 +172,12 @@ int main(int argc, char **argv)
       printf("Test type: SPMVM\n");
     }
     const int itermax = param.itermax;
-    V_ELE *x          = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecSize * sizeof(V_ELE));
-    V_ELE *y          = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecSize * sizeof(V_ELE));
+    V_ELE *x = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)inSize * sizeof(V_ELE));
+    V_ELE *y = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)outSize * sizeof(V_ELE));
 
     // Parallel init for NUMA first-touch — must match spMVM's schedule.
-    omp_init(x, vecSize, 1.0);
-    omp_init(y, vecSize, 0.0);
+    omp_init(x, inSize, 1.0);
+    omp_init(y, outSize, 0.0);
 
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMVM, spMVM(&sm, x, y));
@@ -188,20 +193,33 @@ int main(int argc, char **argv)
       printf("Test type: SPMMVM\n");
     }
     int itermax = param.itermax;
-    DMatrix x   = { .nr = vecSize, .nc = param.blockwidth, .entries = NULL };
-    DMatrix y   = { .nr = vecSize, .nc = param.blockwidth, .entries = NULL };
-    x.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, x.nr * x.nc * sizeof(V_ELE));
-    y.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, y.nr * y.nc * sizeof(V_ELE));
+#ifdef SCS
+    /* spMMVM stacks a per-thread V_ELE tmp[C * blockwidth] VLA; reject a width
+     * that would overflow the worker stack (or a non-positive one, which is a
+     * zero-length VLA / a huge unsigned nc) instead of crashing in the kernel.
+     * Same limit ChebFD applies to cheb_NS. */
+    if (!spMMVMBlockWidthOk(sm.C, param.blockwidth)) {
+      if (commIsMaster(&comm)) {
+        printf("SPMMV: block width %d is invalid for the SCS spMMVM stack "
+               "scratch (C=%llu, limit ~%u bytes/thread); reduce -w or raise "
+               "OMP_STACKSIZE.\n",
+            param.blockwidth,
+            (unsigned long long)sm.C,
+            (unsigned)SCS_MAX_SPMMVM_VLA_BYTES);
+      }
+      rc     = EXIT_FAILURE;
+      numSeq = 0;
+      break;
+    }
+#endif
+    DMatrix x = { .nr = inSize, .nc = param.blockwidth, .entries = NULL };
+    DMatrix y = { .nr = outSize, .nc = param.blockwidth, .entries = NULL };
+    x.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)x.nr * x.nc * sizeof(V_ELE));
+    y.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)y.nr * y.nc * sizeof(V_ELE));
 
     // Parallel init for NUMA first-touch — must match spMMVM's schedule.
-#pragma omp parallel for schedule(OMP_SCHEDULE)
-    for (int i = 0; i < x.nr * x.nc; i++) {
-      x.entries[i] = 1.0;
-    }
-#pragma omp parallel for schedule(OMP_SCHEDULE)
-    for (int i = 0; i < y.nr * y.nc; i++) {
-      y.entries[i] = 0.0;
-    }
+    omp_init(x.entries, (size_t)x.nr * x.nc, 1.0);
+    omp_init(y.entries, (size_t)y.nr * y.nc, 0.0);
 
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMMVM, spMMVM(&sm, &x, &y));
@@ -231,28 +249,32 @@ int main(int argc, char **argv)
     rc = EXIT_FAILURE;
     break;
 #endif
-    numSeq    = 1;
-    seq       = seqChebfd;
+    // ChebFD does its own timing/reporting, so it is left out of the profiler sequence. 
+    // A negative return means a configuration/validation failure -> propagate a non-zero exit.
     int found = solveChebFD(&comm, &param, &sm);
-    k         = found > 0 ? found : 0;
+    if (found < 0) {
+      rc = EXIT_FAILURE;
+    } else {
+      k = found;
+    }
     break;
   }
 
   default:;
   }
 
-  // Skip the profiler on the CHEBFD/MPI bail: no PROFILE regionssymmetry.
-  if (rc == EXIT_SUCCESS) {
+
+  if (rc == EXIT_SUCCESS && numSeq > 0) {
     profilerPrint(&comm, seq, numSeq, k);
   }
   profilerFinalize();
+  freeMatrix(&sm);
+  freeGMatrix(&m);
+
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
   gpu_finalize();
 #endif
   commFinalize(&comm);
-
-  freeMatrix(&sm);
-  freeGMatrix(&m);
 
   return rc;
 }
