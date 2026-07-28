@@ -7,11 +7,18 @@
 
 #include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+/* Affine map xi = alpha * x + beta, clamped to [-1, 1] against endpoint rounding
+ * that would make acos() return NaN. fmin/fmax swallow NaN, so the caller must
+ * reject a NaN x. */
+static inline double mapToChebDomain(const ChebFilter *f, double x)
+{
+  return fmax(-1.0, fmin(f->alpha * x + f->beta, 1.0));
+}
 
 /* Damping kernel factors g_n (paper Table 1, cf. KPM Rev. Mod. Phys. 78, 275).
  * All kernels use the convention g_0 = 1 and vanish for n > Np. */
@@ -41,15 +48,6 @@ static double kernelFactor(KernelType k, int n, int Np, int mu)
   }
 }
 
-static double clamp(double x, double lo, double hi)
-{
-  if (x < lo)
-    return lo;
-  if (x > hi)
-    return hi;
-  return x;
-}
-
 int chebFilterInit(ChebFilter *f,
     double a,
     double b,
@@ -62,11 +60,14 @@ int chebFilterInit(ChebFilter *f,
   if (f == NULL) {
     return -1;
   }
-  if (a >= b) {
+  /* Negated comparisons so a NaN bound is rejected here: mapToChebDomain would
+   * silently turn a NaN xi into 1.0 and zero every moment c_n, giving an empty
+   * filter that looks like an ordinary rank collapse. */
+  if (!(a < b)) {
     fprintf(stderr, "chebFilterInit: need a < b (got a=%g, b=%g)\n", a, b);
     return -1;
   }
-  if (!(lam_lo < lam_hi) || lam_lo < a || lam_hi > b) {
+  if (!(lam_lo < lam_hi) || !(a <= lam_lo) || !(lam_hi <= b)) {
     fprintf(stderr,
         "chebFilterInit: need a <= lam_lo < lam_hi <= b "
         "(got [%g, %g] in [%g, %g])\n",
@@ -95,10 +96,10 @@ int chebFilterInit(ChebFilter *f,
   f->kernel = kernel;
   f->mu     = mu;
 
-  /* mapped target bounds xi = alpha * x + beta in [-1, 1];
-   * theta = acos(xi); since xi_lo < xi_hi, theta_lo > theta_hi */
-  double xi_lo    = clamp(f->alpha * lam_lo + f->beta, -1.0, 1.0);
-  double xi_hi    = clamp(f->alpha * lam_hi + f->beta, -1.0, 1.0);
+  /* mapped target bounds; theta = acos(xi), and since xi_lo < xi_hi the angles
+   * come out reversed: theta_lo > theta_hi */
+  double xi_lo    = mapToChebDomain(f, lam_lo);
+  double xi_hi    = mapToChebDomain(f, lam_hi);
   double theta_lo = acos(xi_lo);
   double theta_hi = acos(xi_hi);
 
@@ -112,7 +113,7 @@ int chebFilterInit(ChebFilter *f,
   for (int n = 1; n <= Np; n++) {
     double cn = 2.0 * (sin((double)n * theta_lo) - sin((double)n * theta_hi)) /
                 (M_PI * (double)n);
-    f->gc[n]  = kernelFactor(kernel, n, Np, mu) * cn;
+    f->gc[n] = kernelFactor(kernel, n, Np, mu) * cn;
   }
 
   return 0;

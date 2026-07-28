@@ -22,11 +22,12 @@ typedef struct {
   DMatrix u;    // block scratch
   DMatrix w;    // block scratch
   DMatrix tmp;  // block scratch
-  V_ELE *vbuf;  // single Ritz vector (nr)
-  V_ELE *avbuf; // single A*Ritz vector (nr)
+  V_ELE *avbuf; // residual of a single Ritz pair (nr)
+  double *evk;  // contiguous gather of one eigenvector column of evec (NS)
   double *H;
   double *eval;
   double *evec;
+  double *accEval; // accepted (converged) in-interval eigenvalues (NS)
   int NS;
 } ChebData;
 

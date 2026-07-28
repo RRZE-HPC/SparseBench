@@ -32,13 +32,15 @@ static KernelType mapKernel(int k)
   }
 }
 
+// Quick spectrum bounds, accurate enough (to me):
 // https://en.wikipedia.org/wiki/Gershgorin_circle_theorem
-// to find the lower and upper bounds quickly with relatively acceptable(to me) accuracy
 void gershgorinBounds(CommType *comm, Matrix *A, double *a_out, double *b_out)
 {
 
-  CG_FLOAT lo = (CG_FLOAT)1e30;
-  CG_FLOAT hi = (CG_FLOAT)-1e30;
+  /* Finite sentinels, not +/-INFINITY: -ffast-math lets the compiler assume Inf
+   * away. CG_FLOAT_MAX is also OpenMP's identity for the reductions below. */
+  CG_FLOAT lo = CG_FLOAT_MAX;
+  CG_FLOAT hi = -CG_FLOAT_MAX;
 
 #ifdef SCS
   CG_UINT *colInd    = A->colInd;
@@ -48,12 +50,10 @@ void gershgorinBounds(CommType *comm, Matrix *A, double *a_out, double *b_out)
   CG_UINT C          = A->C;
   CG_UINT nChunks    = A->nChunks;
 
-  /* SCS stores colInd in permuted (new) ordering, and the row index i*C+k is
-   * also in new ordering, so the diagonal test compares them directly. No
-   * permutation lookup is needed (it would also read out of bounds on padded
-   * rows where i*C+k >= nr); gershgorin bounds are permutation-invariant
-   * anyway. Loop k (row-in-chunk) outer so each row accumulates into scalars,
-   * mirroring the CRS branch. */
+  /* colInd and the row index i*C+k are both in permuted (new) ordering, so the
+   * diagonal test compares them directly — no permutation lookup, which would
+   * also read out of bounds on padded rows. Bounds are permutation-invariant.
+   * Loop k (row-in-chunk) outer so each row accumulates into scalars, as in CRS. */
 #pragma omp parallel for schedule(OMP_SCHEDULE) reduction(min : lo) reduction(max : hi)
   for (CG_UINT i = 0; i < nChunks; ++i) {
     CG_UINT chunkOffset = chunkPtr[i];
@@ -114,35 +114,42 @@ void gershgorinBounds(CommType *comm, Matrix *A, double *a_out, double *b_out)
   *b_out = (double)hi;
 }
 
-/* Deterministic pseudo-random fill of the search block. Each column k is
- * seeded by k (and the rank) so the result is reproducible. Rows [0,nr) are
- * filled; padding rows [nr,vecRows) (SCS) are zeroed. Serial xorshift32 — the
- * state carries across rows, so no omp (the old per-vector loop was racy). */
+/* Stateless splitmix64 mix of a 64-bit key -> uniformly-distributed bits. */
+static inline unsigned long long splitmix64(unsigned long long z)
+{
+  z += 0x9E3779B97F4A7C15ull;
+  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+  z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+  return z ^ (z >> 31);
+}
+
+/* Deterministic pseudo-random fill of the search block. Hashing each entry from
+ * (row, column, rank) makes it order-independent, so the loop runs over rows for
+ * NUMA first-touch. Rows [0,nr) get [-1,1); SCS padding rows are zeroed. */
 static void randomInitBlock(CommType *comm, CG_UINT nr, CG_UINT vecRows, V_ELE *e, int nv)
 {
-  for (int k = 0; k < nv; k++) {
-    unsigned int state =
-        12345u + (unsigned int)k * 7919u + (unsigned int)comm->rank * 1000003u;
-    for (CG_UINT r = 0; r < nr; r++) {
-      state ^= state << 13;
-      state ^= state >> 17;
-      state ^= state << 5;
-      double rv     = (double)state / 4294967295.0 * 2.0 - 1.0;
-      e[r * nv + k] = (V_ELE)rv;
-    }
-  }
-  for (CG_UINT r = nr; r < vecRows; r++) {
-    for (int k = 0; k < nv; k++) {
-      e[r * nv + k] = (V_ELE)0.0;
+  unsigned long long rankKey = (unsigned long long)comm->rank * 0xD1B54A32D192ED03ull;
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (CG_UINT r = 0; r < vecRows; r++) {
+    if (r < nr) {
+      for (int k = 0; k < nv; k++) {
+        unsigned long long key = rankKey + (unsigned long long)r * 0x9E3779B97F4A7C15ull +
+                                 (unsigned long long)k * 0xC2B2AE3D27D4EB4Full;
+        unsigned long long h = splitmix64(key);
+        double rv            = (double)(h >> 11) / (double)(1ull << 53) * 2.0 - 1.0;
+        e[r * (CG_UINT)nv + (CG_UINT)k] = (V_ELE)rv;
+      }
+    } else {
+      for (int k = 0; k < nv; k++) {
+        e[r * (CG_UINT)nv + (CG_UINT)k] = (V_ELE)0.0;
+      }
     }
   }
 }
 
-/* Step 5 (paper Fig. 6): replace each column of X by p(H) x via the
- * Clenshaw/Chebyshev recurrence, applied to the whole subspace at once.
- * X/U/W/TMP are DMatrix blocks of width X->nc; elementwise steps run over the
- * contiguous vecRows*nc prefix (block is row-major packed at stride nc). No
- * halo exchange — ChebFD is single-process only. */
+/* Step 5 (paper Fig. 6): replace each column of X by p(H) x via the Chebyshev
+ * recurrence, applied to the whole subspace at once. X/U/W/TMP are row-major
+ * blocks of width X->nc; no halo exchange — ChebFD is single-process only. */
 static void applyFilter(
     Matrix *A, ChebFilter *f, DMatrix *X, DMatrix *U, DMatrix *W, DMatrix *TMP)
 {
@@ -164,9 +171,8 @@ static void applyFilter(
   waxpby(n, alpha, TMP->entries, beta, U->entries, TMP->entries);
   waxpby(n, (V_ELE)2.0, TMP->entries, (V_ELE)(-1.0), X->entries, W->entries);
 
-  /* x = gc0 x + gc1 u + gc2 w */
-  waxpby(n, (V_ELE)gc[0], X->entries, (V_ELE)0.0, X->entries, X->entries);
-  waxpby(n, (V_ELE)1.0, X->entries, (V_ELE)gc[1], U->entries, X->entries);
+  /* x = gc0 x + gc1 u + gc2 w  (fused into two sweeps) */
+  waxpby(n, (V_ELE)gc[0], X->entries, (V_ELE)gc[1], U->entries, X->entries);
   waxpby(n, (V_ELE)1.0, X->entries, (V_ELE)gc[2], W->entries, X->entries);
 
   /* Remaining recurrence steps. Invariant: U = T_{n-2}, W = T_{n-1}. */
@@ -191,11 +197,9 @@ static void applyFilter(
   }
 }
 
-/* Step 6: rank-revealing Modified Gram-Schmidt with reorthogonalization,
- * operating on the columns of a row-major block `e` (nr rows x nc cols, stride
- * nc). Accepts columns whose remaining norm exceeds tol, orthogonalizes in
- * place, compacts the accepted orthonormal columns to the front, and repacks
- * them to stride m so the result is a tight nr x m block. Returns m. */
+/* Step 6: rank-revealing Modified Gram-Schmidt with reorthogonalization over the
+ * columns of the row-major block `e` (nr x nc, stride nc). Keeps the columns
+ * with norm > tol, compacts them to the front, repacks to stride m, returns m. */
 static int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
 {
   int m = 0;
@@ -222,20 +226,19 @@ static int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
     }
     m++;
   }
-  /* Repack accepted columns from stride nc to stride m. Kept as an explicit
-   * row-wise loop: column-wise via the strided primitives would alias
-   * (narrowing stride in place), and this is a layout transform, not a
-   * dot/axpy kernel. */
-  for (CG_UINT r = 0; r < nr; r++) {
-    for (int i = 0; i < m; i++) {
-      e[r * m + i] = e[r * nc + i];
+  /* Repack accepted columns from stride nc to stride m. Explicit row-wise loop:
+   * the strided primitives would alias (narrowing stride in place). MUST stay
+   * serial and ascending in r — row r overwrites the window that the earlier
+   * row floor(r*m/nc) still reads. */
+  if (m != nc) {
+    for (CG_UINT r = 0; r < nr; r++) {
+      for (int i = 0; i < m; i++) {
+        e[r * m + i] = e[r * nc + i];
+      }
     }
   }
   return m;
 }
-
-/* Norm of the residual for the k-th Ritz pair is computed inline in
- * solveChebFD (Step 8) so the Ritz vector does not need to be materialized. */
 
 int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
 {
@@ -263,6 +266,39 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   if (param->cheb.NS < 2) {
     if (commIsMaster(comm)) {
       printf("ChebFD: set number of search vectors cheb_NS>=2 in the parameter file.\n");
+    }
+    return -1;
+  }
+  if (param->cheb.kernel < 0 || param->cheb.kernel > 3) {
+    if (commIsMaster(comm)) {
+      printf("ChebFD: cheb_kernel must be 0=none, 1=Fejer, 2=Jackson or 3=Lanczos "
+             "(got %d).\n",
+          param->cheb.kernel);
+    }
+    return -1;
+  }
+#ifdef SCS
+  /* spMMVM (SCS) puts a per-thread V_ELE tmp[C * NS] VLA on the worker stack;
+   * reject a width that would overflow it. main.c guards SPMMV the same way. */
+  if (!spMMVMBlockWidthOk(A->C, param->cheb.NS)) {
+    if (commIsMaster(comm)) {
+      printf("ChebFD: cheb_NS=%d too large for the SCS spMMVM stack scratch "
+             "(C=%llu, limit ~%u bytes/thread); reduce cheb_NS or raise "
+             "OMP_STACKSIZE.\n",
+          param->cheb.NS,
+          (unsigned long long)A->C,
+          (unsigned)SCS_MAX_SPMMVM_VLA_BYTES);
+    }
+    return -1;
+  }
+#endif
+
+  /* H = YᵀAY is rank-local and Rayleigh-Ritz is replicated, so this solver is
+   * single-process only. main.c also rejects _MPI at compile time. */
+  if (comm->size > 1) {
+    if (commIsMaster(comm)) {
+      printf("ChebFD: MPI is not supported (comm size %d); run with one rank.\n",
+          comm->size);
     }
     return -1;
   }
@@ -309,52 +345,62 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   ChebData d;
   allocChebData(&d, A, NS);
 
-  DMatrix *Y   = &d.Y;
-  DMatrix *AY  = &d.AY;
-  DMatrix *u   = &d.u;
-  DMatrix *w   = &d.w;
-  DMatrix *tmp = &d.tmp;
-  V_ELE *vbuf  = d.vbuf;
-  V_ELE *avbuf = d.avbuf;
-  double *H    = d.H;
-  double *eval = d.eval;
-  double *evec = d.evec;
+  DMatrix *Y      = &d.Y;
+  DMatrix *AY     = &d.AY;
+  DMatrix *u      = &d.u;
+  DMatrix *w      = &d.w;
+  DMatrix *tmp    = &d.tmp;
+  V_ELE *avbuf    = d.avbuf;
+  double *evk     = d.evk;
+  double *H       = d.H;
+  double *eval    = d.eval;
+  double *evec    = d.evec;
+  double *accEval = d.accEval;
 
   // Alg. 3.1, Step 4: construct NS random search vectors.
   randomInitBlock(comm, nr, Y->nr, Y->entries, NS);
 
   int NT_found     = 0;
-  int mLast        = NS;
   double timeStart = getTimeStamp();
   int iter;
   for (iter = 1; iter <= maxiter; iter++) {
-    int curNS = NS;
     // Alg. 3.1, Step 5 (Fig. 6): apply the polynomial filter to the whole subspace.
-    Y->nc = curNS;
+    Y->nc = NS;
     applyFilter(A, &f, Y, u, w, tmp);
 
     // Alg. 3.1, Step 6: orthogonalize the filtered search vectors (rank-revealing MGS).
-    int m = orthoMGS(nr, Y->entries, curNS, 1e-8);
+    int m = orthoMGS(nr, Y->entries, NS, 1e-8);
     if (m == 0) {
       if (commIsMaster(comm)) {
         printf("iter %d: search space collapsed to rank 0.\n", iter);
       }
       break;
     }
-    mLast = m;
     Y->nc = m;
+
+    /* orthoMGS repacks only rows [0,nr); re-zero the SCS padding at the new
+     * stride m, or applyFilter's Np-step recurrence blows it up to Inf/NaN. */
+    for (CG_UINT r = nr; r < Y->nr; r++) {
+      for (int i = 0; i < m; i++) {
+        Y->entries[r * (CG_UINT)m + i] = (V_ELE)0.0;
+      }
+    }
 
     // Alg. 3.1, Step 7: Rayleigh-Ritz — H = YᵀAY, Ritz pairs via Jacobi. AY = A*Y (block).
     AY->nc = m;
     spMMVM(A, Y, AY);
     V_ELE *Ye  = Y->entries;
     V_ELE *AYe = AY->entries;
+    /* H = YᵀAY (symmetric). One parallel region over the upper-triangular pairs
+     * with a serial inner dot, instead of a ddot_stride fork-join per pair. */
+#pragma omp parallel for schedule(OMP_SCHEDULE)
     for (int i = 0; i < m; i++) {
       for (int j = i; j < m; j++) {
         /* H[i,j] = Y[:,i]·AY[:,j]  (columns at stride m) */
-        V_ELE h;
-        ddot_stride(nr, &Ye[i], m, &AYe[j], m, &h);
-        double hv    = (double)h;
+        double hv = 0.0;
+        for (CG_UINT r = 0; r < nr; r++) {
+          hv += (double)Ye[r * (CG_UINT)m + i] * (double)AYe[r * (CG_UINT)m + j];
+        }
         H[i * m + j] = hv;
         H[j * m + i] = hv;
       }
@@ -377,33 +423,36 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     // Alg. 3.1, Step 8 : convergence check.
     NT_found         = 0;
     double maxres    = 0.0;
-    double minres_in = 1e30;
+    double minres_in = DBL_MAX;
+    double accThresh = sqrt(tol);
     for (int k = 0; k < m; k++) {
       if (eval[k] < lam_lo || eval[k] > lam_hi) {
         continue;
       }
-      /* vbuf = Y·evec[:,k], avbuf = AY·evec[:,k]: dense GEMV accumulated
-       * column-wise so each primitive spans all nr rows (good granularity)
-       * instead of length-m per-row dots that would fork-join per row.
-       * Summation order (j ascending) is preserved, so results are
-       * bit-identical to the prior per-row form. */
-      V_ELE e0 = (V_ELE)evec[k]; /* evec[0*m + k] */
-      waxpby_stride(nr, e0, &Ye[0], m, (V_ELE)0.0, &Ye[0], m, vbuf, 1);
-      waxpby_stride(nr, e0, &AYe[0], m, (V_ELE)0.0, &AYe[0], m, avbuf, 1);
-      for (int j = 1; j < m; j++) {
-        V_ELE ej = (V_ELE)evec[(CG_UINT)j * m + k];
-        waxpby_stride(nr, (V_ELE)1.0, vbuf, 1, ej, &Ye[j], m, vbuf, 1);
-        waxpby_stride(nr, (V_ELE)1.0, avbuf, 1, ej, &AYe[j], m, avbuf, 1);
+      /* Residual of the k-th Ritz pair: avbuf = AY·evec[:,k] - eval_k*(Y·evec[:,k]).
+       * One parallel region over rows, serial dot along each contiguous Ye/AYe
+       * row, so the Ritz vector stays in a register. evk = evec[:,k] gathered. */
+      double evalk = eval[k];
+      for (int j = 0; j < m; j++) {
+        evk[j] = evec[(CG_UINT)j * m + k];
       }
-      /* r = Av_k - eval_k v_k ; ||r|| */
-      waxpby(nr, (V_ELE)1.0, avbuf, (V_ELE)(-eval[k]), vbuf, avbuf);
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+      for (CG_UINT r = 0; r < nr; r++) {
+        double vv = 0.0, av = 0.0;
+        for (int j = 0; j < m; j++) {
+          vv += evk[j] * (double)Ye[r * (CG_UINT)m + j];
+          av += evk[j] * (double)AYe[r * (CG_UINT)m + j];
+        }
+        avbuf[r] = (V_ELE)(av - evalk * vv);
+      }
       V_ELE res2;
       ddot(nr, avbuf, avbuf, &res2);
       double res = sqrt((double)res2);
       if (res < minres_in) {
         minres_in = res;
       }
-      if (res <= sqrt(tol)) { /* accept (discard ghosts with large residual) */
+      if (res <= accThresh) { /* accept (discard ghosts with large residual) */
+        accEval[NT_found] = eval[k];
         NT_found++;
         if (res > maxres) {
           maxres = res;
@@ -415,7 +464,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
              "(accept thr=%.3e)\n",
           minres_in,
           maxres,
-          sqrt(tol));
+          accThresh);
     }
 
     if (commIsMaster(comm)) {
@@ -440,18 +489,20 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   }
   double timeStop = getTimeStamp();
 
+  /* `iter` is maxiter+1 when the loop ran to exhaustion; report what ran. */
+  int itersRun = (iter > maxiter) ? maxiter : iter;
+
   if (commIsMaster(comm)) {
-    printf("ChebFD finished after %d iterations in %.2fs\n", iter, timeStop - timeStart);
+    printf(
+        "ChebFD finished after %d iterations in %.2fs\n", itersRun, timeStop - timeStart);
     printf("Found %d eigenpairs in target interval [%.6g, %.6g]:\n",
         NT_found,
         lam_lo,
         lam_hi);
-    int shown = 0;
-    for (int k = 0; k < mLast && shown < NT_found; k++) {
-      if (eval[k] >= lam_lo && eval[k] <= lam_hi) {
-        printf("  lambda = %.10f\n", eval[k]);
-        shown++;
-      }
+    /* The accepted eigenvalues from the last iteration — not the first NT_found
+     * in-interval Ritz values, which may include an unconverged ghost. */
+    for (int i = 0; i < NT_found; i++) {
+      printf("  lambda = %.10f\n", accEval[i]);
     }
   }
 
@@ -459,6 +510,16 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   chebFilterFree(&f);
 
   return NT_found;
+}
+
+/* Allocate one row-major (vecRows x NS) block; size_t math so the element count
+ * cannot wrap in 32-bit CG_UINT arithmetic. */
+static void allocDMat(DMatrix *M, CG_UINT vecRows, int NS)
+{
+  M->nr = vecRows;
+  M->nc = NS;
+  M->entries =
+      (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)vecRows * (size_t)NS * sizeof(V_ELE));
 }
 
 void allocChebData(ChebData *d, Matrix *m, int NS)
@@ -474,32 +535,19 @@ void allocChebData(ChebData *d, Matrix *m, int NS)
 
   /* All DMatrix blocks are stored row-major (vecRows x NS). The active width
    * (.nc) is shrunk during iterations; storage stays NS-wide. */
-  d->Y.nr        = vecRows;
-  d->Y.nc        = NS;
-  d->Y.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
+  allocDMat(&d->Y, vecRows, NS);
+  allocDMat(&d->AY, vecRows, NS);
+  allocDMat(&d->u, vecRows, NS);
+  allocDMat(&d->w, vecRows, NS);
+  allocDMat(&d->tmp, vecRows, NS);
 
-  d->AY.nr       = vecRows;
-  d->AY.nc       = NS;
-  d->AY.entries  = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
+  d->avbuf   = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)nr * sizeof(V_ELE));
+  d->evk     = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(double));
 
-  d->u.nr        = vecRows;
-  d->u.nc        = NS;
-  d->u.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
-
-  d->w.nr        = vecRows;
-  d->w.nc        = NS;
-  d->w.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
-
-  d->tmp.nr      = vecRows;
-  d->tmp.nc      = NS;
-  d->tmp.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, vecRows * NS * sizeof(V_ELE));
-
-  d->vbuf        = (V_ELE *)allocate(ARRAY_ALIGNMENT, nr * sizeof(V_ELE));
-  d->avbuf       = (V_ELE *)allocate(ARRAY_ALIGNMENT, nr * sizeof(V_ELE));
-
-  d->H           = (double *)allocate(ARRAY_ALIGNMENT, NS * NS * sizeof(double));
-  d->eval        = (double *)allocate(ARRAY_ALIGNMENT, NS * sizeof(double));
-  d->evec        = (double *)allocate(ARRAY_ALIGNMENT, NS * NS * sizeof(double));
+  d->H       = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * NS * sizeof(double));
+  d->eval    = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(double));
+  d->evec    = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * NS * sizeof(double));
+  d->accEval = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(double));
 }
 
 void freeChebData(ChebData *d)
@@ -509,9 +557,10 @@ void freeChebData(ChebData *d)
   deallocate(d->u.entries);
   deallocate(d->w.entries);
   deallocate(d->tmp.entries);
-  deallocate(d->vbuf);
   deallocate(d->avbuf);
+  deallocate(d->evk);
   deallocate(d->H);
   deallocate(d->eval);
   deallocate(d->evec);
+  deallocate(d->accEval);
 }
