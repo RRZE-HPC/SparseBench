@@ -7,7 +7,8 @@
 #include <string.h>
 
 #include "parameter.h"
-#include <math.h>
+
+#include "cli.h" // BenchType / CHEBFD, for the ChebFD section of printParameter
 #define MAXLINE 4096
 
 void initParameter(Parameter *param)
@@ -35,8 +36,6 @@ void initParameter(Parameter *param)
   param->cheb.NS          = 0;
   param->cheb.kernel      = 3;
   param->cheb.mu          = 2; // from paper
-  param->cheb.have_a      = 0;
-  param->cheb.have_b      = 0;
   param->cheb.have_bounds = 0;
   param->cheb.have_target = 0;
 }
@@ -46,6 +45,11 @@ void readParameter(Parameter *param, const char *filename)
   FILE *fp = fopen(filename, "re");
   char line[MAXLINE];
   int i;
+
+  int have_a = param->cheb.have_bounds;
+  int have_b = param->cheb.have_bounds;
+  int have_lam_lo = param->cheb.have_target;
+  int have_lam_hi = param->cheb.have_target;
 
   if (!fp) {
     fprintf(stderr, "Could not open parameter file: %s\n", filename);
@@ -79,10 +83,10 @@ void readParameter(Parameter *param, const char *filename)
       PARSE_KEY("itermax", param->itermax, atoi);
       PARSE_KEY("eps", param->eps, atof);
       // NTS : `cheb_` prefix, populating the nested struct
-      PARSE_KEY("cheb_a", param->cheb.a, atof, param->cheb.have_a = 1);
-      PARSE_KEY("cheb_b", param->cheb.b, atof, param->cheb.have_b = 1);
-      PARSE_KEY("cheb_lam_lo", param->cheb.lam_lo, atof, param->cheb.have_target = 1);
-      PARSE_KEY("cheb_lam_hi", param->cheb.lam_hi, atof, param->cheb.have_target = 1);
+      PARSE_KEY("cheb_a", param->cheb.a, atof, have_a = 1);
+      PARSE_KEY("cheb_b", param->cheb.b, atof, have_b = 1);
+      PARSE_KEY("cheb_lam_lo", param->cheb.lam_lo, atof, have_lam_lo = 1);
+      PARSE_KEY("cheb_lam_hi", param->cheb.lam_hi, atof, have_lam_hi = 1);
       PARSE_KEY("cheb_Np", param->cheb.Np, atoi);
       PARSE_KEY("cheb_NS", param->cheb.NS, atoi);
       PARSE_KEY("cheb_kernel", param->cheb.kernel, atoi);
@@ -93,14 +97,24 @@ void readParameter(Parameter *param, const char *filename)
   // cheb_a and cheb_b must be supplied together; exactly one silently
   // enables user-bounds mode with the other left at its 0.0 default,
   // disabling the Gershgorin spectrum fallback.
-  if (param->cheb.have_a != param->cheb.have_b) {
+  if (have_a != have_b) {
     fprintf(stderr,
         "Error: 'cheb_a' and 'cheb_b' must be supplied together "
         "(both or neither). Supplying only one silently disables the "
         "Gershgorin spectrum fallback.\n");
     exit(EXIT_FAILURE);
   }
-  param->cheb.have_bounds = param->cheb.have_a;
+  param->cheb.have_bounds = have_a;
+
+  // Likewise for the target interval: a lone bound would silently pair with
+  // the other's 0.0 default and target the wrong interval.
+  if (have_lam_lo != have_lam_hi) {
+    fprintf(stderr,
+        "Error: 'cheb_lam_lo' and 'cheb_lam_hi' must be supplied together "
+        "(both or neither).\n");
+    exit(EXIT_FAILURE);
+  }
+  param->cheb.have_target = have_lam_lo;
 
   fclose(fp);
 }
@@ -122,12 +136,15 @@ void printParameter(Parameter *param)
 #endif
   printf("\tVerbose Level: %d\n", param->verbose);
   printf("\tGPU device index: %d\n", param->device);
-  printf("ChebFD parameters:\n");
-  printf("\tspectrum [a,b]: %g, %g%s\n",
-      param->cheb.a,
-      param->cheb.b,
-      param->cheb.have_bounds ? "" : " (auto: Gershgorin)");
-  printf("\ttarget interval: [%g, %g]\n", param->cheb.lam_lo, param->cheb.lam_hi);
-  printf("\tNp / NS: %d / %d\n", param->cheb.Np, param->cheb.NS);
-  printf("\tkernel / mu: %d / %d\n", param->cheb.kernel, param->cheb.mu);
+  
+  if (BenchType == CHEBFD) {
+    printf("ChebFD parameters:\n");
+    printf("\tspectrum [a,b]: %g, %g%s\n",
+        param->cheb.a,
+        param->cheb.b,
+        param->cheb.have_bounds ? "" : " (auto: Gershgorin)");
+    printf("\ttarget interval: [%g, %g]\n", param->cheb.lam_lo, param->cheb.lam_hi);
+    printf("\tNp / NS: %d / %d\n", param->cheb.Np, param->cheb.NS);
+    printf("\tkernel / mu: %d / %d\n", param->cheb.kernel, param->cheb.mu);
+  }
 }

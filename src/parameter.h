@@ -15,10 +15,8 @@ typedef struct {
   int NS;          // number of search vectors
   int kernel;      // 0=none 1=Fejer 2=Jackson 3=Lanczos
   int mu;          // Lanczos kernel exponent (use 2)
-  int have_a;      // 1 => cheb_a user-supplied
-  int have_b;      // 1 => cheb_b user-supplied
-  int have_bounds; // 1 => both a/b user-supplied (derived), else Gershgorin
-  int have_target; // 1 => target interval user-supplied
+  int have_bounds; // 1 => both cheb_a/cheb_b user-supplied, else Gershgorin
+  int have_target; // 1 => both cheb_lam_lo/cheb_lam_hi user-supplied
 } ChebFDParam;
 
 typedef struct {
