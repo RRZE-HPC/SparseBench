@@ -42,14 +42,16 @@ all: $(TARGET)
 
 # Build (if needed) and run the test suite.
 run: all
-	./$(TARGET)
+	@./$(TARGET) || { rc=$$? ; \
+		[ $$rc -le 128 ] || echo "===>  runTests KILLED BY SIGNAL $$((rc - 128)) (rc=$$rc)" ; \
+		exit $$rc ; }
 
-# generate the expected test data from the reference matrices  
+# generate the expected test data from the reference matrices
 # Output is written to data/expected/ by the script.
 prerun:
 	@for m in $(MATRICES) ; do \
 		echo "Generating expected data for $$m" ; \
-		$(PYTHON) $(GEN_DIR)/testfile_generators.py "$$m" ; \
+		$(PYTHON) $(GEN_DIR)/testfile_generators.py "$$m" || exit 1 ; \
 	done
 
 prebuild:
@@ -65,7 +67,7 @@ $(TARGET): prebuild runTests.o $(OBJECTS) ${LINKS}
 	$(LD) $(LFLAGS) -o $@ runTests.o $(OBJECTS) ${LINKS} $(LIBS)
 
 # Compile runTests.c into an object file
-runTests.o: runTests.c 
+runTests.o: runTests.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Module 1 tests: matrix
