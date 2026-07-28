@@ -33,4 +33,18 @@ typedef struct {
   int count;
 } SellCSigmaPair;
 
+/* spMMVM (matrix-SCS.c) puts a per-thread `V_ELE tmp[C * blockwidth]` VLA on the
+ * OpenMP worker stack, so callers must check the block width fits beforehand. */
+#ifndef SCS_MAX_SPMMVM_VLA_BYTES
+#define SCS_MAX_SPMMVM_VLA_BYTES (2u * 1024u * 1024u)
+#endif
+
+static inline int spMMVMBlockWidthOk(CG_UINT C, int blockwidth)
+{
+  if (blockwidth < 1) {
+    return 0; /* a zero/negative width is a zero-length VLA (UB) or a huge nc */
+  }
+  return (size_t)C * (size_t)blockwidth * sizeof(V_ELE) <= SCS_MAX_SPMMVM_VLA_BYTES;
+}
+
 #endif // __SCSMATRIX_H_
