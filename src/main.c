@@ -249,7 +249,7 @@ int main(int argc, char **argv)
     rc = EXIT_FAILURE;
     break;
 #endif
-    // ChebFD does its own timing/reporting, so it is left out of the profiler sequence. 
+    // ChebFD does its own timing/reporting, so it is left out of the profiler sequence.
     // A negative return means a configuration/validation failure -> propagate a non-zero exit.
     int found = solveChebFD(&comm, &param, &sm);
     if (found < 0) {
@@ -262,7 +262,6 @@ int main(int argc, char **argv)
 
   default:;
   }
-
 
   if (rc == EXIT_SUCCESS && numSeq > 0) {
     profilerPrint(&comm, seq, numSeq, k);

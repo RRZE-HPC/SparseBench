@@ -46,8 +46,8 @@ void readParameter(Parameter *param, const char *filename)
   char line[MAXLINE];
   int i;
 
-  int have_a = param->cheb.have_bounds;
-  int have_b = param->cheb.have_bounds;
+  int have_a      = param->cheb.have_bounds;
+  int have_b      = param->cheb.have_bounds;
   int have_lam_lo = param->cheb.have_target;
   int have_lam_hi = param->cheb.have_target;
 
@@ -136,7 +136,7 @@ void printParameter(Parameter *param)
 #endif
   printf("\tVerbose Level: %d\n", param->verbose);
   printf("\tGPU device index: %d\n", param->device);
-  
+
   if (BenchType == CHEBFD) {
     printf("ChebFD parameters:\n");
     printf("\tspectrum [a,b]: %g, %g%s\n",

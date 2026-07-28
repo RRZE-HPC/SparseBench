@@ -25,7 +25,7 @@ enum {
   RC_SOLVER_SPMMV      = RC_BIT,
   RC_CHEBFD_GERSHGORIN = RC_BIT,
   // not a suite failure, so it keeps a reserved high bit of its own.
-  RC_UNSUPPORTED_MPI   = 1 << 6,
+  RC_UNSUPPORTED_MPI = 1 << 6,
 };
 
 // TODO : add tests for MPI cases
@@ -52,15 +52,15 @@ int main(int argc, char **argv)
     int bit;
   } suites[] = {
 #ifdef SCS
-      {"matrixTests", matrixTests, RC_MATRIX_TESTS},
+    { "matrixTests",           matrixTests,           RC_MATRIX_TESTS      },
 #endif
-      {"solverTestsSPMV", solverTestsSPMV, RC_SOLVER_SPMV},
-      {"solverTestsSPMMV", solverTestsSPMMV, RC_SOLVER_SPMMV},
-      {"chebFDGershgorinTests", chebFDGershgorinTests, RC_CHEBFD_GERSHGORIN},
+    { "solverTestsSPMV",       solverTestsSPMV,       RC_SOLVER_SPMV       },
+    { "solverTestsSPMMV",      solverTestsSPMMV,      RC_SOLVER_SPMMV      },
+    { "chebFDGershgorinTests", chebFDGershgorinTests, RC_CHEBFD_GERSHGORIN },
   };
   const size_t numSuites = sizeof(suites) / sizeof(suites[0]);
 
-  int rc = 0;
+  int rc                 = 0;
   for (size_t i = 0; i < numSuites; i++) {
     rc |= suites[i].run(argc, argv) ? suites[i].bit : 0;
   }
