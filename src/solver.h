@@ -31,33 +31,31 @@ extern void spMMVM(Matrix *m, const DMatrix *x, DMatrix *y);
 
 extern void waxpby(const CG_UINT n,
     const V_ELE alpha,
-    const V_ELE *restrict x,
+    const V_ELE *x,
     const V_ELE beta,
-    const V_ELE *restrict y,
-    V_ELE *restrict w);
+    const V_ELE *y,
+    V_ELE *const w);
 
-extern void ddot(const CG_UINT n,
-    const V_ELE *restrict e,
-    const V_ELE *restrict y,
-    V_ELE *restrict result);
+/* x/y may alias (ddot branches on y == x); `result` must not alias either. */
+extern void ddot(const CG_UINT n, const V_ELE *e, const V_ELE *y, V_ELE *restrict result);
 
-/* Strided variants for dense-block ops (e.g. ChebFD columns/rows of row-major
- * DMatrix blocks). The stride-1 ddot/waxpby above stay the hot path for
- * contiguous vectors (CG, applyFilter). */
+/* Strided variants for dense-block ops (e.g. ChebFD columns of row-major DMatrix
+ * blocks); the stride-1 versions above stay the hot path for contiguous vectors.
+ * waxpby_stride: w may alias x/y only if the aliased vectors share a stride. */
 extern void waxpby_stride(const CG_UINT n,
     const V_ELE alpha,
-    const V_ELE *restrict x,
+    const V_ELE *x,
     const CG_UINT incx,
     const V_ELE beta,
-    const V_ELE *restrict y,
+    const V_ELE *y,
     const CG_UINT incy,
-    V_ELE *restrict w,
+    V_ELE *const w,
     const CG_UINT incw);
 
 extern void ddot_stride(const CG_UINT n,
-    const V_ELE *restrict x,
+    const V_ELE *x,
     const CG_UINT incx,
-    const V_ELE *restrict y,
+    const V_ELE *y,
     const CG_UINT incy,
     V_ELE *restrict result);
 #endif // __SOLVER_H_
