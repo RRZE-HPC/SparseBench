@@ -27,7 +27,12 @@ static inline int compareDescSCS(const void *a, const void *b)
     return 1; // Descending order
   if (pa->count > pb->count)
     return -1;
-  return 0; // Stable if equal
+  // Tie-break by ascending original index. since qsort is not stable.
+  if (pa->index < pb->index)
+    return -1;
+  if (pa->index > pb->index)
+    return 1;
+  return 0;
 }
 
 // used twice so made sense to make it as a function
