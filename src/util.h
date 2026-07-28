@@ -5,6 +5,7 @@
 #ifndef __UTIL_H_
 #define __UTIL_H_
 
+#include <float.h>
 #include <string.h>
 
 #define HLINE "----------------------------------------------------------------------\n"
@@ -53,9 +54,11 @@
 
 #if PRECISION == 1
 #define CG_FLOAT float
+#define CG_FLOAT_MAX FLT_MAX
 #define MPI_FLOAT_TYPE MPI_FLOAT
 #else
 #define CG_FLOAT double
+#define CG_FLOAT_MAX DBL_MAX
 #define MPI_FLOAT_TYPE MPI_DOUBLE
 #endif
 
