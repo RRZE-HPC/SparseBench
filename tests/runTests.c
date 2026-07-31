@@ -7,6 +7,7 @@
 #endif
 #include "solver/solverTestsSPMMV.h"
 #include "solver/solverTestsSPMV.h"
+#include "solver/solverTestsSPMVSplit.h"
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
 #include "../src/cuda/cuda_kernels.h"
@@ -20,6 +21,8 @@ int main(int argc, char **argv)
 #ifdef SCS
   matrixTests(argc, argv);
 #endif
+  // Self-contained and fast, so run it before the data-driven tests
+  solverTestsSPMVSplit(argc, argv);
   solverTestsSPMV(argc, argv);
   solverTestsSPMMV(argc, argv);
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)

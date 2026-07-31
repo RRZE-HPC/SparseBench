@@ -67,8 +67,11 @@ static int cmp_int_asc(const void *a, const void *b)
  *
  * Complexity: O(indegree + extCount) = O(extCount)
  */
-static void reorderExternals(
-    const int numRows, const int extCount, int *extLocalIndex, int *extOwningRank, CommType *c)
+static void reorderExternals(const int numRows,
+    const int extCount,
+    int *extLocalIndex,
+    int *extOwningRank,
+    CommType *c)
 {
   int *newExtOwningRank = (int *)allocate(ARRAY_ALIGNMENT, extCount * sizeof(int));
 
@@ -80,7 +83,7 @@ static void reorderExternals(
   // recvCounts[i] = number of externals from sources[i]
   int *rankToBucket = (int *)allocate(ARRAY_ALIGNMENT, c->size * sizeof(int));
   for (int i = 0; i < c->size; i++) {
-    rankToBucket[i] = -1;  // -1 means this rank is not a source
+    rankToBucket[i] = -1; // -1 means this rank is not a source
   }
   for (int i = 0; i < c->indegree; i++) {
     rankToBucket[c->sources[i]] = i;
@@ -88,7 +91,7 @@ static void reorderExternals(
 
   // Compute bucket offsets (prefix sum of recvCounts)
   int *bucketOffset = (int *)allocate(ARRAY_ALIGNMENT, c->indegree * sizeof(int));
-  int cursor = 0;
+  int cursor        = 0;
   for (int i = 0; i < c->indegree; i++) {
     bucketOffset[i] = cursor;
     cursor += c->recvCounts[i];
@@ -96,10 +99,10 @@ static void reorderExternals(
 
   // Single pass: place each external into its bucket
   for (int i = 0; i < extCount; i++) {
-    int rank = extOwningRank[i];
-    int bucketIdx = rankToBucket[rank];
-    int localIdx = numRows + bucketOffset[bucketIdx];
-    extLocalIndex[i] = localIdx;
+    int rank                                  = extOwningRank[i];
+    int bucketIdx                             = rankToBucket[rank];
+    int localIdx                              = numRows + bucketOffset[bucketIdx];
+    extLocalIndex[i]                          = localIdx;
     newExtOwningRank[bucketOffset[bucketIdx]] = rank;
     bucketOffset[bucketIdx]++;
   }
@@ -152,7 +155,7 @@ static void localizeMatrix(
       if (startRow <= curIndex && curIndex <= stopRow) {
         entries[j].col -= startRow;
       } else {
-        int extIdx = findExternalIndex((int)curIndex, extLocalToGlobal, extCount);
+        int extIdx     = findExternalIndex((int)curIndex, extLocalToGlobal, extCount);
         entries[j].col = extLocalIndex[extIdx];
       }
     }
@@ -172,55 +175,89 @@ static void localizeMatrix(
  *   entries[rowPtr[i] .. rowLocalEnd[i]-1]       : LOCAL   (col < numRows)
  *   entries[rowLocalEnd[i] .. rowPtr[i+1]-1]     : EXTERNAL (col >= numRows)
  *
+ * Rows that own at least one external entry are additionally collected in
+ * boundaryRows, so spMVM_external only has to visit those rows instead of
+ * sweeping the whole local row range.
+ *
  * @param A       Localized GMatrix (col indices already remapped to local)
  * @param numRows Number of local rows (= A->nr)
  *
- * Algorithm: O(nnz) copy-based reordering
- *   1. Allocate new entries array
- *   2. Allocate rowLocalEnd array
- *   3. Single pass: for each row, copy local entries then external entries
- *   4. Compute rowLocalEnd[i] = rowPtr[i] + numLocalEntries
- *   5. Swap entries arrays, free old
+ * Algorithm: O(nnz) in-place partitioning
+ *   1. Determine the longest row and allocate a scratch buffer of that size
+ *   2. Per row: compact local entries to the front, park externals in scratch,
+ *      then append the externals behind the locals
+ *   3. Record rowLocalEnd[i] and collect the boundary rows
+ *
+ * The scratch buffer keeps the peak memory at maxRowLen entries instead of a
+ * full duplicate of the nnz-sized entries array.
  */
 static void reorderMatrixForOverlap(GMatrix *A, CG_UINT numRows)
 {
-  CG_UINT *rowPtr  = A->rowPtr;
-  Entry *entries   = A->entries;
-  CG_UINT nnz      = A->nnz;
+  CG_UINT *rowPtr   = A->rowPtr;
+  Entry *entries    = A->entries;
 
-  // Allocate new entries array and rowLocalEnd
-  Entry *newEntries   = (Entry *)allocate(ARRAY_ALIGNMENT, nnz * sizeof(Entry));
+  CG_UINT maxRowLen = 0;
+  for (CG_UINT i = 0; i < numRows; i++) {
+    CG_UINT rowLen = rowPtr[i + 1] - rowPtr[i];
+    if (rowLen > maxRowLen) {
+      maxRowLen = rowLen;
+    }
+  }
+
   CG_UINT *rowLocalEnd = (CG_UINT *)allocate(ARRAY_ALIGNMENT, numRows * sizeof(CG_UINT));
+  Entry *scratch       = NULL;
+  if (maxRowLen > 0) {
+    scratch = (Entry *)allocate(ARRAY_ALIGNMENT, maxRowLen * sizeof(Entry));
+  }
 
-  CG_UINT destIdx = 0;
+  CG_UINT numBoundaryRows = 0;
 
   for (CG_UINT i = 0; i < numRows; i++) {
     CG_UINT rowStart = rowPtr[i];
     CG_UINT rowEnd   = rowPtr[i + 1];
-    CG_UINT rowLocal = rowStart;  // boundary will be updated
+    CG_UINT numLocal = 0;
+    CG_UINT numExt   = 0;
 
-    // First pass through this row: copy LOCAL entries first (col < numRows)
+    // Compact LOCAL entries to the front, park EXTERNAL entries in scratch.
+    // The write index is always <= the read index, so this is safe in place.
     for (CG_UINT j = rowStart; j < rowEnd; j++) {
       if (entries[j].col < numRows) {
-        newEntries[destIdx++] = entries[j];
-        rowLocal++;
+        entries[rowStart + numLocal++] = entries[j];
+      } else {
+        scratch[numExt++] = entries[j];
       }
     }
 
-    rowLocalEnd[i] = destIdx;  // boundary between local and external
+    // Append the EXTERNAL entries behind the local ones
+    for (CG_UINT j = 0; j < numExt; j++) {
+      entries[rowStart + numLocal + j] = scratch[j];
+    }
 
-    // Second pass: copy EXTERNAL entries (col >= numRows)
-    for (CG_UINT j = rowStart; j < rowEnd; j++) {
-      if (entries[j].col >= numRows) {
-        newEntries[destIdx++] = entries[j];
-      }
+    rowLocalEnd[i] = rowStart + numLocal; // boundary between local and external
+
+    if (numExt > 0) {
+      numBoundaryRows++;
     }
   }
 
-  // Swap new entries into place
-  free(A->entries);
-  A->entries    = newEntries;
-  A->rowLocalEnd = rowLocalEnd;
+  // Collect the rows spMVM_external has to touch
+  CG_UINT *boundaryRows = (CG_UINT *)allocate(
+      ARRAY_ALIGNMENT, (numBoundaryRows > 0 ? numBoundaryRows : 1) * sizeof(CG_UINT));
+
+  CG_UINT b = 0;
+  for (CG_UINT i = 0; i < numRows; i++) {
+    if (rowLocalEnd[i] < rowPtr[i + 1]) {
+      boundaryRows[b++] = i;
+    }
+  }
+
+  if (scratch != NULL) {
+    deallocate(scratch);
+  }
+
+  A->rowLocalEnd   = rowLocalEnd;
+  A->boundaryRows  = boundaryRows;
+  A->nBoundaryRows = numBoundaryRows;
 }
 
 /**
@@ -412,7 +449,7 @@ static int identifyExternals(CommType *c, GMatrix *A, int **extLocalToGlobal)
   CG_UINT stopRow  = A->stopRow;
 
   // Phase 1: Collect all external column indices into a flat array
-  int capacity = 1024;
+  int capacity  = 1024;
   int *tmpArray = (int *)malloc(capacity * sizeof(int));
   if (tmpArray == NULL) {
     commAbort(c, "Failed to allocate memory for externals");
@@ -492,7 +529,7 @@ static int findExternalIndex(int key, const int *extLocalToGlobal, int extCount)
       right = mid - 1;
     }
   }
-  return -1;  // not found (should never happen for valid external keys)
+  return -1; // not found (should never happen for valid external keys)
 }
 
 /**
@@ -553,7 +590,7 @@ static int findExternalOwningRanks(CommType *c,
       }
     }
     // left is now one past the last valid position, so right = left - 1 is the owner
-    int j = left - 1;
+    int j            = left - 1;
     extOwningRank[i] = j;
     if (recvFromNeighbors[j] < 0) {
       recvFromNeighbors[j] = 1;
@@ -955,13 +992,13 @@ void commLocalization(CommType *c, GMatrix *m)
       m->totalNr);
 #endif
 
-/***********************************************************************
+  /***********************************************************************
    *    Step 1: Identify externals
    *    Scan matrix to find all unique column indices that reference non-local
    *    rows. Collect into flat array, sort, and deduplicate. Result is a
    *    sorted array mapping external index (0-based) to global column index.
    ***********************************************************************/
-  int *extLocalToGlobal = NULL;  // Will be allocated by identifyExternals
+  int *extLocalToGlobal = NULL; // Will be allocated by identifyExternals
   int extCount          = identifyExternals(c, m, &extLocalToGlobal);
 
   /***********************************************************************
@@ -1078,6 +1115,7 @@ void commExchange(CommType *c, CG_UINT numRows, V_ELE *x)
 #endif
 }
 
+#ifdef _MPI
 /**
  * @brief Begin non-blocking halo exchange.
  *
@@ -1092,11 +1130,10 @@ void commExchange(CommType *c, CG_UINT numRows, V_ELE *x)
  */
 void commExchangeBegin(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req)
 {
-#ifdef _MPI
   V_ELE *sendBuffer   = c->sendBuffer;
   int *elementsToSend = c->elementsToSend;
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (int i = 0; i < c->totalSendCount; i++) {
     sendBuffer[i] = x[elementsToSend[i]];
   }
@@ -1111,7 +1148,26 @@ void commExchangeBegin(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req)
       MPI_V_ELE_TYPE,
       c->communicator,
       req);
-#endif
+}
+
+/**
+ * @brief Nudge the MPI progress engine while the exchange is in flight.
+ *
+ * Most MPI implementations make no progress on a non-blocking collective unless
+ * the application re-enters the library, so without this the whole exchange is
+ * paid inside commExchangeEnd() and nothing is actually overlapped. Call this
+ * periodically from the computation that runs alongside the exchange.
+ *
+ * Must be called by the same thread that posted the exchange (MPI_THREAD_FUNNELED).
+ *
+ * @param req MPI request from commExchangeBegin
+ * @return non-zero once the exchange has completed
+ */
+int commExchangeTest(MPI_Request *req)
+{
+  int flag = 0;
+  MPI_Test(req, &flag, MPI_STATUS_IGNORE);
+  return flag;
 }
 
 /**
@@ -1120,17 +1176,13 @@ void commExchangeBegin(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req)
  * Waits for the MPI_Ineighbor_alltoallv posted by commExchangeBegin to finish.
  * After this call, x[numRows..numRows+extCount-1] contains valid external values.
  *
- * @param c      Communication structure
- * @param numRows Number of local rows
- * @param x      Vector (externals region written by the exchange)
- * @param req    MPI request from commExchangeBegin
+ * @param req MPI request from commExchangeBegin
  */
-void commExchangeEnd(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req)
+void commExchangeEnd(MPI_Request *req)
 {
-#ifdef _MPI
-  MPI_Wait(req, MPI_STATUSES_IGNORE);
-#endif
+  MPI_Wait(req, MPI_STATUS_IGNORE);
 }
+#endif /* _MPI */
 
 void commReduction(CG_FLOAT *v, int op)
 {
@@ -1367,7 +1419,21 @@ void commGMatrixDump(CommType *c, GMatrix *m)
 void commInit(CommType *c, int argc, char **argv)
 {
 #ifdef _MPI
+#ifdef _OPENMP
+  /* The halo pack loops are OpenMP regions and MPI is called from the master
+   * thread only (including the MPI_Test progress nudge during the overlapped
+   * SpMV), so the implementation has to support at least FUNNELED. */
+  int provided = MPI_THREAD_SINGLE;
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+  if (provided < MPI_THREAD_FUNNELED) {
+    fprintf(stderr,
+        "MPI implementation does not provide MPI_THREAD_FUNNELED (got %d)\n",
+        provided);
+    MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+  }
+#else
   MPI_Init(&argc, &argv);
+#endif
   MPI_Comm_rank(MPI_COMM_WORLD, &(c->rank));
   MPI_Comm_size(MPI_COMM_WORLD, &(c->size));
 

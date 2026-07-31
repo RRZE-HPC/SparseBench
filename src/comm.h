@@ -64,7 +64,8 @@ extern void commVectorDump(CommType *c, V_ELE *v, CG_UINT size, char *name);
 extern void commExchange(CommType *c, CG_UINT numRows, V_ELE *x);
 #if defined(_MPI)
 extern void commExchangeBegin(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req);
-extern void commExchangeEnd(CommType *c, CG_UINT numRows, V_ELE *x, MPI_Request *req);
+extern int commExchangeTest(MPI_Request *req);
+extern void commExchangeEnd(MPI_Request *req);
 #endif
 extern void commReduction(CG_FLOAT *v, int op);
 extern void commReductionV(V_ELE *v, int op);

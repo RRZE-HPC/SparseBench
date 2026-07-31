@@ -4,6 +4,14 @@ TOOLCHAIN ?= CLANG
 MTX_FMT ?= CRS
 ENABLE_MPI ?= false
 ENABLE_OPENMP ?= false
+# Overlap the CG halo exchange with the local part of the SpMV (true or false).
+# Only takes effect for the CPU CRS backend with MPI enabled.
+ENABLE_OVERLAP ?= true
+# Number of row chunks the local SpMV is split into while the halo exchange is
+# in flight. After every chunk MPI_Test is called to drive progress, since most
+# MPI implementations make none on their own. 1 disables the nudging; higher
+# values cost one extra OpenMP barrier per chunk.
+OVERLAP_NUDGE_CHUNKS ?= 8
 FLOAT_TYPE ?= DP # SP for float, DP for double
 UINT_TYPE ?= U # U for unsigned int, ULL for unsigned long long int
 USE_COMPLEX_ELEMENTS ?= false
@@ -25,6 +33,7 @@ HIP_ARCH  ?= gfx1030,gfx942
 #Feature options
 OPTIONS +=  -DARRAY_ALIGNMENT=64
 OPTIONS +=  -DOMP_SCHEDULE=static
+OPTIONS +=  -DOVERLAP_NUDGE_CHUNKS=$(OVERLAP_NUDGE_CHUNKS)
 #OPTIONS +=  -DVERBOSE
 #OPTIONS +=  -DVERBOSE_AFFINITY
 #OPTIONS +=  -DVERBOSE_DATASIZE
@@ -37,6 +46,10 @@ OPTIONS +=  -DOMP_SCHEDULE=static
 DEFINES =
 DEFINES += -D$(MTX_FMT)
 DEFINES += -DNUMVEC=$(NUM_VEC)
+
+ifeq ($(strip $(ENABLE_OVERLAP)),true)
+    DEFINES += -DENABLE_OVERLAP
+endif
 
 ifeq ($(strip $(FLOAT_TYPE)),SP)
     DEFINES += -DPRECISION=1

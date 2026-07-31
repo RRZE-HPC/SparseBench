@@ -17,6 +17,13 @@ typedef struct {
 
 double T[NUMREGIONS];
 
+/* Regions that are compiled out of the current build have a walltime of zero;
+ * report a rate of zero for them instead of dividing by it. */
+static double rate(double amount, double time)
+{
+  return (time > 0.0) ? (1.0E-06 * amount / time) : 0.0;
+}
+
 //NOTE: this is currently for every benchmark iterations!
 static WorkType Regions[NUMREGIONS] = {
   { "waxpby:  ", 3, 6 },
@@ -25,7 +32,8 @@ static WorkType Regions[NUMREGIONS] = {
   { "spMVM_l: ", 0, 2 },
   { "spMVM_e: ", 0, 2 },
   { "ddot:    ", 2, 4 },
-  { "comm:    ", 0, 0 }
+  { "comm:    ", 0, 0 },
+  { "commwait:", 0, 0 }
 };
 
 void profilerInit(size_t *facFlops, size_t *facWords)
@@ -40,6 +48,7 @@ void profilerInit(size_t *facFlops, size_t *facWords)
     LIKWID_MARKER_REGISTER("SPMVM_EXT");
     LIKWID_MARKER_REGISTER("DDOT");
     LIKWID_MARKER_REGISTER("COMM");
+    LIKWID_MARKER_REGISTER("COMM_WAIT");
   }
 
   for (int i = 0; i < NUMREGIONS; i++) {
@@ -48,9 +57,9 @@ void profilerInit(size_t *facFlops, size_t *facWords)
     Regions[i].words *= facWords[i];
   }
 
-  Regions[SPMVM].words = facWords[SPMVM];
+  Regions[SPMVM].words       = facWords[SPMVM];
   Regions[SPMVM_LOCAL].words = facWords[SPMVM_LOCAL];
-  Regions[SPMVM_EXT].words = facWords[SPMVM_EXT];
+  Regions[SPMVM_EXT].words   = facWords[SPMVM_EXT];
 }
 
 void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
@@ -78,7 +87,10 @@ void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
       commWords += c->recvCounts[i];
     }
 
-    Regions[COMM].words = sizeof(CG_FLOAT) * commWords;
+    // The same volume moves either way; COMM measures pack+post, COMM_WAIT the
+    // part of the transfer that could not be hidden behind the local SpMV.
+    Regions[COMM].words      = sizeof(CG_FLOAT) * commWords;
+    Regions[COMM_WAIT].words = sizeof(CG_FLOAT) * commWords;
     int commVolume[c->size];
     MPI_Gather(&commWords, 1, MPI_INT, commVolume, 1, MPI_INT, 0, MPI_COMM_WORLD);
     double commTime[c->size];
@@ -94,8 +106,8 @@ void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
 
         printf("%s%11.2f %11.2f %11.2f %11.2f %11.2f\n",
             Regions[j].label,
-            1.0E-06 * bytes / tavg[j],
-            1.0E-06 * flops / tavg[j],
+            rate(bytes, tavg[j]),
+            rate(flops, tavg[j]),
             tmin[j],
             tmax[j],
             tavg[j]);
@@ -109,7 +121,7 @@ void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
         printf("%d %11.2f %11.2f %11.2e\n",
             i,
             dataVolume,
-            dataVolume / commTime[i],
+            (commTime[i] > 0.0) ? (dataVolume / commTime[i]) : 0.0,
             commTime[i]);
         totalVolume += commVolume[i];
       }
@@ -132,8 +144,8 @@ void profilerPrint(CommType *c, int *seq, int numSeq, int iterations)
 
       printf("%s%11.2f %11.2f %11.2f\n",
           Regions[id].label,
-          1.0E-06 * bytes / T[id],
-          1.0E-06 * flops / T[id],
+          rate(bytes, T[id]),
+          rate(flops, T[id]),
           T[id]);
     }
     printf(HLINE);

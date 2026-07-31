@@ -94,22 +94,49 @@ int main(int argc, char **argv)
         "Parallel localization and matrix conversion took %.2fs\n", timeStop - timeStart);
   }
 
-  size_t factorFlops[NUMREGIONS];
-  size_t factorWords[NUMREGIONS];
+  size_t factorFlops[NUMREGIONS] = { 0 };
+  size_t factorWords[NUMREGIONS] = { 0 };
 
   // TODO : update the flops based on V_ELE type
   factorFlops[DDOT]   = m.totalNr;
   factorWords[DDOT]   = 3 * sizeof(CG_FLOAT) * m.totalNr / 2;
   factorFlops[WAXPBY] = m.totalNr;
   factorWords[WAXPBY] = 3 * sizeof(CG_FLOAT) * m.totalNr;
-  factorFlops[SPMVM]  = m.totalNnz;
-  factorWords[SPMVM]  = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
-  factorFlops[SPMMVM]      = factorFlops[SPMVM] * param.blockwidth;
-  factorWords[SPMMVM]      = factorWords[SPMVM] * param.blockwidth;
-  factorFlops[SPMVM_LOCAL] = m.totalNnz;
-  factorWords[SPMVM_LOCAL] = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
-  factorFlops[SPMVM_EXT]   = m.totalNnz;
-  factorWords[SPMVM_EXT]   = (sizeof(CG_FLOAT) * m.totalNnz) + (sizeof(CG_UINT) * m.totalNnz);
+  /* m.nnz / m.totalNnz are allocation upper bounds for generated matrices
+   * (27 entries per row regardless of stencil and of boundary truncation), so
+   * they would over-report every SpMV rate. The real local count is rowPtr[nr];
+   * sum it up to get the global one. */
+  CG_FLOAT nnzSum = (CG_FLOAT)m.rowPtr[m.nr];
+  commReduction(&nnzSum, SUM);
+  size_t globalNnz    = (size_t)nnzSum;
+
+  factorFlops[SPMVM]  = globalNnz;
+  factorWords[SPMVM]  = (sizeof(CG_FLOAT) * globalNnz) + (sizeof(CG_UINT) * globalNnz);
+  factorFlops[SPMMVM] = factorFlops[SPMVM] * param.blockwidth;
+  factorWords[SPMMVM] = factorWords[SPMVM] * param.blockwidth;
+
+#ifdef CRS
+  /* The split kernels each only touch part of the matrix, so they need their
+   * own nnz counts - charging both the full nnz would report twice the work
+   * that is actually done. By construction local + external == globalNnz. */
+  CG_UINT localNnzLocal = 0;
+  for (CG_UINT i = 0; i < sm.nr; i++) {
+    localNnzLocal += sm.rowLocalEnd[i] - sm.rowPtr[i];
+  }
+
+  CG_FLOAT localNnzSum = (CG_FLOAT)localNnzLocal;
+  CG_FLOAT extNnzSum   = (CG_FLOAT)(sm.rowPtr[sm.nr] - localNnzLocal);
+  commReduction(&localNnzSum, SUM);
+  commReduction(&extNnzSum, SUM);
+
+  size_t localNnz          = (size_t)localNnzSum;
+  size_t extNnz            = (size_t)extNnzSum;
+
+  factorFlops[SPMVM_LOCAL] = localNnz;
+  factorWords[SPMVM_LOCAL] = (sizeof(CG_FLOAT) * localNnz) + (sizeof(CG_UINT) * localNnz);
+  factorFlops[SPMVM_EXT]   = extNnz;
+  factorWords[SPMVM_EXT]   = (sizeof(CG_FLOAT) * extNnz) + (sizeof(CG_UINT) * extNnz);
+#endif
 
   profilerInit(factorFlops, factorWords);
   int numSeq = 0;
@@ -118,9 +145,14 @@ int main(int argc, char **argv)
   int k      = 0;
   switch (BenchType) {
   case CG:
+#ifdef USE_OVERLAP_SPMVM
+    numSeq       = 5;
+    int seqCg[5] = { DDOT, WAXPBY, SPMVM_LOCAL, SPMVM_EXT, COMM_WAIT };
+#else
     numSeq       = 3;
     int seqCg[3] = { DDOT, WAXPBY, SPMVM };
-    seq          = seqCg;
+#endif
+    seq = seqCg;
     if (commIsMaster(&comm)) {
       printf("Test type: CG\n");
     }

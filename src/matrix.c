@@ -115,7 +115,10 @@ void matrixGenerate(GMatrix *m, Parameter *p, int rank, int size, bool use_7pt_s
   m->nr       = local_nrow;
   m->nc       = local_nrow;
   m->nnz      = local_nnz;
-  m->rowLocalEnd = NULL;  // Will be set by reorderMatrixForOverlap after localization
+  // All three are set by reorderMatrixForOverlap after localization
+  m->rowLocalEnd   = NULL;
+  m->boundaryRows  = NULL;
+  m->nBoundaryRows = 0;
 }
 
 void MMMatrixRead(MMMatrix *m, char *filename)
@@ -238,18 +241,21 @@ void MMMatrixRead(MMMatrix *m, char *filename)
 
 void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
 {
-  m->startRow     = mm->startRow;
-  m->stopRow      = mm->stopRow;
-  m->totalNr      = mm->totalNr;
-  m->totalNnz     = mm->totalNnz;
-  m->nr           = mm->nr;
-  m->nc           = mm->nr;
-  m->nnz          = mm->nnz;
-  m->entries      = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
-  m->rowPtr       = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
-  m->rowLocalEnd  = NULL;  // Will be set by reorderMatrixForOverlap after localization
+  m->startRow = mm->startRow;
+  m->stopRow  = mm->stopRow;
+  m->totalNr  = mm->totalNr;
+  m->totalNnz = mm->totalNnz;
+  m->nr       = mm->nr;
+  m->nc       = mm->nr;
+  m->nnz      = mm->nnz;
+  m->entries  = (Entry *)allocate(ARRAY_ALIGNMENT, m->nnz * sizeof(Entry));
+  m->rowPtr   = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (m->nr + 1) * sizeof(CG_UINT));
+  // All three are set by reorderMatrixForOverlap after localization
+  m->rowLocalEnd   = NULL;
+  m->boundaryRows  = NULL;
+  m->nBoundaryRows = 0;
 
-  int *valsPerRow = (int *)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(int));
+  int *valsPerRow  = (int *)allocate(ARRAY_ALIGNMENT, m->nr * sizeof(int));
 
   for (int i = 0; i < m->nr; i++) {
     valsPerRow[i] = 0;

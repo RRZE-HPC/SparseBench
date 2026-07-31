@@ -159,6 +159,11 @@ void matrixBinRead(GMatrix *m, CommType *c, char *filename)
   m->startRow = startRow;
   m->stopRow  = stopRow;
 
+  // All three are set by reorderMatrixForOverlap after localization
+  m->rowLocalEnd   = NULL;
+  m->boundaryRows  = NULL;
+  m->nBoundaryRows = 0;
+
   // read row pointers
   m->rowPtr = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (numRows + 1) * sizeof(CG_UINT));
 

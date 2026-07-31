@@ -25,7 +25,7 @@ MOD1_OBJECTS=
 else
 MOD1_OBJECTS=${MOD1}/convertSCS.o ${MOD1}/matrixTests.o
 endif
-MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/spmmvSCS.o ${MOD2}/solverTestsSPMV.o ${MOD2}/solverTestsSPMMV.o
+MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/spmmvSCS.o ${MOD2}/solverTestsSPMV.o ${MOD2}/solverTestsSPMMV.o ${MOD2}/solverTestsSPMVSplit.o
 OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
 # Always leave debugging flag on
@@ -62,7 +62,10 @@ $(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c
 $(MOD2)/solverTestsSPMV.o: $(MOD2)/solverTestsSPMV.c 
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/solverTestsSPMMV.o: $(MOD2)/solverTestsSPMMV.c 
+$(MOD2)/solverTestsSPMMV.o: $(MOD2)/solverTestsSPMMV.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(MOD2)/solverTestsSPMVSplit.o: $(MOD2)/solverTestsSPMVSplit.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c 
