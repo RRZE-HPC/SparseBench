@@ -240,6 +240,69 @@ static int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
   return m;
 }
 
+/* Step 7: Rayleigh-Ritz on the filtered subspace. First form the block product
+ * AY = A·Y, then the m x m symmetric projection matrix H = YᵀAY (one parallel
+ * region over the upper-triangular column pairs with a serial inner dot, instead
+ * of a ddot_stride fork-join per pair), then solve the projected eigenproblem
+ * H z = θ z via cyclic Jacobi for the Ritz values (eval, ascending) and Ritz
+ * vectors (evec, column k pairs with eval[k]). AY is written for reuse by the
+ * residual step. */
+static void rayleighRitz(
+    Matrix *A, DMatrix *Y, DMatrix *AY, int m, CG_UINT nr, double *H, double *eval,
+    double *evec)
+{
+  AY->nc = m;
+  spMMVM(A, Y, AY);
+
+  V_ELE *Ye  = Y->entries;
+  V_ELE *AYe = AY->entries;
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (int i = 0; i < m; i++) {
+    for (int j = i; j < m; j++) {
+      /* H[i,j] = Y[:,i]·AY[:,j]  (columns at stride m) */
+      double hv = 0.0;
+      for (CG_UINT r = 0; r < nr; r++) {
+        hv += (double)Ye[r * (CG_UINT)m + i] * (double)AYe[r * (CG_UINT)m + j];
+      }
+      H[i * m + j] = hv;
+      H[j * m + i] = hv;
+    }
+  }
+  jacobiEigen(H, m, eval, evec);
+}
+
+/* Step 8: residual of the k-th Ritz pair, avbuf = AY·evec[:,k] - evalk·(Y·evec[:,k]).
+ * Gathers the k-th Ritz vector's coefficients into evk first, then one parallel
+ * region over rows with a serial dot along each contiguous Y/AY row, so the Ritz
+ * vector stays in a register. */
+static void computeRitzResidual(
+    DMatrix *Y, DMatrix *AY, int m, CG_UINT nr, double evalk, double *evec, int k,
+    double *evk, V_ELE *avbuf)
+{
+  V_ELE *Ye  = Y->entries;
+  V_ELE *AYe = AY->entries;
+  for (int j = 0; j < m; j++) {
+    evk[j] = evec[(CG_UINT)j * m + k];
+  }
+#pragma omp parallel for schedule(OMP_SCHEDULE)
+  for (CG_UINT r = 0; r < nr; r++) {
+    double vv = 0.0, av = 0.0;
+    for (int j = 0; j < m; j++) {
+      vv += evk[j] * (double)Ye[r * (CG_UINT)m + j];
+      av += evk[j] * (double)AYe[r * (CG_UINT)m + j];
+    }
+    avbuf[r] = (V_ELE)(av - evalk * vv);
+  }
+}
+
+/* Step 8: 2-norm of a residual vector, ||avbuf||₂ = sqrt(avbufᵀ avbuf). */
+static double residualNorm(CG_UINT nr, V_ELE *avbuf)
+{
+  V_ELE res2;
+  ddot(nr, avbuf, avbuf, &res2);
+  return sqrt((double)res2);
+}
+
 int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
 {
 #ifdef USE_COMPLEX
@@ -386,26 +449,8 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
       }
     }
 
-    // Alg. 3.1, Step 7: Rayleigh-Ritz — H = YᵀAY, Ritz pairs via Jacobi. AY = A*Y (block).
-    AY->nc = m;
-    spMMVM(A, Y, AY);
-    V_ELE *Ye  = Y->entries;
-    V_ELE *AYe = AY->entries;
-    /* H = YᵀAY (symmetric). One parallel region over the upper-triangular pairs
-     * with a serial inner dot, instead of a ddot_stride fork-join per pair. */
-#pragma omp parallel for schedule(OMP_SCHEDULE)
-    for (int i = 0; i < m; i++) {
-      for (int j = i; j < m; j++) {
-        /* H[i,j] = Y[:,i]·AY[:,j]  (columns at stride m) */
-        double hv = 0.0;
-        for (CG_UINT r = 0; r < nr; r++) {
-          hv += (double)Ye[r * (CG_UINT)m + i] * (double)AYe[r * (CG_UINT)m + j];
-        }
-        H[i * m + j] = hv;
-        H[j * m + i] = hv;
-      }
-    }
-    jacobiEigen(H, m, eval, evec);
+    // Alg. 3.1, Step 7: Rayleigh-Ritz — project H = YᵀAY and solve for Ritz pairs.
+    rayleighRitz(A, Y, AY, m, nr, H, eval, evec);
 
     if (param->verbose && commIsMaster(comm)) {
       int inint = 0;
@@ -429,25 +474,10 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
       if (eval[k] < lam_lo || eval[k] > lam_hi) {
         continue;
       }
-      /* Residual of the k-th Ritz pair: avbuf = AY·evec[:,k] - eval_k*(Y·evec[:,k]).
-       * One parallel region over rows, serial dot along each contiguous Ye/AYe
-       * row, so the Ritz vector stays in a register. evk = evec[:,k] gathered. */
+      /* Residual of the k-th Ritz pair: avbuf = AY·evec[:,k] - evalk·(Y·evec[:,k]). */
       double evalk = eval[k];
-      for (int j = 0; j < m; j++) {
-        evk[j] = evec[(CG_UINT)j * m + k];
-      }
-#pragma omp parallel for schedule(OMP_SCHEDULE)
-      for (CG_UINT r = 0; r < nr; r++) {
-        double vv = 0.0, av = 0.0;
-        for (int j = 0; j < m; j++) {
-          vv += evk[j] * (double)Ye[r * (CG_UINT)m + j];
-          av += evk[j] * (double)AYe[r * (CG_UINT)m + j];
-        }
-        avbuf[r] = (V_ELE)(av - evalk * vv);
-      }
-      V_ELE res2;
-      ddot(nr, avbuf, avbuf, &res2);
-      double res = sqrt((double)res2);
+      computeRitzResidual(Y, AY, m, nr, evalk, evec, k, evk, avbuf);
+      double res = residualNorm(nr, avbuf);
       if (res < minres_in) {
         minres_in = res;
       }
