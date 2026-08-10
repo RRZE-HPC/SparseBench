@@ -37,7 +37,7 @@ extern int BenchType;
   "  -v         Enable verbose output\n"                                                 \
   "  -e <float>  Convergence criteria epsilon. Default 0.0.\n"                           \
   "  -d <int>   GPU device index (multi-GPU nodes). Default 0.\n"                        \
-  "ChebFD parameters are set via the parameter file (-f), not the CLI."
+  "ChebFD parameters are set via the parameter file (-f), not the CLI.\n"
 
 #define BASE_ARGS_COMMON "hc:t:f:m:x:y:z:i:e:w:v:d:"
 

@@ -61,9 +61,9 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
       writeBinMatrix(comm, optarg);
       commAbort(comm, "Finish write matrix");
 #else
-      printf("Binary matrix files are only supported with MPI!\n");
-      exit(EXIT_SUCCESS);
+      commAbort(comm, "Binary matrix files are only supported with MPI!\n");
 #endif
+      break;
     case 'f':
       readParameter(param, optarg);
       break;
