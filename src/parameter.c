@@ -69,28 +69,29 @@ void readParameter(Parameter *param, const char *filename)
     char *tok = strtok(line, " \t\r\n");
     char *val = strtok(NULL, " \t\r\n");
 
-#define PARSE_KEY(key, target, conv, ...)                                                \
+#define PARSE_KEY(key, target, conv, extra_flag_to_set)                                  \
   if (strcmp(tok, key) == 0) {                                                           \
     target = conv(val);                                                                  \
-    __VA_ARGS__;                                                                         \
+    extra_flag_to_set;                                                                   \
   }
+#define NO_FLAG ((void)0)
 
     if (tok != NULL && val != NULL) {
-      PARSE_KEY("filename", param->filename, strdup);
-      PARSE_KEY("nx", param->nx, atoi);
-      PARSE_KEY("ny", param->ny, atoi);
-      PARSE_KEY("nz", param->nz, atoi);
-      PARSE_KEY("itermax", param->itermax, atoi);
-      PARSE_KEY("eps", param->eps, atof);
+      PARSE_KEY("filename", param->filename, strdup, NO_FLAG);
+      PARSE_KEY("nx", param->nx, atoi, NO_FLAG);
+      PARSE_KEY("ny", param->ny, atoi, NO_FLAG);
+      PARSE_KEY("nz", param->nz, atoi, NO_FLAG);
+      PARSE_KEY("itermax", param->itermax, atoi, NO_FLAG);
+      PARSE_KEY("eps", param->eps, atof, NO_FLAG);
       // NTS : `cheb_` prefix, populating the nested struct
       PARSE_KEY("cheb_a", param->cheb.a, atof, have_a = 1);
       PARSE_KEY("cheb_b", param->cheb.b, atof, have_b = 1);
       PARSE_KEY("cheb_lam_lo", param->cheb.lam_lo, atof, have_lam_lo = 1);
       PARSE_KEY("cheb_lam_hi", param->cheb.lam_hi, atof, have_lam_hi = 1);
-      PARSE_KEY("cheb_Np", param->cheb.Np, atoi);
-      PARSE_KEY("cheb_NS", param->cheb.NS, atoi);
-      PARSE_KEY("cheb_kernel", param->cheb.kernel, atoi);
-      PARSE_KEY("cheb_mu", param->cheb.mu, atoi);
+      PARSE_KEY("cheb_Np", param->cheb.Np, atoi, NO_FLAG);
+      PARSE_KEY("cheb_NS", param->cheb.NS, atoi, NO_FLAG);
+      PARSE_KEY("cheb_kernel", param->cheb.kernel, atoi, NO_FLAG);
+      PARSE_KEY("cheb_mu", param->cheb.mu, atoi, NO_FLAG);
     }
   }
 
