@@ -188,6 +188,7 @@ extern "C" void gpu_init(int device)
 
 extern "C" void gpu_finalize(void)
 {
+  gpu_chebfd_scratch_free();
   if (g_ddot_partial != NULL) {
     GPU_SAFE_CALL(gpuFree(g_ddot_partial));
     g_ddot_partial     = NULL;

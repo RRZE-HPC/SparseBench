@@ -284,9 +284,16 @@ void rayleighRitz(Matrix *A,
 {
   AY->nc = m;
   SPMMVMFUNC(A, Y, AY);
+  GRAMFUNC(nr, m, Y->entries, AY->entries, H);
+  jacobiEigen(H, m, eval, evec);
+}
 
-  V_ELE *Ye  = Y->entries;
-  V_ELE *AYe = AY->entries;
+/* H = YᵀAY for the two nr x m row-major blocks, one parallel region over the
+ * upper-triangular column pairs with a serial inner dot (instead of a
+ * ddot_stride fork-join per pair). Both triangles are written from the same
+ * accumulator so H is exactly symmetric, as jacobiEigen assumes. */
+void gramYtAY(CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H)
+{
 #pragma omp parallel for schedule(OMP_SCHEDULE)
   for (int i = 0; i < m; i++) {
     for (int j = i; j < m; j++) {
@@ -299,7 +306,6 @@ void rayleighRitz(Matrix *A,
       H[j * m + i] = hv;
     }
   }
-  jacobiEigen(H, m, eval, evec);
 }
 
 /* Step 8: residual of the k-th Ritz pair, avbuf = AY·evec[:,k] - evalk·(Y·evec[:,k]).
@@ -336,7 +342,9 @@ void computeRitzResidual(DMatrix *Y,
 double residualNorm(CG_UINT nr, V_ELE *avbuf)
 {
   V_ELE res2;
-  ddot(nr, avbuf, avbuf, &res2);
+  /* Dispatched: avbuf is produced by computeRitzResidual, so a host-side dot
+   * here would fault the whole buffer back per Ritz pair. */
+  DDOTFUNC(nr, avbuf, avbuf, &res2);
   return sqrt((double)res2);
 }
 
@@ -476,7 +484,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
 
     // Alg. 3.1, Step 6: orthogonalize the filtered search vectors (rank-revealing MGS).
     tstep = getTimeStamp();
-    int m = orthoMGS(nr, Y->entries, NS, 1e-8);
+    int m = ORTHOMGSFUNC(nr, Y->entries, NS, 1e-8);
     tOrtho += getTimeStamp() - tstep;
     if (m == 0) {
       if (commIsMaster(comm)) {
@@ -526,7 +534,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
       }
       /* Residual of the k-th Ritz pair: avbuf = AY·evec[:,k] - evalk·(Y·evec[:,k]). */
       double evalk = eval[k];
-      computeRitzResidual(Y, AY, m, nr, evalk, evec, k, evk, avbuf);
+      RITZRESIDUALFUNC(Y, AY, m, nr, evalk, evec, k, evk, avbuf);
       double res = residualNorm(nr, avbuf);
       nInInterval++;
       if (res < minres_in) {

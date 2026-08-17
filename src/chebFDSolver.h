@@ -26,6 +26,11 @@ extern void applyFilter(Matrix *A, ChebFilter *f, DMatrix *X, DMatrix *U, DMatri
 // Returns the accepted rank m <= nc and compacts/repacks the columns in place.
 extern int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol);
 
+// Step 7 (inner): H = Y^T AY for two nr x m row-major blocks, written
+// exactly symmetric. Split out from rayleighRitz so the host and device
+// versions share a signature (see kernel_dispatch.h).
+extern void gramYtAY(CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H);
+
 // Step 7: Rayleigh-Ritz projection H = Y^T A Y (m x m) and its eigenpairs.
 extern void rayleighRitz(Matrix *A,
     DMatrix *Y,

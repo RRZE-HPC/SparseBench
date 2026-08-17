@@ -88,6 +88,25 @@ void gpu_waxpby3_sync(CG_UINT n,
 
 void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result);
 
+/* Dense ChebFD block steps (cuda_chebfd_dense.cu). Signatures mirror their
+ * host counterparts in chebFDSolver.h. */
+void gpu_gramYtAY(CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H);
+
+void gpu_computeRitzResidual(DMatrix *Y,
+    DMatrix *AY,
+    int m,
+    CG_UINT nr,
+    double evalk,
+    double *evec,
+    int k,
+    double *evk,
+    V_ELE *avbuf);
+
+int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol);
+
+/* Release the persistent scratch owned by cuda_chebfd_dense.cu. */
+void gpu_chebfd_scratch_free(void);
+
 /* Managed-memory allocation helpers */
 void *gpu_allocate_managed(size_t bytes);
 void gpu_free_managed(void *ptr);

@@ -31,6 +31,9 @@
 #define WAXBYFUNC gpu_waxpby_sync
 #define WAXPBY3FUNC gpu_waxpby3_sync
 #define DDOTFUNC gpu_ddot_sync
+#define ORTHOMGSFUNC gpu_orthoMGS
+#define GRAMFUNC gpu_gramYtAY
+#define RITZRESIDUALFUNC gpu_computeRitzResidual
 
 #else
 
@@ -41,6 +44,9 @@
 #define WAXBYFUNC waxpby
 #define WAXPBY3FUNC waxpby3
 #define DDOTFUNC ddot
+#define ORTHOMGSFUNC orthoMGS
+#define GRAMFUNC gramYtAY
+#define RITZRESIDUALFUNC computeRitzResidual
 
 #endif
 
