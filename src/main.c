@@ -26,7 +26,9 @@
 #include "cuda_kernels.h"
 #endif
 
-void omp_init(V_ELE *data_ptr, size_t elem_count, V_ELE value)
+/* NUMA first-touch fill. Not named omp_*: that prefix is reserved by the OpenMP
+ * specification for the runtime API, and this has external linkage. */
+static void firstTouchFill(V_ELE *data_ptr, size_t elem_count, V_ELE value)
 {
 #pragma omp parallel for schedule(OMP_SCHEDULE)
   for (size_t i = 0; i < elem_count; i++) {
@@ -176,8 +178,8 @@ int main(int argc, char **argv)
     V_ELE *y = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)outSize * sizeof(V_ELE));
 
     // Parallel init for NUMA first-touch — must match spMVM's schedule.
-    omp_init(x, inSize, 1.0);
-    omp_init(y, outSize, 0.0);
+    firstTouchFill(x, inSize, 1.0);
+    firstTouchFill(y, outSize, 0.0);
 
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMVM, spMVM(&sm, x, y));
@@ -218,8 +220,8 @@ int main(int argc, char **argv)
     y.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)y.nr * y.nc * sizeof(V_ELE));
 
     // Parallel init for NUMA first-touch — must match spMMVM's schedule.
-    omp_init(x.entries, (size_t)x.nr * x.nc, 1.0);
-    omp_init(y.entries, (size_t)y.nr * y.nc, 0.0);
+    firstTouchFill(x.entries, (size_t)x.nr * x.nc, 1.0);
+    firstTouchFill(y.entries, (size_t)y.nr * y.nc, 0.0);
 
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMMVM, spMMVM(&sm, &x, &y));

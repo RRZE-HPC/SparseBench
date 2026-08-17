@@ -60,6 +60,10 @@ int chebFilterInit(ChebFilter *f,
   if (f == NULL) {
     return -1;
   }
+  /* Null first so an early-return failure leaves a coefficient buffer the
+   * caller can safely pass to chebFilterFree. */
+  f->gc = NULL;
+
   /* Negated comparisons so a NaN bound is rejected here: mapToChebDomain would
    * silently turn a NaN xi into 1.0 and zero every moment c_n, giving an empty
    * filter that looks like an ordinary rank collapse. */
@@ -123,6 +127,7 @@ void chebFilterFree(ChebFilter *f)
 {
   if (f != NULL && f->gc != NULL) {
     deallocate(f->gc);
+    f->gc = NULL; /* idempotent: a second free must not double-free */
   }
 }
 

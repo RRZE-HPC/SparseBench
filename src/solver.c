@@ -18,6 +18,21 @@
  * with y (`p = r + beta*p`), which restrict would make undefined. `omp simd`
  * asserts the elementwise pattern instead, so the loops still vectorize fully
  * rather than falling back to the scalar path of a runtime alias check. */
+void waxpby3(const CG_UINT n,
+    const V_ELE a,
+    const V_ELE *x,
+    const V_ELE b,
+    const V_ELE *y,
+    const V_ELE c,
+    const V_ELE *z,
+    V_ELE *const w)
+{
+#pragma omp parallel for simd schedule(OMP_SCHEDULE)
+  for (CG_UINT i = 0; i < n; i++) {
+    w[i] = a * x[i] + b * y[i] + c * z[i];
+  }
+}
+
 void waxpby(const CG_UINT n,
     const V_ELE alpha,
     const V_ELE *x,

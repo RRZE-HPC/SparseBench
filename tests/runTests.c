@@ -8,6 +8,7 @@
 #include "matrix/matrixTests.h"
 #endif
 #include "solver/chebFDGershgorinTests.h"
+#include "solver/chebFDUnitTests.h"
 #include "solver/solverTestsSPMMV.h"
 #include "solver/solverTestsSPMV.h"
 
@@ -24,6 +25,7 @@ enum {
   RC_SOLVER_SPMV       = RC_BIT,
   RC_SOLVER_SPMMV      = RC_BIT,
   RC_CHEBFD_GERSHGORIN = RC_BIT,
+  RC_CHEBFD_UNIT       = RC_BIT,
   // not a suite failure, so it keeps a reserved high bit of its own.
   RC_UNSUPPORTED_MPI = 1 << 6,
 };
@@ -57,6 +59,7 @@ int main(int argc, char **argv)
     { "solverTestsSPMV",       solverTestsSPMV,       RC_SOLVER_SPMV       },
     { "solverTestsSPMMV",      solverTestsSPMMV,      RC_SOLVER_SPMMV      },
     { "chebFDGershgorinTests", chebFDGershgorinTests, RC_CHEBFD_GERSHGORIN },
+    { "chebFDUnitTests",       chebFDUnitTests,       RC_CHEBFD_UNIT       },
   };
   const size_t numSuites = sizeof(suites) / sizeof(suites[0]);
 

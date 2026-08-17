@@ -29,14 +29,18 @@ void jacobiEigen(double *a, int n, double *eval, double *evec)
 
   const int maxsweeps = 100;
   for (int sweep = 0; sweep < maxsweeps; sweep++) {
-    /* sum of squares of strict upper triangle */
+    /* Sum of |a_pq| over the strict upper triangle. It must be the same measure
+     * `thresh` below is compared against (|a_pq|), and it reaches exactly 0.0
+     * once every off-diagonal has been rotated/flushed to zero -- an absolute
+     * epsilon here never trips for a matrix of O(1..100) scale (round-off keeps
+     * the sum near eps*||A||), which would burn all `maxsweeps` sweeps. */
     double off = 0.0;
     for (int p = 0; p < n - 1; p++) {
       for (int q = p + 1; q < n; q++) {
-        off += a[p * n + q] * a[p * n + q];
+        off += fabs(a[p * n + q]);
       }
     }
-    if (off <= 1e-30) {
+    if (off == 0.0) {
       break;
     }
     /* In the first three sweeps rotate only on entries above a threshold. */
