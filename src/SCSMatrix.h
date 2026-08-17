@@ -44,7 +44,16 @@ static inline int spMMVMBlockWidthOk(CG_UINT C, int blockwidth)
   if (blockwidth < 1) {
     return 0; /* a zero/negative width is a zero-length VLA (UB) or a huge nc */
   }
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  /* The device kernels accumulate in registers and tile the block over the
+   * grid, so there is no per-thread scratch to overflow — the limit is purely
+   * a host-stack artifact. Every call site guarded by this check dispatches to
+   * the device kernels in a GPU build (see kernel_dispatch.h). */
+  (void)C;
+  return 1;
+#else
   return (size_t)C * (size_t)blockwidth * sizeof(V_ELE) <= SCS_MAX_SPMMVM_VLA_BYTES;
+#endif
 }
 
 #endif // __SCSMATRIX_H_

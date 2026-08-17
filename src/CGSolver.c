@@ -11,14 +11,11 @@
 
 #include "allocate.h"
 #include "comm.h"
+#include "kernel_dispatch.h"
 #include "profiler.h"
 #include "solver.h"
 #include "timing.h"
 #include "vtype.h"
-
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-#include "cuda_kernels.h"
-#endif
 
 static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
 {
@@ -112,16 +109,6 @@ static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
 //     printf("Difference between computed and exact  = %f\n", residual);
 //   }
 // }
-
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-#define WAXBYFUNC gpu_waxpby_sync
-#define SPMVMFUNC gpu_spMVM
-#define DDOTFUNC gpu_ddot_sync
-#else
-#define WAXBYFUNC waxpby
-#define SPMVMFUNC spMVM
-#define DDOTFUNC ddot
-#endif
 
 #ifdef USE_COMPLEX
 #define CAST(v) VREAL((v))

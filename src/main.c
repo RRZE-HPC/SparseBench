@@ -13,6 +13,7 @@
 #include "chebFDSolver.h"
 #include "cli.h"
 #include "comm.h"
+#include "kernel_dispatch.h"
 #include "matrix.h"
 #include "matrixBinfile.h"
 #include "parameter.h"
@@ -90,6 +91,16 @@ int main(int argc, char **argv)
   initParameter(&param);
   parseArguments(&comm, &param, argc, argv);
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  /* Multi-rank GPU runs are not supported yet and must not be silently wrong:
+   * gpu_ddot has no counterpart to the commReductionV that solver.c's ddot
+   * does, so every rank would converge on its own rank-local dot products.
+   * Lifting this needs a device-pointer halo exchange in comm.c plus the
+   * allreduce in gpu_ddot — see GPU-Port-Plan.md. */
+  if (comm.size > 1) {
+    commAbort(&comm,
+        "GPU builds are single-rank only (gpu_ddot performs no MPI reduction); "
+        "run with one rank.\n");
+  }
   gpu_init(param.device);
 #endif
   commPrintBanner(&comm);
@@ -182,7 +193,7 @@ int main(int argc, char **argv)
     firstTouchFill(y, outSize, 0.0);
 
     for (k = 1; k < itermax; k++) {
-      PROFILE(SPMVM, spMVM(&sm, x, y));
+      PROFILE(SPMVM, SPMVMFUNC(&sm, x, y));
     }
     deallocate(x);
     deallocate(y);
@@ -224,7 +235,7 @@ int main(int argc, char **argv)
     firstTouchFill(y.entries, (size_t)y.nr * y.nc, 0.0);
 
     for (k = 1; k < itermax; k++) {
-      PROFILE(SPMMVM, spMMVM(&sm, &x, &y));
+      PROFILE(SPMMVM, SPMMVMFUNC(&sm, &x, &y));
     }
     deallocate(x.entries);
     deallocate(y.entries);

@@ -43,8 +43,48 @@ void gpu_spmv_crs(CG_UINT numRows,
 void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y);
 void gpu_spMMVM(Matrix *m, const DMatrix *x, DMatrix *y);
 
+/* Fused block kernels backing the ChebFD recurrence. Both are served by one
+ * device kernel per format: spMMVMFused is the accumulator-free form, and
+ * chebfdOp additionally folds x += gc*y into the same pass. */
+void gpu_spMMVMFused(Matrix *m,
+    const DMatrix *x,
+    V_ELE cA,
+    const DMatrix *p,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y);
+
+void gpu_chebfdOp(Matrix *m,
+    const DMatrix *w,
+    V_ELE cA,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y,
+    V_ELE gc,
+    DMatrix *x);
+
 void gpu_waxpby_sync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w);
+
+void gpu_waxpby3(CG_UINT n,
+    V_ELE a,
+    const V_ELE *x,
+    V_ELE b,
+    const V_ELE *y,
+    V_ELE c,
+    const V_ELE *z,
+    V_ELE *w);
+
+void gpu_waxpby3_sync(CG_UINT n,
+    V_ELE a,
+    const V_ELE *x,
+    V_ELE b,
+    const V_ELE *y,
+    V_ELE c,
+    const V_ELE *z,
+    V_ELE *w);
 
 void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result);
 

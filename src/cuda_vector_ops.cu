@@ -35,6 +35,57 @@ extern "C" void gpu_waxpby(
 }
 
 /* ------------------------------------------------------------------ */
+/*  waxpby3:  w = a*x + b*y + c*z                                    */
+/*                                                                    */
+/*  Only one call per ChebFD filter application (against Np calls of  */
+/*  the recurrence kernel), but it still has to run on the device:    */
+/*  under managed memory the cost of a host-side kernel is not its    */
+/*  flops, it is migrating all three blocks host-ward and back once   */
+/*  per filter application.                                           */
+/* ------------------------------------------------------------------ */
+__global__ void kernel_waxpby3(CG_UINT n,
+    V_ELE a,
+    const V_ELE *x,
+    V_ELE b,
+    const V_ELE *y,
+    V_ELE c,
+    const V_ELE *z,
+    V_ELE *w)
+{
+  CG_UINT i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < n) {
+    w[i] = a * x[i] + b * y[i] + c * z[i];
+  }
+}
+
+extern "C" void gpu_waxpby3(CG_UINT n,
+    V_ELE a,
+    const V_ELE *x,
+    V_ELE b,
+    const V_ELE *y,
+    V_ELE c,
+    const V_ELE *z,
+    V_ELE *w)
+{
+  int threads = 256;
+  int blocks  = (int)((n + threads - 1) / threads);
+  kernel_waxpby3<<<blocks, threads>>>(n, a, x, b, y, c, z, w);
+}
+
+extern "C" void gpu_waxpby3_sync(CG_UINT n,
+    V_ELE a,
+    const V_ELE *x,
+    V_ELE b,
+    const V_ELE *y,
+    V_ELE c,
+    const V_ELE *z,
+    V_ELE *w)
+{
+  gpu_waxpby3(n, a, x, b, y, c, z, w);
+  GPU_SAFE_CALL(gpuDeviceSynchronize());
+}
+
+/* ------------------------------------------------------------------ */
 /*  ddot:  result = x^T * y   (uses shared-memory reduction)         */
 /* ------------------------------------------------------------------ */
 __global__ void kernel_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *partial)

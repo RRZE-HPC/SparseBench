@@ -11,6 +11,7 @@
 #include "allocate.h"
 #include "chebFilter.h"
 #include "denseJacobi.h"
+#include "kernel_dispatch.h"
 #include "matrix.h"
 #include "profiler.h"
 #include "solver.h"
@@ -172,21 +173,21 @@ void applyFilter(Matrix *A, ChebFilter *f, DMatrix *X, DMatrix *U, DMatrix *W)
   U->nc = W->nc = nv;
 
   /* u = (alpha H + beta) x = T_1(H) x */
-  spMMVMFused(A, X, alpha, X, beta, NULL, (V_ELE)0.0, U);
+  SPMMVMFUSEDFUNC(A, X, alpha, X, beta, NULL, (V_ELE)0.0, U);
 
   /* w = 2*(alpha H + beta) u - x = T_2(H) x  (x is still T_0 here) */
-  spMMVMFused(A, U, (V_ELE)2.0 * alpha, U, (V_ELE)2.0 * beta, X, (V_ELE)(-1.0), W);
+  SPMMVMFUSEDFUNC(A, U, (V_ELE)2.0 * alpha, U, (V_ELE)2.0 * beta, X, (V_ELE)(-1.0), W);
 
   /* x = gc0 x + gc1 u + gc2 w, in a single sweep; overwrites x (T_0) with the
    * accumulator now that T_2 no longer needs it. */
-  waxpby3(n, (V_ELE)gc[0], X->entries, (V_ELE)gc[1], U->entries, (V_ELE)gc[2], W->entries,
-      X->entries);
+  WAXPBY3FUNC(n, (V_ELE)gc[0], X->entries, (V_ELE)gc[1], U->entries, (V_ELE)gc[2],
+      W->entries, X->entries);
 
   /* Remaining recurrence steps. Invariant: U = T_{n-2}, W = T_{n-1}. */
   for (int nn = 3; nn <= Np; nn++) {
     /* U = 2*(alpha H + beta) W - U = T_n, written in place (row-local, safe
      * to alias the q=U read with the y=U write), fused with x += gc[nn]*T_n. */
-    chebfdOp(A, W, (V_ELE)2.0 * alpha, (V_ELE)2.0 * beta, U, (V_ELE)(-1.0), U, (V_ELE)gc[nn], X);
+    CHEBFDOPFUNC(A, W, (V_ELE)2.0 * alpha, (V_ELE)2.0 * beta, U, (V_ELE)(-1.0), U, (V_ELE)gc[nn], X);
     DMatrix *t = U; /* U <- T_{n-1}, W <- T_n */
     U          = W;
     W          = t;
@@ -282,7 +283,7 @@ void rayleighRitz(Matrix *A,
     double *evec)
 {
   AY->nc = m;
-  spMMVM(A, Y, AY);
+  SPMMVMFUNC(A, Y, AY);
 
   V_ELE *Ye  = Y->entries;
   V_ELE *AYe = AY->entries;
@@ -460,14 +461,23 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
 
   int NT_found     = 0;
   double timeStart = getTimeStamp();
+  /* Per-step wall time, summed over iterations. In a GPU build the kernels
+   * behind each step synchronize before returning, so these host timers bound
+   * the right region; they are what shows which steps are still on the host. */
+  double tFilter = 0.0, tOrtho = 0.0, tRR = 0.0, tResid = 0.0;
+  double tstep;
   int iter;
   for (iter = 1; iter <= maxiter; iter++) {
     // Alg. 3.1, Step 5 (Fig. 6): apply the polynomial filter to the whole subspace.
     Y->nc = NS;
+    tstep = getTimeStamp();
     applyFilter(A, &f, Y, u, w);
+    tFilter += getTimeStamp() - tstep;
 
     // Alg. 3.1, Step 6: orthogonalize the filtered search vectors (rank-revealing MGS).
+    tstep = getTimeStamp();
     int m = orthoMGS(nr, Y->entries, NS, 1e-8);
+    tOrtho += getTimeStamp() - tstep;
     if (m == 0) {
       if (commIsMaster(comm)) {
         printf("iter %d: search space collapsed to rank 0.\n", iter);
@@ -485,7 +495,9 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     }
 
     // Alg. 3.1, Step 7: Rayleigh-Ritz — project H = YᵀAY and solve for Ritz pairs.
+    tstep = getTimeStamp();
     rayleighRitz(A, Y, AY, m, nr, H, eval, evec);
+    tRR += getTimeStamp() - tstep;
 
     if (param->verbose && commIsMaster(comm)) {
       int inint = 0;
@@ -507,6 +519,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     double maxres_in = 0.0; /* max over ALL in-interval pairs; for reporting */
     int nInInterval  = 0;
     double accThresh = sqrt(tol);
+    tstep            = getTimeStamp();
     for (int k = 0; k < m; k++) {
       if (eval[k] < lam_lo || eval[k] > lam_hi) {
         continue;
@@ -530,6 +543,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
         }
       }
     }
+    tResid += getTimeStamp() - tstep;
     if (commIsMaster(comm) && param->verbose) {
       printf("  [dbg] in-interval residuals over %d pairs: min=%.3e max=%.3e "
              "(accept thr=%.3e)\n",
@@ -571,6 +585,12 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   if (commIsMaster(comm)) {
     printf(
         "ChebFD finished after %d iterations in %.2fs\n", itersRun, timeStop - timeStart);
+    printf("  step breakdown: filter %.2fs, ortho %.2fs, rayleigh-ritz %.2fs, "
+           "residual %.2fs\n",
+        tFilter,
+        tOrtho,
+        tRR,
+        tResid);
     printf("Found %d eigenpairs in target interval [%.6g, %.6g]:\n",
         NT_found,
         lam_lo,
