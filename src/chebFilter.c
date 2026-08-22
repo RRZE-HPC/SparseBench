@@ -12,16 +12,14 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-/* Affine map xi = alpha * x + beta, clamped to [-1, 1] against endpoint rounding
- * that would make acos() return NaN. fmin/fmax swallow NaN, so the caller must
- * reject a NaN x. */
+/* xi = alpha*x + beta, clamped to [-1,1] (endpoint rounding must not reach
+ * acos); fmin/fmax swallow NaN, so callers must reject a NaN x. */
 static inline double mapToChebDomain(const ChebFilter *f, double x)
 {
   return fmax(-1.0, fmin(f->alpha * x + f->beta, 1.0));
 }
 
-/* Damping kernel factors g_n (paper Table 1, cf. KPM Rev. Mod. Phys. 78, 275).
- * All kernels use the convention g_0 = 1 and vanish for n > Np. */
+/* Damping kernel factors g_n (paper Table 1); convention g_0 = 1. */
 static double kernelFactor(KernelType k, int n, int Np, int mu)
 {
   switch (k) {
@@ -60,13 +58,11 @@ int chebFilterInit(ChebFilter *f,
   if (f == NULL) {
     return -1;
   }
-  /* Null first so an early-return failure leaves a coefficient buffer the
-   * caller can safely pass to chebFilterFree. */
+  /* NULL first so an early-return failure leaves gc safe for chebFilterFree. */
   f->gc = NULL;
 
-  /* Negated comparisons so a NaN bound is rejected here: mapToChebDomain would
-   * silently turn a NaN xi into 1.0 and zero every moment c_n, giving an empty
-   * filter that looks like an ordinary rank collapse. */
+  /* Negated comparisons so a NaN bound is rejected: mapToChebDomain would
+   * silently turn a NaN xi into 1.0 and zero every moment c_n. */
   if (!(a < b)) {
     fprintf(stderr, "chebFilterInit: need a < b (got a=%g, b=%g)\n", a, b);
     return -1;
@@ -100,8 +96,7 @@ int chebFilterInit(ChebFilter *f,
   f->kernel = kernel;
   f->mu     = mu;
 
-  /* mapped target bounds; theta = acos(xi), and since xi_lo < xi_hi the angles
-   * come out reversed: theta_lo > theta_hi */
+  /* theta = acos(xi); since xi_lo < xi_hi, theta_lo > theta_hi. */
   double xi_lo    = mapToChebDomain(f, lam_lo);
   double xi_hi    = mapToChebDomain(f, lam_hi);
   double theta_lo = acos(xi_lo);
@@ -109,10 +104,7 @@ int chebFilterInit(ChebFilter *f,
 
   f->gc = (double *)allocate(ARRAY_ALIGNMENT, (size_t)(Np + 1) * sizeof(double));
 
-  /* Window Chebyshev moments c_n of the indicator on [xi_lo, xi_hi]:
-   *   c_0 = (theta_lo - theta_hi) / pi
-   *   c_n = 2 (sin(n theta_lo) - sin(n theta_hi)) / (pi n),  n >= 1
-   * Combined with the kernel damping: gc[n] = g_n c_n. */
+  /* Chebyshev moments c_n of the window indicator; gc[n] = g_n * c_n. */
   f->gc[0] = kernelFactor(kernel, 0, Np, mu) * (theta_lo - theta_hi) / M_PI;
   for (int n = 1; n <= Np; n++) {
     double cn = 2.0 * (sin((double)n * theta_lo) - sin((double)n * theta_hi)) /
@@ -127,7 +119,7 @@ void chebFilterFree(ChebFilter *f)
 {
   if (f != NULL && f->gc != NULL) {
     deallocate(f->gc);
-    f->gc = NULL; /* idempotent: a second free must not double-free */
+    f->gc = NULL; /* idempotent: no double-free */
   }
 }
 

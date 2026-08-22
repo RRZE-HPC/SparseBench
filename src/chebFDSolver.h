@@ -12,23 +12,22 @@
 
 extern int solveChebFD(CommType *comm, Parameter *param, Matrix *A);
 
-// Gershgorin circle-theorem estimate of the spectrum bounds [a,b] of A.
+// Gershgorin estimate of the spectrum bounds [a,b] of A.
 extern void gershgorinBounds(CommType *comm, Matrix *A, double *a_out, double *b_out);
 
-// Internal ChebFD algorithm steps (Alg. 3.1 in the paper), exposed from
-// chebFDSolver.c for standalone unit testing; not part of the stable API.
+// Internal ChebFD steps (Alg. 3.1 in the paper), exposed from chebFDSolver.c
+// for unit tests only; not part of the stable API.
 
-// Step 5 (Fig. 6): Y <- p(H)Y via the Chebyshev recurrence. U/W are scratch
-// blocks of the same shape as Y (X on entry); see allocChebData.
+// Step 5 (Fig. 6): Y <- p(H)Y via the Chebyshev recurrence; U/W are scratch
+// blocks shaped like Y on entry (see allocChebData).
 extern void applyFilter(Matrix *A, ChebFilter *f, DMatrix *X, DMatrix *U, DMatrix *W);
 
-// Step 6: rank-revealing MGS (CGS2) of the nr x nc row-major block `e`.
-// Returns the accepted rank m <= nc and compacts/repacks the columns in place.
+// Step 6: rank-revealing CGS2 of the nr x nc row-major block e; returns the
+// accepted rank m <= nc and compacts/repacks columns in place.
 extern int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol);
 
-// Step 7 (inner): H = Y^T AY for two nr x m row-major blocks, written
-// exactly symmetric. Split out from rayleighRitz so the host and device
-// versions share a signature (see kernel_dispatch.h).
+// Step 7 (inner): H = Y^T AY, written exactly symmetric; shared by the
+// host and device paths (see kernel_dispatch.h).
 extern void gramYtAY(CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H);
 
 // Step 7: Rayleigh-Ritz projection H = Y^T A Y (m x m) and its eigenpairs.
@@ -41,8 +40,8 @@ extern void rayleighRitz(Matrix *A,
     double *eval,
     double *evec);
 
-// Step 8: residual avbuf = AY*evec[:,k] - evalk*(Y*evec[:,k]) of the k-th
-// Ritz pair. evk is scratch of length m.
+// Step 8: residual avbuf = AY*evec[:,k] - evalk*(Y*evec[:,k]); evk is
+// length-m scratch.
 extern void computeRitzResidual(DMatrix *Y,
     DMatrix *AY,
     int m,
@@ -56,8 +55,7 @@ extern void computeRitzResidual(DMatrix *Y,
 // Step 8: 2-norm of a length-nr residual vector.
 extern double residualNorm(CG_UINT nr, V_ELE *avbuf);
 
-// Centralized allocation for ChebFD work buffers so nothing is allocated
-// during the iterations.
+// Centralized work buffers so nothing is allocated during the iterations.
 typedef struct {
   DMatrix Y;    // search vectors block (vecRows x NS)
   DMatrix AY;   // A*Y block (vecRows x NS)

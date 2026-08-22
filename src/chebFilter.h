@@ -5,14 +5,9 @@
 #ifndef __CHEBFILTER_H_
 #define __CHEBFILTER_H_
 
-/* Construction of Chebyshev filter polynomials for ChebFD (paper Sec. 2.1).
- *
- * The filter polynomial approximates the rectangular window
- *     W(x) = 1  for x in the target interval [lam_lo, lam_hi]
- *          = 0  otherwise
- * on the spectral interval [a, b] via the damped Chebyshev expansion
- *     p(x) = sum_{n=0}^{Np} g_n c_n T_n(alpha x + beta)
- * with alpha x + beta in [-1, 1] for x in [a, b]. */
+/* Chebyshev filter polynomials for ChebFD (paper Sec. 2.1): p(x) approximates
+ * the window W(x)=1 on [lam_lo, lam_hi] and 0 elsewhere on [a,b] via the
+ * damped Chebyshev expansion sum_{n=0}^{Np} g_n c_n T_n(alpha x + beta). */
 
 typedef enum {
   KERNEL_NONE = 0, /* g_n = 1 (no damping) */
@@ -36,16 +31,9 @@ typedef struct {
   double *gc;
 } ChebFilter;
 
-/* Construct the filter polynomial coefficients.
- *
- *   a, b      : spectral interval [a, b] (spectrum of H contained here)
- *   lam_lo/hi : target interval (must satisfy a <= lam_lo < lam_hi <= b)
- *   Np        : polynomial degree (>= 2)
- *   kernel    : damping kernel (KERNEL_LANCZOS recommended)
- *   mu        : Lanczos kernel exponent (use 2; ignored otherwise)
- *
- * On success allocates f->gc (free with chebFilterFree) and returns 0.
- * Returns -1 on invalid input. */
+/* Build the coefficients in f->gc (free with chebFilterFree); returns 0,
+ * or -1 on invalid input. Requires a <= lam_lo < lam_hi <= b and Np >= 2;
+ * mu is the Lanczos exponent (use 2). */
 int chebFilterInit(ChebFilter *f,
     double a,
     double b,

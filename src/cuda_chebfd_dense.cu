@@ -4,21 +4,12 @@
  * license that can be found in the LICENSE file. */
 
 /*
- * Dense block kernels for the non-sparse ChebFD steps: orthogonalization
- * (CGS2), the Rayleigh-Ritz projection H = Y^T A Y, and the Ritz residual.
+ * Dense block kernels for the non-sparse ChebFD steps: CGS2
+ * orthogonalization, Rayleigh-Ritz projection H = Y^T A Y, Ritz residual.
+ * Format-independent: only see row-major (nr x nc) block vectors.
  *
- * These are format-independent — they only see the row-major (nr x nc) block
- * vectors — so they live outside the matrix-format .cu files.
- *
- * Why they must be on the device at all: with the filter ported, these steps
- * are what remains, and under managed memory a host-side pass over a block
- * migrates the whole block (hundreds of MB) each way. Leaving even the cheap
- * O(nr*m) tail steps (scale/compact/repack) on the host would fault the block
- * back per column and undo the win from porting the hot loops.
- *
- * Element offsets use size_t: nr*nc overflows a 32-bit CG_UINT well within the
- * problem sizes this benchmark targets (see REVIEW_TODO.md item 2, which
- * defers widening the host-side signatures to their own commit).
+ * Must run on the device: under managed memory a host-side pass migrates
+ * the whole block each way. Offsets use size_t: nr*nc overflows 32-bit.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,10 +24,8 @@
 #define DOT_BLOCKS 256
 #define LIN_THREADS 256
 
-/* Real part of a block element as a double. The Rayleigh-Ritz projection and
- * the Ritz residual are real-valued (solveChebFD rejects USE_COMPLEX), but the
- * .cu files are still compiled in a complex build, where V_ELE is a
- * thrust::complex and has no implicit conversion to double. */
+/* Real part of V_ELE as double (under USE_COMPLEX V_ELE is a
+ * thrust::complex with no implicit conversion to double). */
 __device__ __host__ static inline double asReal(V_ELE z)
 {
 #ifdef USE_COMPLEX
@@ -46,9 +35,7 @@ __device__ __host__ static inline double asReal(V_ELE z)
 #endif
 }
 
-/* ------------------------------------------------------------------ */
-/*  Persistent scratch                                                */
-/* ------------------------------------------------------------------ */
+/* Persistent scratch */
 static V_ELE *g_partial     = NULL; /* projection partials, PROJ_CHUNKS x nc */
 static size_t g_partial_cap = 0;
 static V_ELE *g_dotPartial  = NULL; /* column-norm partials, DOT_BLOCKS      */
@@ -102,20 +89,15 @@ extern "C" void gpu_chebfd_scratch_free(void)
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  CGS2 projection:  coefs[0:m] = E[:,0:m]^T * e[:,k]                */
-/*                                                                    */
-/*  threadIdx.x indexes j so the read of e[r*nc + j] is coalesced;    */
-/*  e[r*nc + k] is uniform across the block and broadcasts. Rows are  */
-/*  split over blockIdx.y into PROJ_CHUNKS partial sums, reduced by   */
-/*  a second kernel — deterministic, unlike an atomicAdd fan-in.      */
-/* ------------------------------------------------------------------ */
+/* CGS2 projection: coefs[0:m] = E[:,0:m]^T * e[:,k]. Rows split over
+ * blockIdx.y into PROJ_CHUNKS partial sums, reduced by kernel_proj_reduce
+ * (deterministic, unlike an atomicAdd fan-in). */
 __global__ void kernel_proj(
     CG_UINT nr, const V_ELE *e, int nc, int k, int m, V_ELE *partial, CG_UINT rowsPerChunk)
 {
   int j = blockIdx.x * blockDim.x + threadIdx.x;
   if (j >= m)
-    return; /* safe: no shared memory or __syncthreads in this kernel */
+    return;
 
   CG_UINT r0 = (CG_UINT)blockIdx.y * rowsPerChunk;
   CG_UINT r1 = r0 + rowsPerChunk;
@@ -144,11 +126,7 @@ __global__ void kernel_proj_reduce(
   coefs[j] = s;
 }
 
-/* ------------------------------------------------------------------ */
-/*  CGS2 subtract:  e[:,k] -= E[:,0:m] * coefs                        */
-/*  One warp per row, lanes striding over j (coalesced), then a       */
-/*  shared-memory reduction across the warp.                          */
-/* ------------------------------------------------------------------ */
+/* CGS2 subtract: e[:,k] -= E[:,0:m] * coefs */
 __global__ void kernel_subtract(
     CG_UINT nr, V_ELE *e, int nc, int k, int m, const V_ELE *coefs)
 {
@@ -165,8 +143,7 @@ __global__ void kernel_subtract(
   sred[threadIdx.y][threadIdx.x] = s;
   __syncthreads();
 
-  /* Unconditional syncs: every thread reaches them, only the accumulate above
-   * was predicated on row < nr. */
+  /* Syncs stay unconditional; only the accumulate is predicated on row < nr. */
   for (int t = WARP / 2; t > 0; t >>= 1) {
     if (threadIdx.x < t) {
       sred[threadIdx.y][threadIdx.x] += sred[threadIdx.y][threadIdx.x + t];
@@ -179,9 +156,7 @@ __global__ void kernel_subtract(
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Column 2-norm squared of e[:,k] (stride nc)                       */
-/* ------------------------------------------------------------------ */
+/* Column 2-norm squared of e[:,k] (stride nc) */
 __global__ void kernel_col_dot(CG_UINT nr, const V_ELE *e, int nc, int k, V_ELE *partial)
 {
   __shared__ V_ELE sd[LIN_THREADS];
@@ -228,9 +203,7 @@ __global__ void kernel_reduce_scalar(int n, const V_ELE *partial, V_ELE *result)
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Scale e[:,k] by inv, and compact it to column mDst if they differ */
-/* ------------------------------------------------------------------ */
+/* Scale e[:,k] by inv; compact to column mDst if different */
 __global__ void kernel_scale_compact(
     CG_UINT nr, V_ELE *e, int nc, int k, int mDst, V_ELE inv)
 {
@@ -246,15 +219,9 @@ __global__ void kernel_scale_compact(
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Repack accepted columns from stride nc to stride m                */
-/*                                                                    */
-/*  Out-of-place, unlike the host version. In place this is only safe */
-/*  serially ascending in r: row r writes [r*m, r*m+m) which overlaps */
-/*  the source window [r'*nc, r'*nc+m) of an earlier row r' ~ r*m/nc, */
-/*  so a parallel pass would race. Gathering into scratch and copying */
-/*  back costs one extra pass and no ordering constraint.             */
-/* ------------------------------------------------------------------ */
+/* Repack accepted columns from stride nc to stride m. Out-of-place: an
+ * in-place parallel pass would race (row r's write window overlaps earlier
+ * rows' source windows). */
 __global__ void kernel_repack_gather(
     CG_UINT nr, const V_ELE *src, int nc, int m, V_ELE *dst)
 {
@@ -276,25 +243,17 @@ __global__ void kernel_copy(size_t n, const V_ELE *src, V_ELE *dst)
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Rayleigh-Ritz projection  H = Y^T (A Y),  H is m x m              */
-/*                                                                    */
-/*  Tiled so both loads are coalesced: a GRAM_TILE-wide row segment   */
-/*  of a row-major block is contiguous. Only tiles on or above the    */
-/*  diagonal run, and each writes both H[i,j] and H[j,i] from the     */
-/*  same accumulator — H must come out exactly symmetric, since       */
-/*  jacobiEigen assumes it and the two triangles would otherwise      */
-/*  differ in the last bits (Y_i^T A Y_j and Y_j^T A Y_i are equal    */
-/*  only in exact arithmetic).                                        */
-/* ------------------------------------------------------------------ */
+/* Rayleigh-Ritz projection H = Y^T (A Y), m x m. Only tiles on or above the
+ * diagonal run; each writes both H[i,j] and H[j,i] from one accumulator so
+ * H is exactly symmetric, which jacobiEigen assumes. */
 __global__ void kernel_gram(
     CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H)
 {
   __shared__ V_ELE As[GRAM_TILE][GRAM_TILE];
   __shared__ V_ELE Bs[GRAM_TILE][GRAM_TILE];
 
-  /* Whole tile is strictly below the diagonal — uniform across the block, so
-   * returning before the __syncthreads below is safe. */
+  /* Below-diagonal tile: uniform across the block, so early return
+   * before __syncthreads is safe. */
   if (blockIdx.x > blockIdx.y)
     return;
 
@@ -325,11 +284,7 @@ __global__ void kernel_gram(
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Ritz residual:  avbuf = AY*evk - evalk*(Y*evk)                    */
-/*  One warp per row; lanes stride over j so both block reads are     */
-/*  coalesced, then a shared reduction across the warp.               */
-/* ------------------------------------------------------------------ */
+/* Ritz residual: avbuf = AY*evk - evalk*(Y*evk) */
 __global__ void kernel_ritz_residual(CG_UINT nr,
     int m,
     const V_ELE *Ye,
@@ -369,10 +324,7 @@ __global__ void kernel_ritz_residual(CG_UINT nr,
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Host-side entry points, matching the CPU signatures in            */
-/*  chebFDSolver.h so a call site switches by renaming the call.      */
-/* ------------------------------------------------------------------ */
+/* Host entry points; signatures mirror the CPU versions in chebFDSolver.h. */
 
 extern "C" void gpu_gramYtAY(
     CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H)
@@ -392,8 +344,7 @@ extern "C" void gpu_computeRitzResidual(DMatrix *Y,
     double *evk,
     V_ELE *avbuf)
 {
-  /* Gather the k-th Ritz vector on the host: evec is m x m and was just
-   * produced there by jacobiEigen, so it is host-resident already. */
+  /* evec was produced by jacobiEigen on the host. */
   for (int j = 0; j < m; j++) {
     evk[j] = evec[(size_t)j * (size_t)m + (size_t)k];
   }
@@ -433,12 +384,12 @@ extern "C" int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
     kernel_reduce_scalar<<<1, LIN_THREADS>>>(DOT_BLOCKS, g_dotPartial, g_scalar);
 
     V_ELE nrm2;
-    /* Synchronous copy: also the sync point for the kernels above. */
+    /* Sync point for the kernels above. */
     GPU_SAFE_CALL(gpuMemcpy(&nrm2, g_scalar, sizeof(V_ELE), gpuMemcpyDeviceToHost));
 
     double nrm = sqrt(asReal(nrm2));
     if (nrm < tol) {
-      continue; /* linearly dependent -> drop */
+      continue; /* linearly dependent: drop */
     }
 
     V_ELE inv = VCONST(1.0 / nrm, 0);
