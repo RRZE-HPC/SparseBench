@@ -17,7 +17,7 @@
 #endif
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-#include "../../src/cuda/cuda_kernels.h"
+#include "../../src/cuda_kernels.h"
 #endif
 
 void swap_DMatrix(DMatrix *x_perm, DMatrix *y_perm)

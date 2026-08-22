@@ -17,7 +17,7 @@
 #endif
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-#include "../../src/cuda/cuda_kernels.h"
+#include "../../src/cuda_kernels.h"
 #endif
 
 int test_spmvSCS(void *args, const char *dataDir)
