@@ -4,6 +4,8 @@ TOOLCHAIN ?= CLANG
 MTX_FMT ?= CRS
 # Enable LIKWID instrumentation (true or false)
 ENABLE_LIKWID ?= false
+# Enable NVTX range markers for nsys/ncu timelines (TOOLCHAIN=NVCC only)
+ENABLE_NVTX ?= false
 # Enable MPI parallelization (true or false)
 ENABLE_MPI ?= false
 # Enable OpenMP shared memory parallelization (true or false)
