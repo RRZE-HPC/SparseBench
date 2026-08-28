@@ -79,6 +79,9 @@ for mtx in "${MTX_FORMATS[@]}"; do
           # Adjust the glob below to match your actual output binary name(s)
           cp -r ./build/. "$DEST_DIR"/ 2>/dev/null || \
           find . -maxdepth 1 -type f -executable -exec cp {} "$DEST_DIR"/ \; 2>/dev/null || true
+          # The linked binary (TARGET = sparseBench-<fmt>-<toolchain>) lands at the
+          # repo root, not in ./build, and the next iteration's distclean removes it.
+          mv ./sparseBench-"${mtx}"-"${TOOLCHAIN}" "$DEST_DIR"/ 2>/dev/null || true
 
         else
           EXIT_CODE=$?
