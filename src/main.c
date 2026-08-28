@@ -16,6 +16,7 @@
 #include "kernel_dispatch.h"
 #include "matrix.h"
 #include "matrixBinfile.h"
+#include "nvtx_marker.h"
 #include "parameter.h"
 #include "profiler.h"
 #include "solver.h"
@@ -27,8 +28,7 @@
 #include "cuda_kernels.h"
 #endif
 
-/* NUMA first-touch fill. Not named omp_*: that prefix is reserved by the OpenMP
- * specification for the runtime API, and this has external linkage. */
+// NUMA first-touch fill
 static void firstTouchFill(V_ELE *data_ptr, size_t elem_count, V_ELE value)
 {
 #pragma omp parallel for schedule(OMP_SCHEDULE)
@@ -90,6 +90,7 @@ int main(int argc, char **argv)
   commInit(&comm, argc, argv);
   initParameter(&param);
   parseArguments(&comm, &param, argc, argv);
+  NVTX_INIT();
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
   /* Multi-rank GPU runs are not supported yet and must not be silently wrong:
    * gpu_ddot has no counterpart to the commReductionV that solver.c's ddot
@@ -102,6 +103,7 @@ int main(int argc, char **argv)
         "run with one rank.\n");
   }
   gpu_init(param.device);
+  gpu_set_alloc_type(param.allocType);
 #endif
   commPrintBanner(&comm);
   if (param.verbose > 0 && commIsMaster(&comm)) {
@@ -110,6 +112,7 @@ int main(int argc, char **argv)
 
   double ts;
   GMatrix m;
+  NVTX_RANGE_PUSH_C("Main.initMatrix", NVTX_C_CONVERT);
   double timeStart = getTimeStamp();
   initMatrix(&comm, &param, &m);
   commBarrier();
@@ -117,6 +120,8 @@ int main(int argc, char **argv)
   if (commIsMaster(&comm)) {
     printf("Init matrix took %.2fs\n", timeStop - timeStart);
   }
+  NVTX_RANGE_POP();
+  NVTX_RANGE_PUSH_C("Main.localize+convert", NVTX_C_CONVERT);
   timeStart = getTimeStamp();
   commLocalization(&comm, &m);
 
@@ -132,6 +137,7 @@ int main(int argc, char **argv)
     printf(
         "Parallel localization and matrix conversion took %.2fs\n", timeStop - timeStart);
   }
+  NVTX_RANGE_POP();
 
   size_t factorFlops[NUMREGIONS];
   size_t factorWords[NUMREGIONS];
@@ -175,7 +181,9 @@ int main(int argc, char **argv)
     if (commIsMaster(&comm)) {
       printf("Test type: CG\n");
     }
+    NVTX_RANGE_PUSH_C("Bench.CG", NVTX_C_CG);
     k = solveCG(&comm, &param, &sm);
+    NVTX_RANGE_POP();
     break;
 
   case SPMV: {
@@ -192,9 +200,11 @@ int main(int argc, char **argv)
     firstTouchFill(x, inSize, 1.0);
     firstTouchFill(y, outSize, 0.0);
 
+    NVTX_RANGE_PUSH_C("Bench.SPMV", NVTX_C_MATVEC);
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMVM, SPMVMFUNC(&sm, x, y));
     }
+    NVTX_RANGE_POP();
     deallocate(x);
     deallocate(y);
   } break;
@@ -234,9 +244,11 @@ int main(int argc, char **argv)
     firstTouchFill(x.entries, (size_t)x.nr * x.nc, 1.0);
     firstTouchFill(y.entries, (size_t)y.nr * y.nc, 0.0);
 
+    NVTX_RANGE_PUSH_C("Bench.SPMMV", NVTX_C_MATVEC);
     for (k = 1; k < itermax; k++) {
       PROFILE(SPMMVM, SPMMVMFUNC(&sm, &x, &y));
     }
+    NVTX_RANGE_POP();
     deallocate(x.entries);
     deallocate(y.entries);
   } break;
@@ -264,7 +276,9 @@ int main(int argc, char **argv)
 #endif
     // ChebFD does its own timing/reporting, so it is left out of the profiler sequence.
     // A negative return means a configuration/validation failure -> propagate a non-zero exit.
+    NVTX_RANGE_PUSH_C("Bench.CHEBFD", NVTX_C_FILTER);
     int found = solveChebFD(&comm, &param, &sm);
+    NVTX_RANGE_POP();
     if (found < 0) {
       rc = EXIT_FAILURE;
     } else {
@@ -280,8 +294,10 @@ int main(int argc, char **argv)
     profilerPrint(&comm, seq, numSeq, k);
   }
   profilerFinalize();
+  NVTX_RANGE_PUSH_C("Main.cleanup", NVTX_C_SETUP);
   freeMatrix(&sm);
   freeGMatrix(&m);
+  NVTX_RANGE_POP();
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
   gpu_finalize();
