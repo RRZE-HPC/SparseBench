@@ -60,7 +60,9 @@
 /* --- Portable convenience wrappers -------------------------------- */
 #define gpuMalloc(ptr, size) GCXX_RUNTIME_BACKEND(Malloc)((ptr), (size))
 #define gpuMallocManaged(ptr, size) GCXX_RUNTIME_BACKEND(MallocManaged)((ptr), (size))
+#define gpuMallocHost(ptr, size) GCXX_RUNTIME_BACKEND(MallocHost)((ptr), (size))
 #define gpuFree(ptr) GCXX_RUNTIME_BACKEND(Free)((ptr))
+#define gpuFreeHost(ptr) GCXX_RUNTIME_BACKEND(FreeHost)((ptr))
 #define gpuMemcpy(dst, src, sz, k) GCXX_RUNTIME_BACKEND(Memcpy)((dst), (src), (sz), (k))
 #define gpuMemset(ptr, val, sz) GCXX_RUNTIME_BACKEND(Memset)((ptr), (val), (sz))
 #define gpuMemsetAsync(ptr, val, sz, str)                                               \

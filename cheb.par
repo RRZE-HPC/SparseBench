@@ -9,3 +9,5 @@ cheb_Np 150
 cheb_NS 2000
 eps 1e-6
 itermax 30
+# GPU buffer placement: pageable | explicit | managed (default managed)
+# gpu_alloc managed

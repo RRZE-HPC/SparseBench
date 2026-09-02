@@ -6,17 +6,47 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "allocate.h"
 #ifdef _GPU
 #include "cuda_kernels.h"
 #endif
 
+const char *allocTypeName(AllocType type)
+{
+  switch (type) {
+  case ALLOC_PAGEABLE:
+    return "pageable";
+  case ALLOC_EXPLICIT:
+    return "explicit";
+  case ALLOC_MANAGED:
+    return "managed";
+  default:
+    return "unknown";
+  }
+}
+
+AllocType allocTypeFromName(const char *name)
+{
+  if (strcmp(name, "pageable") == 0)
+    return ALLOC_PAGEABLE;
+  if (strcmp(name, "explicit") == 0)
+    return ALLOC_EXPLICIT;
+  if (strcmp(name, "managed") == 0)
+    return ALLOC_MANAGED;
+  fprintf(stderr,
+      "Error: unknown allocation type '%s' "
+      "(expected pageable, explicit or managed)\n",
+      name);
+  exit(EXIT_FAILURE);
+}
+
 void *allocate(size_t alignment, size_t bytesize)
 {
 #ifdef _GPU
   (void)alignment;
-  return gpu_allocate_managed(bytesize);
+  return gpu_allocate(bytesize);
 #else
   int errorCode;
   void *ptr;
@@ -46,7 +76,25 @@ void *allocate(size_t alignment, size_t bytesize)
 extern void deallocate(void *ptr)
 {
 #ifdef _GPU
-  gpu_free_managed(ptr);
+  gpu_free(ptr);
+#else
+  free(ptr);
+#endif
+}
+
+extern void *allocateDevice(size_t bytesize)
+{
+#ifdef _GPU
+  return gpu_allocate_device(bytesize);
+#else
+  return allocate(ARRAY_ALIGNMENT, bytesize);
+#endif
+}
+
+extern void deallocateDevice(void *ptr)
+{
+#ifdef _GPU
+  gpu_free_device(ptr);
 #else
   free(ptr);
 #endif

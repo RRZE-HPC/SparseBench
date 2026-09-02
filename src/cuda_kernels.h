@@ -5,6 +5,7 @@
 #ifndef __GPU_KERNELS_H_
 #define __GPU_KERNELS_H_
 
+#include "allocate.h"
 #include "matrix.h"
 #include "util.h"
 
@@ -110,9 +111,29 @@ int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol);
 /* Release the persistent scratch owned by cuda_chebfd_dense.cu. */
 void gpu_chebfd_scratch_free(void);
 
-/* Managed-memory allocation helpers */
-void *gpu_allocate_managed(size_t bytes);
-void gpu_free_managed(void *ptr);
+/* Mode-selectable buffer allocation (AllocType from allocate.h). One mode
+ * per run: set via gpu_set_alloc_type before the first gpu_allocate, and
+ * the free functions dispatch on that same mode. Under ALLOC_EXPLICIT,
+ * gpu_allocate places host-side buffers (cudaMallocHost) while
+ * gpu_allocate_device places kernel-only buffers (cudaMalloc); other modes
+ * hand out one backing store from both. Pair each allocation with its
+ * matching free (gpu_free / gpu_free_device). */
+void gpu_set_alloc_type(AllocType type);
+void *gpu_allocate(size_t bytes);
+void *gpu_allocate_device(size_t bytes);
+void gpu_free(void *ptr);
+void gpu_free_device(void *ptr);
+
+/* Device-side ChebFD block initialization, so the vector blocks can be
+ * kernel-only buffers (allocateDevice) under ALLOC_EXPLICIT.
+ * gpu_randomInitBlock mirrors randomInitBlock in chebFDSolver.c (same
+ * splitmix64 key layout; pass comm->rank * 0xD1B54A32D192ED03ull as
+ * rankKey). gpu_zeroPadRows zeroes rows [startRow, startRow + numRows) of
+ * a row-major block — the post-ortho SCS re-padding. */
+void gpu_randomInitBlock(
+    unsigned long long rankKey, CG_UINT nr, CG_UINT vecRows, V_ELE *e, int nv);
+
+void gpu_zeroPadRows(V_ELE *e, CG_UINT startRow, CG_UINT numRows, CG_UINT stride);
 
 /* Device init / finalize */
 void gpu_init(int device);

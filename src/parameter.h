@@ -5,6 +5,8 @@
 #ifndef __PARAMETER_H_
 #define __PARAMETER_H_
 
+#include "allocate.h" /* AllocType */
+
 // NTS : CHEB_FD params
 typedef struct {
   double a;        // spectrum lower bound  (valid iff have_bounds)
@@ -31,7 +33,8 @@ typedef struct {
   int blockwidth;
   int verbose;
   int device;
-  ChebFDParam cheb; // NTS : compostion to keep struct clean
+  AllocType allocType; /* GPU buffer placement; ignored by the CPU build */
+  ChebFDParam cheb;    // NTS : compostion to keep struct clean
 } Parameter;
 
 void initParameter(Parameter *);
