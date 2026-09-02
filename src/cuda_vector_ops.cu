@@ -13,6 +13,7 @@
 
 #include "cuda_kernels.h"
 #include "gpu_backend.h"
+#include "nvtx_marker.h"
 
 /* ------------------------------------------------------------------ */
 /*  waxpby:  w = alpha*x + beta*y                                    */
@@ -81,8 +82,10 @@ extern "C" void gpu_waxpby3_sync(CG_UINT n,
     const V_ELE *z,
     V_ELE *w)
 {
+  NVTX_RANGE_PUSH_C("gpu.waxpby3", NVTX_C_VECTOR);
   gpu_waxpby3(n, a, x, b, y, c, z, w);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
+  NVTX_RANGE_POP();
 }
 
 /* ------------------------------------------------------------------ */
@@ -175,6 +178,7 @@ extern "C" void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *resul
 /* ------------------------------------------------------------------ */
 extern "C" void gpu_init(int device)
 {
+  NVTX_RANGE_PUSH_C("gpu.init", NVTX_C_SETUP);
   GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(SetDevice)(device));
 
   gpuDeviceProp_t prop;
@@ -184,10 +188,12 @@ extern "C" void gpu_init(int device)
       prop.name,
       prop.major,
       prop.minor);
+  NVTX_RANGE_POP();
 }
 
 extern "C" void gpu_finalize(void)
 {
+  NVTX_RANGE_PUSH_C("gpu.finalize", NVTX_C_SETUP);
   gpu_chebfd_scratch_free();
   if (g_ddot_partial != NULL) {
     GPU_SAFE_CALL(gpuFree(g_ddot_partial));
@@ -199,6 +205,7 @@ extern "C" void gpu_finalize(void)
     g_ddot_result_d = NULL;
   }
   GPU_SAFE_CALL(GCXX_RUNTIME_BACKEND(DeviceReset)());
+  NVTX_RANGE_POP();
 }
 
 /* ------------------------------------------------------------------ */
@@ -230,12 +237,15 @@ extern "C" void gpu_waxpby_nosync(
 extern "C" void gpu_waxpby_sync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
 {
+  NVTX_RANGE_PUSH_C("gpu.waxpby", NVTX_C_VECTOR);
   gpu_waxpby_nosync(n, alpha, x, beta, y, w);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
+  NVTX_RANGE_POP();
 }
 
 extern "C" void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result)
 {
+  NVTX_RANGE_PUSH_C("gpu.ddot", NVTX_C_VECTOR);
   int threads = 256;
   int blocks  = (n + threads - 1) / threads;
 
@@ -250,4 +260,5 @@ extern "C" void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *
   /* gpuMemcpy is synchronous w.r.t. the host, so it both waits for the
    * kernels above and delivers the scalar — no separate DeviceSynchronize. */
   GPU_SAFE_CALL(gpuMemcpy(result, g_ddot_result_d, sizeof(V_ELE), gpuMemcpyDeviceToHost));
+  NVTX_RANGE_POP();
 }

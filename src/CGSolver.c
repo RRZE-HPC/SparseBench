@@ -12,6 +12,7 @@
 #include "allocate.h"
 #include "comm.h"
 #include "kernel_dispatch.h"
+#include "nvtx_marker.h"
 #include "profiler.h"
 #include "solver.h"
 #include "timing.h"
@@ -118,6 +119,7 @@ static void initVectors(Matrix *m, V_ELE *x, V_ELE *b, V_ELE *xexact)
 
 int solveCG(CommType *comm, Parameter *param, Matrix *A)
 {
+  NVTX_RANGE_PUSH_C("CG.solve", NVTX_C_CG);
   CG_FLOAT eps   = (CG_FLOAT)param->eps;
   int itermax    = param->itermax;
 
@@ -136,6 +138,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   V_ELE *b      = d.b;
   V_ELE *xexact = d.xexact;
 
+  NVTX_RANGE_PUSH_C("CG.setup", NVTX_C_CG);
   initVectors(A, x, b, xexact);
 
   // Permute colInd and vectors to SCS ordering so no per-iteration
@@ -157,6 +160,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     memcpy(xexact, permTmp, nrow * sizeof(V_ELE));
   }
 #endif
+  NVTX_RANGE_POP();
 
   CG_FLOAT normr  = 0.0;
   V_ELE rtrans    = 0.0;
@@ -171,12 +175,14 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
   }
   double timeStart, timeStop, ts;
 
+  NVTX_RANGE_PUSH_C("CG.initResidual", NVTX_C_CG);
   PROFILE(WAXPBY, WAXBYFUNC(nrow, 1.0, x, 0.0, x, p));
   PROFILE(COMM, commExchange(comm, A->nr, p));
 
   PROFILE(SPMVM, SPMVMFUNC(A, p, ap));
   PROFILE(WAXPBY, WAXBYFUNC(nrow, 1.0, b, -1.0, ap, r));
   PROFILE(DDOT, DDOTFUNC(nrow, r, r, &rtrans));
+  NVTX_RANGE_POP();
 
   normr = sqrt(CAST(rtrans));
   if (commIsMaster(comm)) {
@@ -185,6 +191,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
   int k;
   timeStart = getTimeStamp();
+  NVTX_RANGE_PUSH_C("CG.iterations", NVTX_C_CG);
   for (k = 1; k < itermax && normr > eps; k++) {
     if (k == 1) {
       PROFILE(WAXPBY, WAXBYFUNC(nrow, 1.0, r, 0.0, r, p));
@@ -209,6 +216,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
     PROFILE(WAXPBY, WAXBYFUNC(nrow, 1.0, x, alpha, p, x));
     PROFILE(WAXPBY, WAXBYFUNC(nrow, 1.0, r, -alpha, ap, r));
   }
+  NVTX_RANGE_POP();
   timeStop = getTimeStamp();
 
   if (commIsMaster(comm)) {
@@ -227,6 +235,7 @@ int solveCG(CommType *comm, Parameter *param, Matrix *A)
 
   freeCGData(&d);
 
+  NVTX_RANGE_POP();
   return k;
 }
 

@@ -16,6 +16,7 @@
 
 #include "cuda_kernels.h"
 #include "gpu_backend.h"
+#include "nvtx_marker.h"
 
 #define WARP 32
 #define ROWS_PER_BLOCK 8
@@ -329,9 +330,11 @@ __global__ void kernel_ritz_residual(CG_UINT nr,
 extern "C" void gpu_gramYtAY(
     CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H)
 {
+  NVTX_RANGE_PUSH_C("gpu.gramYtAY", NVTX_C_RR);
   int tiles = (m + GRAM_TILE - 1) / GRAM_TILE;
   kernel_gram<<<dim3(tiles, tiles), dim3(GRAM_TILE, GRAM_TILE)>>>(nr, m, Ye, AYe, H);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
+  NVTX_RANGE_POP();
 }
 
 extern "C" void gpu_computeRitzResidual(DMatrix *Y,
@@ -344,6 +347,7 @@ extern "C" void gpu_computeRitzResidual(DMatrix *Y,
     double *evk,
     V_ELE *avbuf)
 {
+  NVTX_RANGE_PUSH_C("gpu.ritzResidual", NVTX_C_RESID);
   /* evec was produced by jacobiEigen on the host. */
   for (int j = 0; j < m; j++) {
     evk[j] = evec[(size_t)j * (size_t)m + (size_t)k];
@@ -353,6 +357,7 @@ extern "C" void gpu_computeRitzResidual(DMatrix *Y,
   kernel_ritz_residual<<<blocks, dim3(WARP, ROWS_PER_BLOCK)>>>(
       nr, m, Y->entries, AY->entries, evk, evalk, avbuf);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
+  NVTX_RANGE_POP();
 }
 
 extern "C" int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
@@ -360,6 +365,8 @@ extern "C" int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
   if (nc < 1 || nr == 0) {
     return 0;
   }
+
+  NVTX_RANGE_PUSH_C("gpu.orthoMGS", NVTX_C_ORTHO);
 
   ensureScratch((size_t)PROJ_CHUNKS * (size_t)nc, (size_t)nr * (size_t)nc);
 
@@ -406,6 +413,7 @@ extern "C" int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
     kernel_copy<<<blocks, LIN_THREADS>>>(total, g_repack, e);
   }
   GPU_SAFE_CALL(gpuDeviceSynchronize());
+  NVTX_RANGE_POP();
 
   return m;
 }

@@ -8,6 +8,7 @@
 
 #include "allocate.h"
 #include "matrix.h"
+#include "nvtx_marker.h"
 
 static inline int compareDesc(const void *a, const void *b)
 {
@@ -102,6 +103,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
   }
 
   // Sort rows over a scope of sigma
+  NVTX_RANGE_PUSH_C("Convert.SCS.sigmaSort", NVTX_C_CONVERT);
   for (int i = 0; i < m->nrPadded; i += m->sigma) {
     int chunkStart = i;
     int chunkStop  = MIN(i + m->sigma, m->nrPadded);
@@ -115,6 +117,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
     mergesort(&elemsPerRow[chunkStart], size, sizeof(SellCSigmaPair), compareDescSCS);
 #endif
   }
+  NVTX_RANGE_POP();
 
   /* Derive the total element count (nElems) before allocating, since colInd
    * and val are sized by it. */
@@ -179,6 +182,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
     rowLocalElemCount[i] = 0;
   }
 
+  NVTX_RANGE_PUSH_C("Convert.SCS.scatter", NVTX_C_CONVERT);
   for (int i = 0; i < m->nr; i++) {
 
     int rowOld = i;
@@ -214,6 +218,7 @@ void convertMatrix(Matrix *m, GMatrix *im)
       ++rowLocalElemCount[row];
     }
   }
+  NVTX_RANGE_POP();
 
   deallocate(elemsPerRow);
   deallocate(rowLocalElemCount);
