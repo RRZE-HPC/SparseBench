@@ -14,9 +14,6 @@ extern "C" {
 #endif
 
 /* Low-level kernel launchers (async — no sync, no managed memory) */
-void gpu_waxpby(
-    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w);
-
 void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result);
 
 // Whole dot product on the GPU
@@ -133,30 +130,6 @@ void gpu_vstream_stats(const GpuVectorStream *s,
 void *gpu_allocate_host(size_t bytes);
 void gpu_free_host(void *p);
 
-/* Resident-matrix variants with column-subblock tiling (cheb_nb). */
-void gpu_spMMVM_nb(Matrix *m, const DMatrix *x, DMatrix *y, int nb);
-
-void gpu_spMMVMFused_nb(Matrix *m,
-    const DMatrix *x,
-    V_ELE cA,
-    const DMatrix *p,
-    V_ELE cP,
-    const DMatrix *q,
-    V_ELE cQ,
-    DMatrix *y,
-    int nb);
-
-void gpu_chebfdOp_nb(Matrix *m,
-    const DMatrix *w,
-    V_ELE cA,
-    V_ELE cP,
-    const DMatrix *q,
-    V_ELE cQ,
-    DMatrix *y,
-    V_ELE gc,
-    DMatrix *x,
-    int nb);
-
 void gpu_waxpby_sync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w);
 
@@ -194,8 +167,6 @@ void gpu_computeRitzResidual(DMatrix *Y,
     double *evk,
     V_ELE *avbuf);
 
-int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol);
-
 /* Release the persistent scratch owned by cuda_chebfd_dense.cu. */
 void gpu_chebfd_scratch_free(void);
 
@@ -211,17 +182,6 @@ void *gpu_allocate(size_t bytes);
 void *gpu_allocate_device(size_t bytes);
 void gpu_free(void *ptr);
 void gpu_free_device(void *ptr);
-
-/* Device-side ChebFD block initialization, so the vector blocks can be
- * kernel-only buffers (allocateDevice) under ALLOC_EXPLICIT.
- * gpu_randomInitBlock mirrors randomInitBlock in chebFDSolver.c (same
- * splitmix64 key layout; pass comm->rank * 0xD1B54A32D192ED03ull as
- * rankKey). gpu_zeroPadRows zeroes rows [startRow, startRow + numRows) of
- * a row-major block — the post-ortho SCS re-padding. */
-void gpu_randomInitBlock(
-    unsigned long long rankKey, CG_UINT nr, CG_UINT vecRows, V_ELE *e, int nv);
-
-void gpu_zeroPadRows(V_ELE *e, CG_UINT startRow, CG_UINT numRows, CG_UINT stride);
 
 /* Device init / finalize */
 void gpu_init(int device);

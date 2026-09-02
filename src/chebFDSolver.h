@@ -90,7 +90,6 @@ typedef struct {
   double *accEval; // accepted (converged) in-interval eigenvalues (NS)
   int *sel;        // in-interval Ritz pair indices of the current iteration (NS)
   double *res2;    // their squared residual norms (NS)
-  int NS;
 } ChebData;
 
 extern void allocChebData(ChebData *d, Matrix *m, int NS);

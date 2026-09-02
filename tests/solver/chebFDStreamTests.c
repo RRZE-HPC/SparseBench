@@ -44,120 +44,22 @@ int chebFDStreamTests(int argc, char **argv)
 #include "../../src/parameter.h"
 #include "../../src/solver.h"
 #include "../common.h"
+#include "chebFDTestUtil.h"
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
-/* ---- shared helpers (conventions from chebFDUnitTests.c) --------------- */
+/* ---- helpers ------------------------------------------------------------ */
 
 /* 1-D Laplacian tridiagonal, converted with an explicit SCS chunk height /
  * sigma so multi-lane chunks, padding rows and the sigma permutation are
- * exercised. */
+ * exercised, and prefetched to the device as the solver does. */
 static void buildTridiagMatrixCS(Matrix *A, GMatrix *gm, int n, int C, int sigma)
 {
-  memset(gm, 0, sizeof(*gm));
-  gm->nr       = (CG_UINT)n;
-  gm->nc       = (CG_UINT)n;
-  gm->nnz      = (CG_UINT)(3 * n - 2);
-  gm->totalNr  = (CG_UINT)n;
-  gm->totalNnz = gm->nnz;
-  gm->startRow = 0;
-  gm->stopRow  = (CG_UINT)n;
-  gm->rowPtr   = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (size_t)(n + 1) * sizeof(CG_UINT));
-  gm->entries  = (Entry *)allocate(ARRAY_ALIGNMENT, (size_t)gm->nnz * sizeof(Entry));
-
-  CG_UINT idx = 0;
-  for (int i = 0; i < n; i++) {
-    gm->rowPtr[i] = idx;
-    if (i > 0) {
-      gm->entries[idx].col = (CG_UINT)(i - 1);
-      gm->entries[idx].val = (V_ELE)(-1.0);
-      idx++;
-    }
-    gm->entries[idx].col = (CG_UINT)i;
-    gm->entries[idx].val = (V_ELE)2.0;
-    idx++;
-    if (i < n - 1) {
-      gm->entries[idx].col = (CG_UINT)(i + 1);
-      gm->entries[idx].val = (V_ELE)(-1.0);
-      idx++;
-    }
-  }
-  gm->rowPtr[n] = idx;
-
-  memset(A, 0, sizeof(*A));
-#ifdef SCS
-  A->C     = (CG_UINT)C;
-  A->sigma = (CG_UINT)sigma;
-#else
-  (void)C;
-  (void)sigma;
-#endif
-  convertMatrix(A, gm);
+  buildTridiagMatrix(A, gm, n, C, sigma);
   gpu_matrix_prefetch(A);
-}
-
-static CG_UINT vecRowsOf(Matrix *A)
-{
-#ifdef SCS
-  return A->nrPadded;
-#else
-  return A->nr;
-#endif
-}
-
-static void tridiagEigenvalue(int n, int k, double *lambda)
-{
-  *lambda = 2.0 - 2.0 * cos((double)k * M_PI / (double)(n + 1));
-}
-
-static unsigned long long splitmix64Local(unsigned long long z)
-{
-  z += 0x9E3779B97F4A7C15ull;
-  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
-  z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
-  return z ^ (z >> 31);
-}
-
-/* Random fill of rows [0, nr), zero padding rows [nr, vecRows). */
-static void fillRandomBlock(
-    V_ELE *e, CG_UINT vecRows, CG_UINT nr, int nc, unsigned long long seed)
-{
-  for (CG_UINT r = 0; r < vecRows; r++) {
-    for (int c = 0; c < nc; c++) {
-      double rv = 0.0;
-      if (r < nr) {
-        unsigned long long h = splitmix64Local(seed + r * 0x9E3779B97F4A7C15ull +
-                                               (unsigned long long)c * 0xff51afd7ed558ccdull);
-        rv                   = (double)(h >> 11) / (double)(1ull << 53) * 2.0 - 1.0;
-      }
-      e[r * (CG_UINT)nc + (CG_UINT)c] = (V_ELE)rv;
-    }
-  }
-}
-
-static double maxAbsDiff(const V_ELE *a, const V_ELE *b, size_t sz)
-{
-  double maxd = 0.0;
-  for (size_t i = 0; i < sz; i++) {
-    maxd = fmax(maxd, fabs((double)(a[i] - b[i])));
-  }
-  return maxd;
-}
-
-static double maxAbsDiffD(const double *a, const double *b, size_t sz)
-{
-  double maxd = 0.0;
-  for (size_t i = 0; i < sz; i++) {
-    maxd = fmax(maxd, fabs(a[i] - b[i]));
-  }
-  return maxd;
 }
 
 /* Managed (device-visible) block for the resident reference kernels. */
@@ -180,14 +82,6 @@ static DMatrix makeHostBlock(CG_UINT rows, int nc)
   return m;
 }
 
-#define CHECK(cond, msg, ...)                                                            \
-  do {                                                                                   \
-    if (!(cond)) {                                                                       \
-      printf("    FAIL: " msg "\n", ##__VA_ARGS__);                                      \
-      ok = 0;                                                                            \
-    }                                                                                    \
-  } while (0)
-
 /* Tiny row chunks (16 rows at NS*8 B each) so every row-chunk pass on the
  * 44-row test block runs three chunks and hits the write-back tail. */
 static size_t tinyChunkBytes(int NS)
@@ -206,7 +100,7 @@ static int testFilterParity(void)
   Matrix A;
   GMatrix gm;
   buildTridiagMatrixCS(&A, &gm, n, C, sigma);
-  CG_UINT vecRows = vecRowsOf(&A);
+  CG_UINT vecRows = matrixVecRows(&A);
 
   const int NS = 7;
   ChebFilter f;
@@ -283,7 +177,7 @@ static int testDensePassParity(void)
   Matrix A;
   GMatrix gm;
   buildTridiagMatrixCS(&A, &gm, n, C, sigma);
-  CG_UINT vecRows = vecRowsOf(&A);
+  CG_UINT vecRows = matrixVecRows(&A);
   const int NS    = 6;
   size_t sz       = (size_t)vecRows * (size_t)NS;
 
@@ -377,7 +271,7 @@ static int testUpdateAndOrtho(void)
   Matrix A;
   GMatrix gm;
   buildTridiagMatrixCS(&A, &gm, n, C, sigma);
-  CG_UINT vecRows = vecRowsOf(&A);
+  CG_UINT vecRows = matrixVecRows(&A);
   const int NS    = 6;
   size_t sz       = (size_t)vecRows * (size_t)NS;
 

@@ -25,23 +25,19 @@
  * makes every gather a scattered 8-byte access. ChebFD runs with numVecs in
  * the hundreds, so that shape both fails to launch and mis-uses the bus.
  *
- * Part and subblock views (matrix streaming / cheb_nb)
- * ----------------------------------------------------
- * Every kernel takes its matrix through a *part* view: nPartChunks
- * consecutive chunks described by sliced chunkPtr/chunkLens/colInd/val
- * arrays plus the scalars elemBase (= chunkPtr[c0], absolute) and rowBase
- * (= c0*C, global first row). chunkPtr keeps ABSOLUTE element ids, so the
- * kernels rebase with `chunkPtr[pc] - elemBase` to index the slices, while
- * colInd values stay global — the vector gather xin[colInd * ld + vec]
- * reaches any row, which is why a streamed column sub-block must always
- * carry all rows (cuda_vector_stream.cu).
+ * Part views and leading dimensions
+ * --------------------------------
+ * Every kernel takes its matrix through a GpuPartView (cuda_vector_stream.h):
+ * chunkPtr keeps ABSOLUTE element ids and the kernels rebase with
+ * `chunkPtr[pc] - elemBase`; colInd stays global, so the vector gather
+ * xin[colInd * ld + vec] reaches any row — a streamed column sub-block must
+ * always carry all rows (cuda_vector_stream.cu). Today the only view in use
+ * is the identity view of the whole resident matrix (wholeMatrixView).
  *
  * The block vectors are addressed with a separate leading dimension ld >=
- * numVecs, so a launch may cover a width-numVecs column slice at offset v0
- * of a wider row-major block (base pointer + v0), or a device sub-block
- * buffer with ld = nb. The plain wrappers pass the identity view (ld =
- * numVecs, bases 0); the _nb wrappers tile the columns; gpu_launch_* is
- * the stream-aware entry the vector streaming uses.
+ * numVecs, so a launch may cover a device sub-block buffer with ld = nb.
+ * The plain wrappers pass ld = numVecs; gpu_launch_* is the stream-aware
+ * entry the vector streaming uses.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -396,15 +392,9 @@ typedef struct {
   const V_ELE *x, *p, *q, *r;
   V_ELE *y, *acc;
   V_ELE cA, cP, cQ, gc, cR;
-  CG_UINT width, ld, nb;
+  CG_UINT width, ld;
   CG_UINT C;
 } ChebfdArgs;
-
-/* Effective subblock width: 0 or >= width means "one full-width launch". */
-static inline CG_UINT effNb(CG_UINT nb, CG_UINT width)
-{
-  return (nb == 0 || nb >= width) ? width : nb;
-}
 
 /* Vector lanes per block row for a launch over w columns: a full warp when
  * the slice is wide enough, otherwise 16 or 8 lanes so a warp spans 2 or 4
@@ -417,8 +407,8 @@ static inline unsigned vecTile(CG_UINT w)
   return (w <= 4) ? 4u : (w <= 8) ? 8u : (w <= 16) ? 16u : (unsigned)VEC_TILE;
 }
 
-/* Fused kernel on one part (or an identity view of the whole matrix),
- * tiled into width-nb column slices. stream 0 = legacy default stream. */
+/* Fused kernel on one part (or an identity view of the whole matrix) over
+ * `width` columns. stream 0 = legacy default stream. */
 
 /* Column-vector width of the fused kernel: 4 (default, kernel_chebfd_scs_v4),
  * 2 (kernel_chebfd_scs_v2) or 1 (scalar); the launcher falls back to the
@@ -439,82 +429,20 @@ static void launchChebfdPart(const GpuPartView *v, gpuStream_t stream, void *ua)
 {
   initChebfdVec();
   ChebfdArgs *a = (ChebfdArgs *)ua;
-  CG_UINT nb    = effNb(a->nb, a->width);
-  for (CG_UINT v0 = 0; v0 < a->width; v0 += nb) {
-    CG_UINT w   = (nb < a->width - v0) ? nb : a->width - v0;
+  CG_UINT w     = a->width;
 #ifndef USE_COMPLEX
-    /* Column-pair kernel when every operand is 16-byte aligned: even width
-     * and ld, even slice offset, and 16 B aligned base pointers. */
-    int pairOk = (w % 2 == 0) && (a->ld % 2 == 0) && (v0 % 2 == 0) &&
-                 (((uintptr_t)a->x | (uintptr_t)a->p | (uintptr_t)a->y |
-                      (uintptr_t)(a->q ? a->q : a->x) | (uintptr_t)(a->r ? a->r : a->x) |
-                      (uintptr_t)(a->acc ? a->acc : a->x)) %
-                         16 ==
-                     0);
-    int quadOk = pairOk && (w % 4 == 0) && (a->ld % 4 == 0) && (v0 % 4 == 0) &&
-                 (((uintptr_t)a->x | (uintptr_t)a->p | (uintptr_t)a->y |
-                      (uintptr_t)(a->q ? a->q : a->x) | (uintptr_t)(a->r ? a->r : a->x) |
-                      (uintptr_t)(a->acc ? a->acc : a->x)) %
-                         32 ==
-                     0);
-    if (quadOk && g_chebfdVec == 4) {
-      CG_UINT wq  = w / 4;
-      unsigned vt = vecTile(wq);
-      dim3 grid((unsigned)v->count, (unsigned)((wq + vt - 1) / vt));
-      kernel_chebfd_scs_v4<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
-          a->C,
-          w,
-          a->ld,
-          v->ptr,
-          v->elemBase,
-          v->rowBase,
-          v->lens,
-          v->colInd,
-          v->val,
-          a->x + v0,
-          a->cA,
-          a->p + v0,
-          a->cP,
-          (a->q != NULL) ? a->q + v0 : NULL,
-          a->cQ,
-          a->y + v0,
-          a->gc,
-          (a->acc != NULL) ? a->acc + v0 : NULL,
-          (a->r != NULL) ? a->r + v0 : NULL,
-          a->cR);
-      continue;
-    }
-    if (pairOk && g_chebfdVec >= 2) {
-      CG_UINT wp  = w / 2;
-      unsigned vt = vecTile(wp);
-      dim3 grid((unsigned)v->count, (unsigned)((wp + vt - 1) / vt));
-      kernel_chebfd_scs_v2<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
-          a->C,
-          w,
-          a->ld,
-          v->ptr,
-          v->elemBase,
-          v->rowBase,
-          v->lens,
-          v->colInd,
-          v->val,
-          a->x + v0,
-          a->cA,
-          a->p + v0,
-          a->cP,
-          (a->q != NULL) ? a->q + v0 : NULL,
-          a->cQ,
-          a->y + v0,
-          a->gc,
-          (a->acc != NULL) ? a->acc + v0 : NULL,
-          (a->r != NULL) ? a->r + v0 : NULL,
-          a->cR);
-      continue;
-    }
-#endif
-    unsigned vt = vecTile(w);
-    dim3 grid((unsigned)v->count, (unsigned)((w + vt - 1) / vt));
-    kernel_chebfd_scs<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
+  /* Column-pair kernel when every operand is 16-byte aligned: even width
+   * and ld, and 16 B aligned base pointers. */
+  uintptr_t ptrs = (uintptr_t)a->x | (uintptr_t)a->p | (uintptr_t)a->y |
+                   (uintptr_t)(a->q ? a->q : a->x) | (uintptr_t)(a->r ? a->r : a->x) |
+                   (uintptr_t)(a->acc ? a->acc : a->x);
+  int pairOk = (w % 2 == 0) && (a->ld % 2 == 0) && (ptrs % 16 == 0);
+  int quadOk = pairOk && (w % 4 == 0) && (a->ld % 4 == 0) && (ptrs % 32 == 0);
+  if (quadOk && g_chebfdVec == 4) {
+    CG_UINT wq  = w / 4;
+    unsigned vt = vecTile(wq);
+    dim3 grid((unsigned)v->count, (unsigned)((wq + vt - 1) / vt));
+    kernel_chebfd_scs_v4<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
         a->C,
         w,
         a->ld,
@@ -524,49 +452,98 @@ static void launchChebfdPart(const GpuPartView *v, gpuStream_t stream, void *ua)
         v->lens,
         v->colInd,
         v->val,
-        a->x + v0,
+        a->x,
         a->cA,
-        a->p + v0,
+        a->p,
         a->cP,
-        (a->q != NULL) ? a->q + v0 : NULL,
+        a->q,
         a->cQ,
-        a->y + v0,
+        a->y,
         a->gc,
-        (a->acc != NULL) ? a->acc + v0 : NULL,
-        (a->r != NULL) ? a->r + v0 : NULL,
+        a->acc,
+        a->r,
         a->cR);
+    return;
   }
+  if (pairOk && g_chebfdVec >= 2) {
+    CG_UINT wp  = w / 2;
+    unsigned vt = vecTile(wp);
+    dim3 grid((unsigned)v->count, (unsigned)((wp + vt - 1) / vt));
+    kernel_chebfd_scs_v2<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
+        a->C,
+        w,
+        a->ld,
+        v->ptr,
+        v->elemBase,
+        v->rowBase,
+        v->lens,
+        v->colInd,
+        v->val,
+        a->x,
+        a->cA,
+        a->p,
+        a->cP,
+        a->q,
+        a->cQ,
+        a->y,
+        a->gc,
+        a->acc,
+        a->r,
+        a->cR);
+    return;
+  }
+#endif
+  unsigned vt = vecTile(w);
+  dim3 grid((unsigned)v->count, (unsigned)((w + vt - 1) / vt));
+  kernel_chebfd_scs<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
+      a->C,
+      w,
+      a->ld,
+      v->ptr,
+      v->elemBase,
+      v->rowBase,
+      v->lens,
+      v->colInd,
+      v->val,
+      a->x,
+      a->cA,
+      a->p,
+      a->cP,
+      a->q,
+      a->cQ,
+      a->y,
+      a->gc,
+      a->acc,
+      a->r,
+      a->cR);
 }
 
-/* Plain SpMMV on one part, same column tiling. */
+/* Plain SpMMV on one part. */
 typedef struct {
   const V_ELE *x;
   V_ELE *y;
-  CG_UINT width, ld, nb;
+  CG_UINT width, ld;
   CG_UINT C;
 } SpmmvArgs;
 
 static void launchSpmmvPart(const GpuPartView *v, gpuStream_t stream, void *ua)
 {
   SpmmvArgs *a = (SpmmvArgs *)ua;
-  CG_UINT nb   = effNb(a->nb, a->width);
-  for (CG_UINT v0 = 0; v0 < a->width; v0 += nb) {
-    CG_UINT w   = (nb < a->width - v0) ? nb : a->width - v0;
-    unsigned vt = vecTile(w);
-    dim3 grid((unsigned)v->count, (unsigned)((w + vt - 1) / vt));
-    kernel_spmmv_scs<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
-        a->C,
-        w,
-        a->ld,
-        v->ptr,
-        v->elemBase,
-        v->rowBase,
-        v->lens,
-        v->colInd,
-        v->val,
-        a->x + v0,
-        a->y + v0);
-  }
+  CG_UINT w    = a->width;
+  unsigned vt  = vecTile(w);
+  dim3 grid((unsigned)v->count, (unsigned)((w + vt - 1) / vt));
+  kernel_spmmv_scs<<<grid, dim3(vt, LAUNCH_THREADS / vt), 0, stream>>>(v->count,
+      a->C,
+      w,
+      a->ld,
+      v->ptr,
+      v->elemBase,
+      v->rowBase,
+      v->lens,
+      v->colInd,
+      v->val,
+      a->x,
+      a->y);
 }
 
 /* Identity part view of the whole matrix (resident mode: the kernels read
@@ -714,92 +691,6 @@ extern "C" void gpu_chebfdOp(Matrix *m,
 }
 
 /* ------------------------------------------------------------------ */
-/*  Subblock-width variants (cheb_nb). Same kernels and semantics as   */
-/*  the wrappers above, but the columns are tiled into width-nb       */
-/*  slices — the "subspace blocking" knob from the ChebFD papers.     */
-/* ------------------------------------------------------------------ */
-extern "C" void gpu_spMMVM_nb(Matrix *m, const DMatrix *x, DMatrix *y, int nb)
-{
-  NVTX_RANGE_PUSH_C("gpu.spMMVM_nb", NVTX_C_MATVEC);
-  GpuPartView v;
-  wholeMatrixView(m, &v);
-  SpmmvArgs a;
-  a.x     = x->entries;
-  a.y     = y->entries;
-  a.width = a.ld = x->nc;
-  a.nb    = (CG_UINT)nb;
-  a.C     = m->C;
-  launchSpmmvPart(&v, 0, &a);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
-  NVTX_RANGE_POP();
-}
-
-extern "C" void gpu_spMMVMFused_nb(Matrix *m,
-    const DMatrix *x,
-    V_ELE cA,
-    const DMatrix *p,
-    V_ELE cP,
-    const DMatrix *q,
-    V_ELE cQ,
-    DMatrix *y,
-    int nb)
-{
-  NVTX_RANGE_PUSH_C("gpu.spMMVMFused_nb", NVTX_C_MATVEC);
-  GpuPartView v;
-  wholeMatrixView(m, &v);
-  ChebfdArgs a;
-  a.x     = x->entries;
-  a.p     = p->entries;
-  a.q     = (q != NULL) ? q->entries : NULL;
-  a.y     = y->entries;
-  a.acc   = NULL;
-  a.r     = NULL;
-  a.cR    = VCONST(0, 0);
-  a.cA    = cA;
-  a.cP    = cP;
-  a.cQ    = cQ;
-  a.gc    = VCONST(0, 0);
-  a.width = a.ld = x->nc;
-  a.nb    = (CG_UINT)nb;
-  a.C     = m->C;
-  launchChebfdPart(&v, 0, &a);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
-  NVTX_RANGE_POP();
-}
-
-extern "C" void gpu_chebfdOp_nb(Matrix *m,
-    const DMatrix *w,
-    V_ELE cA,
-    V_ELE cP,
-    const DMatrix *q,
-    V_ELE cQ,
-    DMatrix *y,
-    V_ELE gc,
-    DMatrix *x,
-    int nb)
-{
-  GpuPartView v;
-  wholeMatrixView(m, &v);
-  ChebfdArgs a;
-  a.x     = w->entries;
-  a.p     = w->entries; /* chebfdOp's cP term is the matvec operand itself */
-  a.q     = (q != NULL) ? q->entries : NULL;
-  a.y     = y->entries;
-  a.acc   = x->entries;
-  a.r     = NULL;
-  a.cR    = VCONST(0, 0);
-  a.cA    = cA;
-  a.cP    = cP;
-  a.cQ    = cQ;
-  a.gc    = gc;
-  a.width = a.ld = w->nc;
-  a.nb    = (CG_UINT)nb;
-  a.C     = m->C;
-  launchChebfdPart(&v, 0, &a);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
-}
-
-/* ------------------------------------------------------------------ */
 /*  Stream-aware launchers for the search-space streaming              */
 /*  (cuda_vector_stream.cu): whole resident matrix, `width` columns of  */
 /*  blocks with leading dimension `ld`, no sync.                        */
@@ -836,7 +727,6 @@ extern "C" void gpu_launch_chebfd(const Matrix *m,
   a.gc    = gc;
   a.width = width;
   a.ld    = ld;
-  a.nb    = 0;
   a.C     = m->C;
   launchChebfdPart(&v, stream, &a);
 }
@@ -855,7 +745,6 @@ extern "C" void gpu_launch_spmmv(const Matrix *m,
   a.y     = y;
   a.width = width;
   a.ld    = ld;
-  a.nb    = 0;
   a.C     = m->C;
   launchSpmmvPart(&v, stream, &a);
 }

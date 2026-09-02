@@ -4,9 +4,8 @@
  * license that can be found in the LICENSE file. */
 
 /*
- * Common CUDA vector operations: waxpby and ddot.
- * Each kernel lives in its own .cu file for easy extensibility —
- * add new kernels by creating additional .cu files in src/cuda/.
+ * Common CUDA vector operations (waxpby, waxpby3, ddot), device init /
+ * finalize and the mode-selectable allocation helpers.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,14 +25,6 @@ __global__ void kernel_waxpby(
   if (i < n) {
     w[i] = alpha * x[i] + beta * y[i];
   }
-}
-
-extern "C" void gpu_waxpby(
-    CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w)
-{
-  int threads = 256;
-  int blocks  = (n + threads - 1) / threads;
-  kernel_waxpby<<<blocks, threads>>>(n, alpha, x, beta, y, w);
 }
 
 /* ------------------------------------------------------------------ */
@@ -315,88 +306,5 @@ extern "C" void gpu_ddot_sync(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *
   /* gpuMemcpy is synchronous w.r.t. the host, so it both waits for the
    * kernel above and delivers the scalar — no separate DeviceSynchronize. */
   GPU_SAFE_CALL(gpuMemcpy(result, g_ddot_result_d, sizeof(V_ELE), gpuMemcpyDeviceToHost));
-  NVTX_RANGE_POP();
-}
-
-/* ------------------------------------------------------------------ */
-/*  ChebFD block initialization — device-side so the vector blocks    */
-/*  can live in plain cudaMalloc memory under ALLOC_EXPLICIT.         */
-/* ------------------------------------------------------------------ */
-
-/* Same splitmix64 mix and (rank,row,col) key layout as randomInitBlock in
- * chebFDSolver.c, so both builds draw the identical search block. */
-__device__ static unsigned long long dev_splitmix64(unsigned long long z)
-{
-  z += 0x9E3779B97F4A7C15ull;
-  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
-  z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
-  return z ^ (z >> 31);
-}
-
-/* One thread per row: rows < nr get deterministic pseudo-random values,
- * padding rows [nr, vecRows) are zeroed (the filter recurrence would
- * otherwise blow them up). */
-__global__ void kernel_random_init_block(unsigned long long rankKey,
-    CG_UINT nr,
-    CG_UINT vecRows,
-    V_ELE *e,
-    int nv)
-{
-  CG_UINT r = blockIdx.x * blockDim.x + threadIdx.x;
-  if (r >= vecRows)
-    return;
-
-  if (r < nr) {
-    for (int k = 0; k < nv; k++) {
-      unsigned long long key = rankKey + (unsigned long long)r * 0x9E3779B97F4A7C15ull +
-                               (unsigned long long)k * 0xC2B2AE3D27D4EB4Full;
-      unsigned long long h            = dev_splitmix64(key);
-      double rv                       = (double)(h >> 11) / (double)(1ull << 53) * 2.0 - 1.0;
-      e[r * (CG_UINT)nv + (CG_UINT)k] = (V_ELE)rv;
-    }
-  } else {
-    for (int k = 0; k < nv; k++) {
-      e[r * (CG_UINT)nv + (CG_UINT)k] = (V_ELE)0.0;
-    }
-  }
-}
-
-extern "C" void gpu_randomInitBlock(unsigned long long rankKey,
-    CG_UINT nr,
-    CG_UINT vecRows,
-    V_ELE *e,
-    int nv)
-{
-  NVTX_RANGE_PUSH_C("gpu.randomInitBlock", NVTX_C_SETUP);
-  int threads = 256;
-  int blocks  = (int)((vecRows + threads - 1) / threads);
-  kernel_random_init_block<<<blocks, threads>>>(rankKey, nr, vecRows, e, nv);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
-  NVTX_RANGE_POP();
-}
-
-/* Zero rows [startRow, startRow + numRows) of a row-major block with the
- * given stride — the post-ortho re-padding of the SCS rows. */
-__global__ void kernel_zero_rows(V_ELE *e, CG_UINT startRow, CG_UINT numRows, CG_UINT stride)
-{
-  CG_UINT r = blockIdx.x * blockDim.x + threadIdx.x;
-  if (r >= numRows)
-    return;
-
-  V_ELE *row = e + (size_t)(startRow + r) * stride;
-  for (CG_UINT i = 0; i < stride; i++) {
-    row[i] = (V_ELE)0.0;
-  }
-}
-
-extern "C" void gpu_zeroPadRows(V_ELE *e, CG_UINT startRow, CG_UINT numRows, CG_UINT stride)
-{
-  if (numRows == 0)
-    return;
-  NVTX_RANGE_PUSH_C("gpu.zeroPadRows", NVTX_C_ORTHO);
-  int threads = 256;
-  int blocks  = (int)((numRows + threads - 1) / threads);
-  kernel_zero_rows<<<blocks, threads>>>(e, startRow, numRows, stride);
-  GPU_SAFE_CALL(gpuDeviceSynchronize());
   NVTX_RANGE_POP();
 }

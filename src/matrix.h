@@ -45,6 +45,17 @@ typedef struct {
   V_ELE *entries;
 } DMatrix; // for Block vectors
 
+/* Rows a (block) vector compatible with m must have: SCS pads the row count
+ * to a multiple of the chunk height C, CRS does not. */
+static inline CG_UINT matrixVecRows(const Matrix *m)
+{
+#ifdef SCS
+  return m->nrPadded;
+#else
+  return m->nr;
+#endif
+}
+
 typedef struct {
   int row;
   int col;

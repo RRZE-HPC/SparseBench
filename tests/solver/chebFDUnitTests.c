@@ -16,15 +16,12 @@
 #include "../../src/parameter.h"
 #include "../../src/solver.h"
 #include "../common.h"
+#include "chebFDTestUtil.h"
 
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 #ifdef USE_COMPLEX
 
@@ -38,121 +35,6 @@ int chebFDUnitTests(int argc, char **argv)
 }
 
 #else
-
-/* ---- shared helpers -------------------------------------------------- */
-
-/* Symmetric tridiagonal matrix (2 on the diagonal, -1 on the off-diagonals),
- * the standard discrete 1-D Laplacian. Its eigenpairs have a closed form:
- *   lambda_k = 2 - 2*cos(k*pi/(n+1))          (ascending in k)
- *   v_k[j]   = sin((j+1)*k*pi/(n+1))          j = 0..n-1
- * for k = 1..n, which gives an independent ground truth for every ChebFD
- * step below without relying on any of the code under test. */
-static void tridiagEigenvalue(int n, int k, double *lambda)
-{
-  *lambda = 2.0 - 2.0 * cos((double)k * M_PI / (double)(n + 1));
-}
-
-static void tridiagEigenvector(int n, int k, double *v /* length n */)
-{
-  double norm2 = 0.0;
-  for (int j = 0; j < n; j++) {
-    v[j] = sin((double)(j + 1) * (double)k * M_PI / (double)(n + 1));
-    norm2 += v[j] * v[j];
-  }
-  double inv = 1.0 / sqrt(norm2);
-  for (int j = 0; j < n; j++) {
-    v[j] *= inv;
-  }
-}
-
-/* Build the tridiagonal matrix above as a GMatrix, then convert it via the
- * format-specific convertMatrix() (CRS or SCS, whichever this test binary
- * was built with) into a ready-to-use sparse Matrix. */
-static void buildTridiagMatrix(Matrix *A, GMatrix *gm, int n)
-{
-  memset(gm, 0, sizeof(*gm));
-  gm->nr       = (CG_UINT)n;
-  gm->nc       = (CG_UINT)n;
-  gm->nnz      = (CG_UINT)(3 * n - 2);
-  gm->totalNr  = (CG_UINT)n;
-  gm->totalNnz = gm->nnz;
-  gm->startRow = 0;
-  gm->stopRow  = (CG_UINT)n;
-  gm->rowPtr   = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (size_t)(n + 1) * sizeof(CG_UINT));
-  gm->entries  = (Entry *)allocate(ARRAY_ALIGNMENT, (size_t)gm->nnz * sizeof(Entry));
-
-  CG_UINT idx = 0;
-  for (int i = 0; i < n; i++) {
-    gm->rowPtr[i] = idx;
-    if (i > 0) {
-      gm->entries[idx].col = (CG_UINT)(i - 1);
-      gm->entries[idx].val = (V_ELE)(-1.0);
-      idx++;
-    }
-    gm->entries[idx].col = (CG_UINT)i;
-    gm->entries[idx].val = (V_ELE)2.0;
-    idx++;
-    if (i < n - 1) {
-      gm->entries[idx].col = (CG_UINT)(i + 1);
-      gm->entries[idx].val = (V_ELE)(-1.0);
-      idx++;
-    }
-  }
-  gm->rowPtr[n] = idx;
-
-  memset(A, 0, sizeof(*A));
-#ifdef SCS
-  /* C=1, sigma=1 disables SCS's row/column permutation and chunk padding
-   * (each row is its own 1-row "chunk", sigma-sort window size 1 is a
-   * no-op), so this matrix's row/column indices stay in the original 0..n-1
-   * numbering the tests below build vectors and reference eigenpairs in.
-   * (row lengths differ at the two endpoints, so any sigma>1 here WOULD
-   * reorder rows.) */
-  A->C     = 1;
-  A->sigma = 1;
-#endif
-  convertMatrix(A, gm);
-}
-
-static CG_UINT vecRowsOf(Matrix *A)
-{
-#ifdef SCS
-  return A->nrPadded;
-#else
-  return A->nr;
-#endif
-}
-
-/* Deterministic splitmix64-based fill, independent of randomInitBlock in
- * chebFDSolver.c (that one is not exposed, and this test wants its own
- * source of pseudo-random data anyway). */
-static unsigned long long splitmix64Local(unsigned long long z)
-{
-  z += 0x9E3779B97F4A7C15ull;
-  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
-  z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
-  return z ^ (z >> 31);
-}
-
-static void fillRandomBlock(V_ELE *e, CG_UINT nr, int nc, unsigned long long seed)
-{
-  for (CG_UINT r = 0; r < nr; r++) {
-    for (int c = 0; c < nc; c++) {
-      unsigned long long h =
-          splitmix64Local(seed + r * 0x9E3779B97F4A7C15ull + (unsigned long long)c * 0xff51afd7ed558ccdull);
-      double rv                    = (double)(h >> 11) / (double)(1ull << 53) * 2.0 - 1.0;
-      e[r * (CG_UINT)nc + (CG_UINT)c] = (V_ELE)rv;
-    }
-  }
-}
-
-#define CHECK(cond, msg, ...)                                                            \
-  do {                                                                                   \
-    if (!(cond)) {                                                                       \
-      printf("    FAIL: " msg "\n", ##__VA_ARGS__);                                      \
-      ok = 0;                                                                            \
-    }                                                                                    \
-  } while (0)
 
 /* ---- Section 1: chebFilterInit (src/chebFilter.c) --------------------- */
 
@@ -274,8 +156,8 @@ static int testFusedKernels(void)
   const int n = 10;
   Matrix A;
   GMatrix gm;
-  buildTridiagMatrix(&A, &gm, n);
-  CG_UINT vecRows = vecRowsOf(&A);
+  buildTridiagMatrix(&A, &gm, n, 1, 1);
+  CG_UINT vecRows = matrixVecRows(&A);
 
   int nc     = 4;
   CG_UINT sz = vecRows * (CG_UINT)nc;
@@ -289,9 +171,9 @@ static int testFusedKernels(void)
   xRef.entries    = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
   xFused.entries  = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
 
-  fillRandomBlock(w.entries, vecRows, nc, 0x1234);
-  fillRandomBlock(q.entries, vecRows, nc, 0x5678);
-  fillRandomBlock(xRef.entries, vecRows, nc, 0x9abc);
+  fillRandomBlock(w.entries, vecRows, vecRows, nc, 0x1234);
+  fillRandomBlock(q.entries, vecRows, vecRows, nc, 0x5678);
+  fillRandomBlock(xRef.entries, vecRows, vecRows, nc, 0x9abc);
   memcpy(xFused.entries, xRef.entries, (size_t)sz * sizeof(V_ELE));
 
   V_ELE cA = (V_ELE)0.7, cP = (V_ELE)(-1.3), cQ = (V_ELE)2.1, gc = (V_ELE)0.37;
@@ -305,22 +187,12 @@ static int testFusedKernels(void)
   waxpby((CG_UINT)sz, cA, Aw.entries, cP, w.entries, yRef.entries);
   waxpby((CG_UINT)sz, (V_ELE)1.0, yRef.entries, cQ, q.entries, yRef.entries);
   spMMVMFused(&A, &w, cA, &w, cP, &q, cQ, &yFused);
-  double maxd = 0.0;
-  for (CG_UINT i = 0; i < sz; i++) {
-    double d = fabs((double)(yRef.entries[i] - yFused.entries[i]));
-    if (d > maxd)
-      maxd = d;
-  }
+  double maxd = maxAbsDiff(yRef.entries, yFused.entries, sz);
   CHECK(maxd < 1e-9, "spMMVMFused (3-term) max|diff|=%.3e", maxd);
 
   spMMVMFused(&A, &w, cA, &w, cP, NULL, (V_ELE)0.0, &yFused);
   waxpby((CG_UINT)sz, cA, Aw.entries, cP, w.entries, yRef.entries);
-  maxd = 0.0;
-  for (CG_UINT i = 0; i < sz; i++) {
-    double d = fabs((double)(yRef.entries[i] - yFused.entries[i]));
-    if (d > maxd)
-      maxd = d;
-  }
+  maxd = maxAbsDiff(yRef.entries, yFused.entries, sz);
   CHECK(maxd < 1e-9, "spMMVMFused (2-term) max|diff|=%.3e", maxd);
 
   /* chebfdOp vs. spMMVMFused + waxpby accumulate, including the in-place
@@ -330,12 +202,8 @@ static int testFusedKernels(void)
   waxpby((CG_UINT)sz, (V_ELE)1.0, yRef.entries, cQ, q.entries, yRef.entries);
   waxpby((CG_UINT)sz, (V_ELE)1.0, xRef.entries, gc, yRef.entries, xRef.entries);
   chebfdOp(&A, &w, cA, cP, &q, cQ, &yFused, gc, &xFused);
-  maxd = 0.0;
-  double maxdx = 0.0;
-  for (CG_UINT i = 0; i < sz; i++) {
-    maxd  = fmax(maxd, fabs((double)(yRef.entries[i] - yFused.entries[i])));
-    maxdx = fmax(maxdx, fabs((double)(xRef.entries[i] - xFused.entries[i])));
-  }
+  maxd         = maxAbsDiff(yRef.entries, yFused.entries, sz);
+  double maxdx = maxAbsDiff(xRef.entries, xFused.entries, sz);
   CHECK(maxd < 1e-9, "chebfdOp y max|diff|=%.3e", maxd);
   CHECK(maxdx < 1e-9, "chebfdOp x accumulate max|diff|=%.3e", maxdx);
 
@@ -350,12 +218,8 @@ static int testFusedKernels(void)
   spMMVMFused(&A, &w, cA, &w, cP, &qAlias, cQ, &yRef);
   waxpby((CG_UINT)sz, (V_ELE)1.0, xRef.entries, gc, yRef.entries, xRef.entries);
   chebfdOp(&A, &w, cA, cP, &qAlias, cQ, &qAlias, gc, &xFused);
-  maxd  = 0.0;
-  maxdx = 0.0;
-  for (CG_UINT i = 0; i < sz; i++) {
-    maxd  = fmax(maxd, fabs((double)(yRef.entries[i] - qAlias.entries[i])));
-    maxdx = fmax(maxdx, fabs((double)(xRef.entries[i] - xFused.entries[i])));
-  }
+  maxd  = maxAbsDiff(yRef.entries, qAlias.entries, sz);
+  maxdx = maxAbsDiff(xRef.entries, xFused.entries, sz);
   CHECK(maxd < 1e-9, "chebfdOp (y==q aliased) y max|diff|=%.3e", maxd);
   CHECK(maxdx < 1e-9, "chebfdOp (y==q aliased) x max|diff|=%.3e", maxdx);
 
@@ -366,10 +230,7 @@ static int testFusedKernels(void)
   waxpby((CG_UINT)sz, (V_ELE)1.0, w1, (V_ELE)0.9, q.entries, w1);
   waxpby3((CG_UINT)sz, (V_ELE)1.1, xRef.entries, (V_ELE)(-0.4), w.entries, (V_ELE)0.9,
       q.entries, w2);
-  maxd = 0.0;
-  for (CG_UINT i = 0; i < sz; i++) {
-    maxd = fmax(maxd, fabs((double)(w1[i] - w2[i])));
-  }
+  maxd = maxAbsDiff(w1, w2, sz);
   CHECK(maxd < 1e-9, "waxpby3 max|diff|=%.3e", maxd);
 
   deallocate(w.entries);
@@ -399,7 +260,7 @@ static int testApplyFilter(void)
   const int n = 10;
   Matrix A;
   GMatrix gm;
-  buildTridiagMatrix(&A, &gm, n);
+  buildTridiagMatrix(&A, &gm, n, 1, 1);
   CG_UINT nr = A.nr;
 
   ChebFilter f;
@@ -494,7 +355,7 @@ static int testOrthoMGS(void)
   int nc     = 8;
   V_ELE *e   = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)nr * (size_t)nc * sizeof(V_ELE));
 
-  fillRandomBlock(e, nr, nc, 0xdeadbeef);
+  fillRandomBlock(e, nr, nr, nc, 0xdeadbeef);
   int m = orthoMGS(nr, e, nc, 1e-8);
   CHECK(m == nc, "generic random block: m=%d expected %d (full rank)", m, nc);
   double off = gramOffDiagMax(e, nr, m);
@@ -503,7 +364,7 @@ static int testOrthoMGS(void)
   /* Rank-deficient block: column 1 is an exact copy of column 0. */
   deallocate(e);
   e = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)nr * (size_t)nc * sizeof(V_ELE));
-  fillRandomBlock(e, nr, nc, 0xfeedface);
+  fillRandomBlock(e, nr, nr, nc, 0xfeedface);
   for (CG_UINT r = 0; r < nr; r++) {
     e[r * (CG_UINT)nc + 1] = e[r * (CG_UINT)nc + 0];
   }
@@ -527,7 +388,7 @@ static int testRayleighRitzAndResidual(void)
   const int n = 8;
   Matrix A;
   GMatrix gm;
-  buildTridiagMatrix(&A, &gm, n);
+  buildTridiagMatrix(&A, &gm, n, 1, 1);
   CG_UINT nr = A.nr;
 
   ChebData d;
@@ -578,7 +439,7 @@ static int testSolveChebFDEndToEnd(void)
   const int n = 40;
   Matrix A;
   GMatrix gm;
-  buildTridiagMatrix(&A, &gm, n);
+  buildTridiagMatrix(&A, &gm, n, 1, 1);
 
   /* Target a window around three consecutive interior eigenvalues. */
   int kMid = n / 2;

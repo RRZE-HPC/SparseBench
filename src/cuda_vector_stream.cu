@@ -16,45 +16,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "cuda_dense_kernels.cuh"
 #include "cuda_kernels.h"
 #include "cuda_vector_stream.h"
 #include "gpu_backend.h"
 #include "nvtx_marker.h"
 
-#define GRAM_TILE 16
-#define LIN_THREADS 256
 #define UPD_COLS 32
 #define UPD_ROWS 8
 #define RES_COLS 32
 #define RES_ROWS 8
 #define DEFAULT_CHUNK_BYTES ((size_t)128 << 20)
-#define GRAM_SUBS 256 /* row sub-ranges per Gram chunk launch (upper bound) */
-#define GRAM_PARTIAL_MAX_BYTES ((size_t)256 << 20)
-
-/* Row sub-ranges for one Gram launch of an m x m result: as many as
- * GRAM_SUBS, but never more partial-buffer bytes than the cap (wide
- * blocks, e.g. NS in the thousands, would otherwise need gigabytes). */
-static int gramSubs(int m)
-{
-  size_t mm    = (size_t)m * (size_t)m;
-  size_t capEl = GRAM_PARTIAL_MAX_BYTES / sizeof(double);
-  int nSub     = GRAM_SUBS;
-  while (nSub > 1 && (size_t)nSub * mm > capEl) {
-    nSub--;
-  }
-  return nSub;
-}
-
-/* Real part of V_ELE as double (under USE_COMPLEX V_ELE is a
- * thrust::complex with no implicit conversion to double). */
-__device__ __host__ static inline double asReal(V_ELE z)
-{
-#ifdef USE_COMPLEX
-  return (double)VREAL(z);
-#else
-  return (double)z;
-#endif
-}
+/* Device scratch per context: NSLOT input sub-blocks + U + W column
+ * buffers, and (rA, rB, rO) x NSLOT row-chunk buffers. */
+#define COL_BUFFERS (GPU_VSTREAM_NSLOT + 2)
+#define ROW_BUFFERS (3 * GPU_VSTREAM_NSLOT)
 
 /* ------------------------------------------------------------------ */
 /*  Prefetch of the managed matrix                                     */
@@ -116,70 +92,6 @@ __global__ void kernel_vs_axpby3(size_t n,
   if (i < n) {
     w[i] = a * x[i] + b * y[i] + c * z[i];
   }
-}
-
-/* partial[sub][i][j] = sum_{r in sub-range} A[r,i] * B[r,j] for i <= j over
- * one row chunk of two row-major blocks with independent leading dims.
- * Same shared-memory tiling as kernel_gram_partial in cuda_chebfd_dense.cu. */
-__global__ void kernel_vs_gram_chunk(CG_UINT rows,
-    int m,
-    const V_ELE *A,
-    CG_UINT ldA,
-    const V_ELE *B,
-    CG_UINT ldB,
-    double *partial,
-    CG_UINT rowsPerSub)
-{
-  __shared__ V_ELE As[GRAM_TILE][GRAM_TILE];
-  __shared__ V_ELE Bs[GRAM_TILE][GRAM_TILE];
-
-  if (blockIdx.x > blockIdx.y)
-    return;
-
-  int i      = blockIdx.x * GRAM_TILE + threadIdx.x;
-  int j      = blockIdx.y * GRAM_TILE + threadIdx.y;
-  int ai     = blockIdx.x * GRAM_TILE + threadIdx.x;
-  int bj     = blockIdx.y * GRAM_TILE + threadIdx.x;
-
-  CG_UINT rs = (CG_UINT)blockIdx.z * rowsPerSub;
-  CG_UINT re = rs + rowsPerSub;
-  if (re > rows)
-    re = rows;
-
-  double acc = 0.0;
-  for (CG_UINT r0 = rs; r0 < re; r0 += GRAM_TILE) {
-    CG_UINT r = r0 + threadIdx.y;
-    As[threadIdx.y][threadIdx.x] =
-        (r < re && ai < m) ? A[(size_t)r * ldA + (size_t)ai] : VCONST(0, 0);
-    Bs[threadIdx.y][threadIdx.x] =
-        (r < re && bj < m) ? B[(size_t)r * ldB + (size_t)bj] : VCONST(0, 0);
-    __syncthreads();
-    for (int rr = 0; rr < GRAM_TILE; rr++) {
-      acc += asReal(As[rr][threadIdx.x]) * asReal(Bs[rr][threadIdx.y]);
-    }
-    __syncthreads();
-  }
-
-  if (i < m && j < m && i <= j) {
-    partial[((size_t)blockIdx.z * (size_t)m + (size_t)i) * (size_t)m + (size_t)j] = acc;
-  }
-}
-
-/* G[i][j] += sum_sub partial[sub][i][j], mirrored to G[j][i]: fixed
- * summation order (deterministic) and exactly symmetric. */
-__global__ void kernel_vs_gram_accum(int m, int nSub, const double *partial, double *G)
-{
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int j = blockIdx.y;
-  if (i >= m || i > j)
-    return;
-  double s = 0.0;
-  for (int c = 0; c < nSub; c++) {
-    s += partial[((size_t)c * (size_t)m + (size_t)i) * (size_t)m + (size_t)j];
-  }
-  double v = G[(size_t)i * (size_t)m + (size_t)j] + s;
-  G[(size_t)i * (size_t)m + (size_t)j] = v;
-  G[(size_t)j * (size_t)m + (size_t)i] = v;
 }
 
 /* Out[r, jo] = sum_i In[r, i] * B[i, jo]  (In: rows x m, ld ldIn; B: m x
@@ -270,15 +182,12 @@ __global__ void kernel_vs_ritz_accum(int nsel, CG_UINT nBlocks, const double *pa
 /*  Context                                                           */
 /* ------------------------------------------------------------------ */
 
+/* Partial-sum scratch shared by the Gram and residual passes. Sized before a
+ * pipeline starts, never inside one: a reallocation would free a buffer
+ * that queued kernels still read. */
 static void ensurePartial(GpuVectorStream *s, size_t elems)
 {
-  if (elems > s->partialCap) {
-    if (s->partial != NULL) {
-      GPU_SAFE_CALL(gpuFree(s->partial));
-    }
-    GPU_SAFE_CALL(gpuMalloc((void **)&s->partial, elems * sizeof(double)));
-    s->partialCap = elems;
-  }
+  gpuGrowBuffer((void **)&s->partial, &s->partialCap, elems, sizeof(double));
 }
 
 extern "C" GpuVectorStream *gpu_vstream_init(
@@ -292,13 +201,9 @@ extern "C" GpuVectorStream *gpu_vstream_init(
     return NULL;
   }
   s->A  = A;
-  s->nr = A->nr;
-#ifdef SCS
-  s->vecRows = A->nrPadded;
-#else
-  s->vecRows = A->nr;
-#endif
-  s->NS = NS;
+  s->nr      = A->nr;
+  s->vecRows = matrixVecRows(A);
+  s->NS      = NS;
   if (nb <= 0 || nb > NS) {
     nb = NS;
   }
@@ -360,8 +265,8 @@ extern "C" GpuVectorStream *gpu_vstream_init(
         (NS + nb - 1) / nb,
         NS,
         (unsigned)s->chunkRows,
-        4.0 * (double)colBytes * mib,
-        6.0 * (double)rowChunk * mib);
+        (double)(COL_BUFFERS * colBytes) * mib,
+        (double)(ROW_BUFFERS * rowChunk) * mib);
   }
 
   /* Oversubscription is silent: the managed matrix still "fits" once the
@@ -381,7 +286,7 @@ extern "C" GpuVectorStream *gpu_vstream_init(
   /* freeB was sampled after this context's scratch was allocated; the
    * matrix may or may not have been prefetched yet (managed), so compare
    * against the total budget instead. */
-  size_t scratchB = 4 * colBytes + 6 * rowChunk;
+  size_t scratchB = COL_BUFFERS * colBytes + ROW_BUFFERS * rowChunk;
   if (matrixB + scratchB > (size_t)(0.92 * (double)totalB)) {
     fprintf(stderr,
         "Warning: ChebFD device footprint %.1f GiB (matrix %.1f + streaming scratch "
@@ -452,6 +357,28 @@ extern "C" void gpu_vstream_stats(const GpuVectorStream *s,
  * (ld = nb); the result to write back must end up in out[k]. */
 typedef void (*ColBlockFn)(GpuVectorStream *s, int k, CG_UINT w, void *ctx);
 
+/* Queue the D2H write-back of sub-block i (columns [i*nb, +w)) from its
+ * slot's device buffer, once that slot's compute has finished. */
+static void drainColBlock(
+    GpuVectorStream *s, int i, CG_UINT ncols, V_ELE *outH, V_ELE **outBuf)
+{
+  const CG_UINT nb = (CG_UINT)s->nb;
+  int k            = i % GPU_VSTREAM_NSLOT;
+  CG_UINT v0       = (CG_UINT)i * nb;
+  CG_UINT w        = MIN(nb, ncols - v0);
+  size_t bytes     = (size_t)w * sizeof(V_ELE);
+  GPU_SAFE_CALL(gpuStreamWaitEvent(s->copyStream, s->computeDone[k], 0));
+  GPU_SAFE_CALL(gpuMemcpy2DAsync(outH + v0,
+      (size_t)ncols * sizeof(V_ELE),
+      outBuf[k],
+      (size_t)nb * sizeof(V_ELE),
+      bytes,
+      (size_t)s->vecRows,
+      gpuMemcpyDeviceToHost,
+      s->copyStream));
+  s->d2hBytes += bytes * (size_t)s->vecRows;
+}
+
 static void colBlockPipeline(GpuVectorStream *s,
     const V_ELE *inH,
     CG_UINT ncols,
@@ -468,25 +395,14 @@ static void colBlockPipeline(GpuVectorStream *s,
   for (int i = 0; i < nBlocks; i++) {
     int k       = i % GPU_VSTREAM_NSLOT;
     CG_UINT v0  = (CG_UINT)i * nb;
-    CG_UINT w   = (nb < ncols - v0) ? nb : ncols - v0;
+    CG_UINT w   = MIN(nb, ncols - v0);
     size_t wB   = (size_t)w * sizeof(V_ELE);
 
     /* Slot k is free once its previous compute finished; first drain its
      * previous result to the host, then load the next input. */
     GPU_SAFE_CALL(gpuStreamWaitEvent(s->copyStream, s->computeDone[k], 0));
     if (outH != NULL && i >= GPU_VSTREAM_NSLOT) {
-      int ip      = i - GPU_VSTREAM_NSLOT;
-      CG_UINT vp  = (CG_UINT)ip * nb;
-      CG_UINT wp  = (nb < ncols - vp) ? nb : ncols - vp;
-      GPU_SAFE_CALL(gpuMemcpy2DAsync(outH + vp,
-          hostPitch,
-          outBuf[k],
-          devPitch,
-          (size_t)wp * sizeof(V_ELE),
-          (size_t)s->vecRows,
-          gpuMemcpyDeviceToHost,
-          s->copyStream));
-      s->d2hBytes += (size_t)wp * sizeof(V_ELE) * (size_t)s->vecRows;
+      drainColBlock(s, i - GPU_VSTREAM_NSLOT, ncols, outH, outBuf);
     }
     GPU_SAFE_CALL(gpuMemcpy2DAsync(s->X[k],
         devPitch,
@@ -506,21 +422,9 @@ static void colBlockPipeline(GpuVectorStream *s,
 
   /* Drain the last NSLOT results. */
   if (outH != NULL) {
-    int first = (nBlocks > GPU_VSTREAM_NSLOT) ? nBlocks - GPU_VSTREAM_NSLOT : 0;
+    int first = MAX(nBlocks - GPU_VSTREAM_NSLOT, 0);
     for (int i = first; i < nBlocks; i++) {
-      int k      = i % GPU_VSTREAM_NSLOT;
-      CG_UINT v0 = (CG_UINT)i * nb;
-      CG_UINT w  = (nb < ncols - v0) ? nb : ncols - v0;
-      GPU_SAFE_CALL(gpuStreamWaitEvent(s->copyStream, s->computeDone[k], 0));
-      GPU_SAFE_CALL(gpuMemcpy2DAsync(outH + v0,
-          hostPitch,
-          outBuf[k],
-          devPitch,
-          (size_t)w * sizeof(V_ELE),
-          (size_t)s->vecRows,
-          gpuMemcpyDeviceToHost,
-          s->copyStream));
-      s->d2hBytes += (size_t)w * sizeof(V_ELE) * (size_t)s->vecRows;
+      drainColBlock(s, i, ncols, outH, outBuf);
     }
   }
   GPU_SAFE_CALL(gpuStreamSynchronize(s->computeStream));
@@ -627,6 +531,21 @@ extern "C" void gpu_vstream_spmmv(GpuVectorStream *s, const V_ELE *Yh, V_ELE *AY
  * to rO[k] with leading dimension ldOut. */
 typedef void (*RowChunkFn)(GpuVectorStream *s, int k, CG_UINT r0, CG_UINT rows, void *ctx);
 
+/* Queue the D2H write-back of row chunk i from its slot's output buffer,
+ * once that slot's compute has finished. */
+static void drainRowChunk(GpuVectorStream *s, int i, V_ELE *outH, CG_UINT ldOut)
+{
+  const CG_UINT cr = s->chunkRows;
+  int k            = i % GPU_VSTREAM_NSLOT;
+  CG_UINT r0       = (CG_UINT)i * cr;
+  CG_UINT rows     = MIN(cr, s->vecRows - r0);
+  size_t bytes     = (size_t)rows * (size_t)ldOut * sizeof(V_ELE);
+  GPU_SAFE_CALL(gpuStreamWaitEvent(s->copyStream, s->computeDone[k], 0));
+  GPU_SAFE_CALL(gpuMemcpyAsync(
+      outH + (size_t)r0 * ldOut, s->rO[k], bytes, gpuMemcpyDeviceToHost, s->copyStream));
+  s->d2hBytes += bytes;
+}
+
 static void rowChunkPipeline(GpuVectorStream *s,
     const V_ELE *Ah,
     const V_ELE *Bh,
@@ -643,20 +562,11 @@ static void rowChunkPipeline(GpuVectorStream *s,
   for (int i = 0; i < nChunks; i++) {
     int k        = i % GPU_VSTREAM_NSLOT;
     CG_UINT r0   = (CG_UINT)i * cr;
-    CG_UINT rows = (cr < total - r0) ? cr : total - r0;
+    CG_UINT rows = MIN(cr, total - r0);
 
     GPU_SAFE_CALL(gpuStreamWaitEvent(s->copyStream, s->computeDone[k], 0));
     if (outH != NULL && i >= GPU_VSTREAM_NSLOT) {
-      int ip       = i - GPU_VSTREAM_NSLOT;
-      CG_UINT rp   = (CG_UINT)ip * cr;
-      CG_UINT rowp = (cr < total - rp) ? cr : total - rp;
-      size_t bytes = (size_t)rowp * (size_t)ldOut * sizeof(V_ELE);
-      GPU_SAFE_CALL(gpuMemcpyAsync(outH + (size_t)rp * ldOut,
-          s->rO[k],
-          bytes,
-          gpuMemcpyDeviceToHost,
-          s->copyStream));
-      s->d2hBytes += bytes;
+      drainRowChunk(s, i - GPU_VSTREAM_NSLOT, outH, ldOut);
     }
     size_t inBytes = (size_t)rows * (size_t)ld * sizeof(V_ELE);
     GPU_SAFE_CALL(gpuMemcpyAsync(
@@ -675,19 +585,9 @@ static void rowChunkPipeline(GpuVectorStream *s,
   }
 
   if (outH != NULL) {
-    int first = (nChunks > GPU_VSTREAM_NSLOT) ? nChunks - GPU_VSTREAM_NSLOT : 0;
+    int first = MAX(nChunks - GPU_VSTREAM_NSLOT, 0);
     for (int i = first; i < nChunks; i++) {
-      int k        = i % GPU_VSTREAM_NSLOT;
-      CG_UINT r0   = (CG_UINT)i * cr;
-      CG_UINT rows = (cr < total - r0) ? cr : total - r0;
-      size_t bytes = (size_t)rows * (size_t)ldOut * sizeof(V_ELE);
-      GPU_SAFE_CALL(gpuStreamWaitEvent(s->copyStream, s->computeDone[k], 0));
-      GPU_SAFE_CALL(gpuMemcpyAsync(outH + (size_t)r0 * ldOut,
-          s->rO[k],
-          bytes,
-          gpuMemcpyDeviceToHost,
-          s->copyStream));
-      s->d2hBytes += bytes;
+      drainRowChunk(s, i, outH, ldOut);
     }
   }
   GPU_SAFE_CALL(gpuStreamSynchronize(s->computeStream));
@@ -705,23 +605,9 @@ static void gramChunk(GpuVectorStream *s, int k, CG_UINT r0, CG_UINT rows, void 
 {
   (void)r0;
   const GramCtx *c = (const GramCtx *)vctx;
-  int m            = c->m;
-  int tiles        = (m + GRAM_TILE - 1) / GRAM_TILE;
-  CG_UINT tileRows = (rows + GRAM_TILE - 1) / GRAM_TILE;
-  int nSub         = gramSubs(m);
-  if ((CG_UINT)nSub > tileRows) {
-    nSub = (int)tileRows;
-  }
-  if (nSub < 1) {
-    nSub = 1;
-  }
-  CG_UINT rowsPerSub = ((tileRows + nSub - 1) / nSub) * GRAM_TILE;
-  const V_ELE *Bp    = c->useB ? s->rB[k] : s->rA[k];
-
-  kernel_vs_gram_chunk<<<dim3(tiles, tiles, nSub), dim3(GRAM_TILE, GRAM_TILE), 0, s->computeStream>>>(
-      rows, m, s->rA[k], (CG_UINT)m, Bp, (CG_UINT)m, s->partial, rowsPerSub);
-  kernel_vs_gram_accum<<<dim3((m + LIN_THREADS - 1) / LIN_THREADS, m), LIN_THREADS, 0, s->computeStream>>>(
-      m, nSub, s->partial, s->G);
+  const V_ELE *Bp  = c->useB ? s->rB[k] : s->rA[k];
+  launchGram(rows, c->m, s->rA[k], (CG_UINT)c->m, Bp, (CG_UINT)c->m, s->partial, s->G, 1,
+      s->computeStream);
 }
 
 extern "C" void gpu_vstream_gram(
@@ -781,7 +667,6 @@ static void ritzChunk(GpuVectorStream *s, int k, CG_UINT r0, CG_UINT rows, void 
   (void)r0;
   const ResCtx *c = (const ResCtx *)vctx;
   CG_UINT nBlocks = (rows + RES_ROWS - 1) / RES_ROWS;
-  ensurePartial(s, (size_t)nBlocks * (size_t)c->nsel);
   dim3 grid(nBlocks, (c->nsel + RES_COLS - 1) / RES_COLS);
   kernel_vs_ritz_chunk<<<grid, dim3(RES_COLS, RES_ROWS), 0, s->computeStream>>>(
       rows, c->m, s->rA[k], s->rB[k], s->B, s->eval, s->sel, c->nsel, s->partial);
@@ -803,8 +688,7 @@ extern "C" void gpu_vstream_ritzResiduals(GpuVectorStream *s,
     return;
   }
   NVTX_RANGE_PUSH_C("gpu.vstream.ritzResiduals", NVTX_C_RESID);
-  /* ensurePartial may reallocate inside the pipeline; size it up front for
-   * the largest chunk so the pointer stays stable while kernels run. */
+  /* Sized for the largest chunk so no reallocation happens mid-pipeline. */
   CG_UINT maxBlocks = (s->chunkRows + RES_ROWS - 1) / RES_ROWS;
   ensurePartial(s, (size_t)maxBlocks * (size_t)nsel);
   GPU_SAFE_CALL(gpuMemcpy(
