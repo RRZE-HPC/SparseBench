@@ -36,15 +36,25 @@ PYTHON  ?= python3
 GEN_DIR  = test_case_generator
 MATRICES = $(wildcard data/testMatrices/*.mtx)
 
-.PHONY: all clean prebuild run prerun
+.PHONY: all clean prebuild run prerun list format
 
 all: $(TARGET)
 
-# Build (if needed) and run the test suite.
+# Build (if needed) and run the whole test suite.
 run: all
 	@./$(TARGET) || { rc=$$? ; \
 		[ $$rc -le 128 ] || echo "===>  runTests KILLED BY SIGNAL $$((rc - 128)) (rc=$$rc)" ; \
 		exit $$rc ; }
+
+# Build (if needed) and run a single suite, e.g. `make run-chebFDStreamTests`.
+# Use `make list` (or `./runTests --list`) to see the available suite names.
+run-%: all
+	@./$(TARGET) $* || { rc=$$? ; \
+		[ $$rc -le 128 ] || echo "===>  runTests KILLED BY SIGNAL $$((rc - 128)) (rc=$$rc)" ; \
+		exit $$rc ; }
+
+list: all
+	@./$(TARGET) --list
 
 # generate the expected test data from the reference matrices
 # Output is written to data/expected/ by the script.

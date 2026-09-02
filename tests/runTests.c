@@ -34,43 +34,87 @@ enum {
   RC_UNSUPPORTED_MPI = RC_BIT,
 };
 
+// Every suite runs even if an earlier one fails, so rc is the OR of the bits
+// of all failing suites and a single run can name all of them at once.
+static const struct {
+  const char *name;
+  int (*run)(int, char **);
+  int bit;
+} suites[] = {
+#ifdef SCS
+  { "matrixTests",           matrixTests,           RC_MATRIX_TESTS      },
+#endif
+  { "solverTestsSPMV",       solverTestsSPMV,       RC_SOLVER_SPMV       },
+  { "solverTestsSPMMV",      solverTestsSPMMV,      RC_SOLVER_SPMMV      },
+  { "chebFDGershgorinTests", chebFDGershgorinTests, RC_CHEBFD_GERSHGORIN },
+  { "chebFDUnitTests",       chebFDUnitTests,       RC_CHEBFD_UNIT       },
+  { "chebFDStreamTests",     chebFDStreamTests,     RC_CHEBFD_STREAM     },
+  { "sectionTimerTests",     sectionTimerTests,     RC_SECTIMER          },
+};
+static const size_t numSuites = sizeof(suites) / sizeof(suites[0]);
+
+static void usage(const char *prog)
+{
+  printf("Usage: %s [-h|--help] [-l|--list] [SUITE ...]\n", prog);
+  printf("  With no SUITE arguments every suite runs. Otherwise only the named\n");
+  printf("  suites run, in the order given. Available suites:\n");
+  for (size_t i = 0; i < numSuites; i++) {
+    printf("    %s\n", suites[i].name);
+  }
+}
+
 // TODO : add tests for MPI cases
 int main(int argc, char **argv)
 {
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  gpu_init(0);
-#endif
-
 #if defined(_MPI)
   printf("tests do not support MPI recompile with ENABLE_MPI ?= false\n");
   return RC_UNSUPPORTED_MPI;
+#endif
+
+  // Resolve the selection before touching the GPU or filesystem so that
+  // --help / --list / a typo exit cleanly and instantly.
+  int selected[sizeof(suites) / sizeof(suites[0])] = { 0 };
+  int anySelected                                  = 0;
+  for (int a = 1; a < argc; a++) {
+    if (!strcmp(argv[a], "-h") || !strcmp(argv[a], "--help")) {
+      usage(argv[0]);
+      return 0;
+    }
+    if (!strcmp(argv[a], "-l") || !strcmp(argv[a], "--list")) {
+      for (size_t i = 0; i < numSuites; i++) {
+        printf("%s\n", suites[i].name);
+      }
+      return 0;
+    }
+    size_t i = 0;
+    for (; i < numSuites; i++) {
+      if (!strcmp(argv[a], suites[i].name)) {
+        selected[i] = 1;
+        anySelected = 1;
+        break;
+      }
+    }
+    if (i == numSuites) {
+      fprintf(stderr, "Unknown test suite: %s\n\n", argv[a]);
+      usage(argv[0]);
+      return 1;
+    }
+  }
+
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+  gpu_init(0);
 #endif
 
   // since tests needs a reported folder it made sense to centralize it here
   mkdir("./data", 0775);
   mkdir("./data/reported", 0775);
 
-  // Every suite runs even if an earlier one fails, so rc is the OR of the bits
-  // of all failing suites and a single run can name all of them at once.
-  static const struct {
-    const char *name;
-    int (*run)(int, char **);
-    int bit;
-  } suites[] = {
-#ifdef SCS
-    { "matrixTests",           matrixTests,           RC_MATRIX_TESTS      },
-#endif
-    { "solverTestsSPMV",       solverTestsSPMV,       RC_SOLVER_SPMV       },
-    { "solverTestsSPMMV",      solverTestsSPMMV,      RC_SOLVER_SPMMV      },
-    { "chebFDGershgorinTests", chebFDGershgorinTests, RC_CHEBFD_GERSHGORIN },
-    { "chebFDUnitTests",       chebFDUnitTests,       RC_CHEBFD_UNIT       },
-    { "chebFDStreamTests",     chebFDStreamTests,     RC_CHEBFD_STREAM     },
-    { "sectionTimerTests",     sectionTimerTests,     RC_SECTIMER          },
-  };
-  const size_t numSuites = sizeof(suites) / sizeof(suites[0]);
-
-  int rc                 = 0;
+  int rc = 0;
   for (size_t i = 0; i < numSuites; i++) {
+    if (anySelected && !selected[i]) {
+      continue;
+    }
+    printf("===>  RUNNING SUITE %s\n", suites[i].name);
     rc |= suites[i].run(argc, argv) ? suites[i].bit : 0;
   }
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
