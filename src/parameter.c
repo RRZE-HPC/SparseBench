@@ -27,7 +27,6 @@ void initParameter(Parameter *param)
   param->verbose   = 0;
   param->device    = 0;
   param->allocType = ALLOC_MANAGED;
-  param->streamMb  = 0;
   param->chebNb    = 0;
   // NTS : if spectrum bounds unpassed Gershgorin is used
   // NTS : lancozs kern mu=2 used by paper
@@ -97,8 +96,12 @@ void readParameter(Parameter *param, const char *filename)
       PARSE_KEY("cheb_mu", param->cheb.mu, atoi, NO_FLAG);
       // NTS : allocTypeFromName validates and exits on typos
       PARSE_KEY("gpu_alloc", param->allocType, allocTypeFromName, NO_FLAG);
-      PARSE_KEY("gpu_stream_mb", param->streamMb, atoi, NO_FLAG);
       PARSE_KEY("cheb_nb", param->chebNb, atoi, NO_FLAG);
+      if (strcmp(tok, "gpu_stream_mb") == 0) {
+        fprintf(stderr,
+            "Warning: gpu_stream_mb is obsolete (the matrix is device-resident and "
+            "the search space is streamed; see cheb_nb) — ignored.\n");
+      }
     }
   }
 
@@ -144,12 +147,9 @@ void printParameter(Parameter *param)
 #endif
   printf("\tVerbose Level: %d\n", param->verbose);
   printf("\tGPU device index: %d\n", param->device);
-  printf("\tGPU allocation: %s\n", allocTypeName(param->allocType));
-  printf("\tGPU matrix streaming: %s", param->streamMb > 0 ? "on" : "off");
-  if (param->streamMb > 0) {
-    printf(" (~%d MiB parts)", param->streamMb);
-  }
-  printf("\n");
+  printf("\tGPU allocation: %s%s\n",
+      allocTypeName(param->allocType),
+      BenchType == CHEBFD ? " (ChebFD: matrix managed+prefetched, blocks pinned)" : "");
 
   if (BenchType == CHEBFD) {
     printf("ChebFD parameters:\n");
@@ -160,8 +160,8 @@ void printParameter(Parameter *param)
     printf("\ttarget interval: [%g, %g]\n", param->cheb.lam_lo, param->cheb.lam_hi);
     printf("\tNp / NS: %d / %d\n", param->cheb.Np, param->cheb.NS);
     printf("\tkernel / mu: %d / %d\n", param->cheb.kernel, param->cheb.mu);
-    printf("\tsubblock width cheb_nb: %d%s\n",
+    printf("\tstreamed sub-block width cheb_nb: %d%s\n",
         param->chebNb,
-        param->chebNb > 0 ? "" : " (full block width)");
+        param->chebNb > 0 ? "" : " (default 16)");
   }
 }

@@ -85,6 +85,9 @@
   GCXX_RUNTIME_BACKEND(EventElapsedTime)((ms), (a), (b))
 #define gpuMemcpyAsync(dst, src, sz, k, str)                                             \
   GCXX_RUNTIME_BACKEND(MemcpyAsync)((dst), (src), (sz), (k), (str))
+#define gpuMemcpy2DAsync(dst, dpitch, src, spitch, width, height, k, str)                \
+  GCXX_RUNTIME_BACKEND(Memcpy2DAsync)                                                    \
+  ((dst), (dpitch), (src), (spitch), (width), (height), (k), (str))
 #define gpuGetDevice(dev) GCXX_RUNTIME_BACKEND(GetDevice)(dev)
 
 /* Prefetch a managed range to a device. CUDA 13 replaced the int-device

@@ -9,10 +9,6 @@ cheb_Np 150
 cheb_NS 64
 eps 1e-6
 itermax 10
-# GPU buffer placement: managed pairs with streaming on this cluster
-gpu_alloc managed
-# Stream the host-resident matrix to the GPU in ~1 MiB parts (~3 parts at
-# this size), double-buffered against compute
-gpu_stream_mb 1
-# Fused-kernel column-subblock width for ChebFD (0 = full block width)
-cheb_nb 0
+# GPU build: matrix managed + prefetched, search space streamed from pinned
+# host memory in sub-blocks of cheb_nb columns (0 = 16)
+cheb_nb 16

@@ -30,6 +30,12 @@ extern void *allocateDevice(size_t bytesize);
 
 extern void deallocateDevice(void *ptr);
 
+// Pinned host memory (cudaMallocHost on GPU builds, posix_memalign
+// otherwise) for blocks that are streamed to the device.
+extern void *allocateHost(size_t bytesize);
+
+extern void deallocateHost(void *ptr);
+
 #ifdef __cplusplus
 }
 #endif

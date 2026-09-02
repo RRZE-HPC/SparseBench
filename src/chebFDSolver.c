@@ -35,17 +35,11 @@ static KernelType mapKernel(int k)
 }
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-/* Matrix-streaming context + subblock width for the ChebFD block kernels.
- * Installed by solveChebFD from the gpu_stream_mb / cheb_nb parameters, or
- * by the streaming unit tests via chebFDSetMatrixStream. NULL / 0 = off. */
-static GpuMatrixStream *g_chebStream = NULL;
-static int g_chebNb                  = 0;
-
-void chebFDSetMatrixStream(GpuMatrixStream *s, int nb)
-{
-  g_chebStream = s;
-  g_chebNb     = nb;
-}
+#define CHEB_GPU 1
+/* Default columns per streamed search-space sub-block (cheb_nb 0). */
+#define CHEB_DEFAULT_NB 16
+#else
+#define CHEB_GPU 0
 #endif
 
 // Spectrum bounds via Gershgorin's circle theorem.
@@ -139,11 +133,9 @@ static inline unsigned long long splitmix64(unsigned long long z)
 
 /* Deterministic pseudo-random fill of the search block, hashed from
  * (row, column, rank) so it is order-independent; loop over rows for NUMA
- * first-touch. Rows >= nr are SCS padding and are zeroed.
- * Host-only path: GPU builds use gpu_randomInitBlock (same key layout), so
- * the blocks stay kernel-only buffers under ALLOC_EXPLICIT. */
-#ifndef RUNTIME_BACKEND_IS_CUDA
-#ifndef RUNTIME_BACKEND_IS_HIP
+ * first-touch. Rows >= nr are SCS padding and are zeroed. The block is
+ * host memory on every build (pinned on GPU builds), so this runs on the
+ * host everywhere; gpu_randomInitBlock keeps the same key layout. */
 static void randomInitBlock(CommType *comm, CG_UINT nr, CG_UINT vecRows, V_ELE *e, int nv)
 {
   unsigned long long rankKey = (unsigned long long)comm->rank * 0xD1B54A32D192ED03ull;
@@ -164,8 +156,6 @@ static void randomInitBlock(CommType *comm, CG_UINT nr, CG_UINT vecRows, V_ELE *
     }
   }
 }
-#endif
-#endif
 
 /* Roofline-style accounting for one whole-block matrix pass (one SpMMV over
  * nv columns), used to report GFlop/s and GB/s so runs with different
@@ -192,10 +182,10 @@ static void accountMatvec(
             (double)npasses;
 }
 
-/* Three-way dispatch for the block kernels that touch the matrix: a
- * streaming sweep over a host-resident matrix, resident subblock tiling
- * (cheb_nb), or the plain dispatched kernel. The CPU build compiles the
- * plain call alone. */
+/* Block kernels that touch the matrix, through the dispatched (host or
+ * device) kernel on whole resident blocks. The GPU solver itself does not
+ * take this path — it streams the search space (gpu_vstream_*) — but the
+ * CPU build and the unit tests do. */
 static void chebFusedOp(Matrix *A,
     const DMatrix *x,
     V_ELE cA,
@@ -205,16 +195,6 @@ static void chebFusedOp(Matrix *A,
     V_ELE cQ,
     DMatrix *y)
 {
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  if (g_chebStream != NULL) {
-    gpu_stream_spMMVMFused(g_chebStream, x, cA, p, cP, q, cQ, y, g_chebNb);
-    return;
-  }
-  if (g_chebNb > 0) {
-    gpu_spMMVMFused_nb(A, x, cA, p, cP, q, cQ, y, g_chebNb);
-    return;
-  }
-#endif
   SPMMVMFUSEDFUNC(A, x, cA, p, cP, q, cQ, y);
 }
 
@@ -228,31 +208,11 @@ static void chebRecurrenceOp(Matrix *A,
     V_ELE gc,
     DMatrix *x)
 {
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  if (g_chebStream != NULL) {
-    gpu_stream_chebfdOp(g_chebStream, w, cA, cP, q, cQ, y, gc, x, g_chebNb);
-    return;
-  }
-  if (g_chebNb > 0) {
-    gpu_chebfdOp_nb(A, w, cA, cP, q, cQ, y, gc, x, g_chebNb);
-    return;
-  }
-#endif
   CHEBFDOPFUNC(A, w, cA, cP, q, cQ, y, gc, x);
 }
 
 static void chebBlockMatvec(Matrix *A, const DMatrix *x, DMatrix *y)
 {
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  if (g_chebStream != NULL) {
-    gpu_stream_spMMVM(g_chebStream, x, y, g_chebNb);
-    return;
-  }
-  if (g_chebNb > 0) {
-    gpu_spMMVM_nb(A, x, y, g_chebNb);
-    return;
-  }
-#endif
   SPMMVMFUNC(A, x, y);
 }
 
@@ -260,11 +220,9 @@ static void chebBlockMatvec(Matrix *A, const DMatrix *x, DMatrix *y)
  * recurrence on the whole subspace at once. X/U/W are row-major blocks of
  * width X->nc; ChebFD is single-process only (no halo exchange). Each term
  * uses a fused matvec+axpy kernel (spMMVMFused, then chebfdOp from n=3) so
- * T_n is never written out and re-read by a separate axpy pass. With matrix
- * streaming enabled each matrix pass becomes a double-buffered sweep of the
- * host-resident matrix (degree-outer order: one sweep per recurrence step —
- * the paper's block-outer order would multiply the streamed bytes by
- * NS/n_b). */
+ * T_n is never written out and re-read by a separate axpy pass. Degree-outer
+ * order over resident blocks; the GPU solver runs the same recurrence
+ * block-outer on streamed column sub-blocks (gpu_vstream_filter). */
 void applyFilter(Matrix *A, ChebFilter *f, DMatrix *X, DMatrix *U, DMatrix *W)
 {
   V_ELE alpha = (V_ELE)f->alpha;
@@ -373,6 +331,60 @@ int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
   }
   return m;
 }
+
+#if CHEB_GPU
+/* Step 6 on a streamed search space: rank-revealing Cholesky-QR in Loewdin
+ * form. Per pass: G = Y^T Y (one row-chunk pass), eigenpairs of the m x m G
+ * on the host, drop directions with sqrt(lambda) < tol, then one block
+ * update Y <- Y V diag(lambda^-1/2) written at the new stride. Two passes
+ * give CGS2-level orthogonality; ~6 block transfers instead of the ~4*nc
+ * full-block passes of column-wise CGS2. */
+int chebOrthoCholQR2(GpuVectorStream *vs,
+    V_ELE *Y,
+    int nc,
+    double tol,
+    double *G,
+    double *eval,
+    double *evec,
+    int passes)
+{
+  int m = nc;
+  for (int pass = 0; pass < passes && m > 0; pass++) {
+    gpu_vstream_gram(vs, Y, NULL, m, G);
+    jacobiEigen(G, m, eval, evec);
+
+    /* B (m x mNew, row-major) = kept eigenvectors scaled by lambda^-1/2.
+     * G is no longer needed and is at least m*m: reuse it for B. */
+    int mNew = 0;
+    for (int j = 0; j < m; j++) {
+      double lam = eval[j] > 0.0 ? eval[j] : 0.0;
+      if (sqrt(lam) < tol) {
+        continue; /* linearly dependent direction -> drop */
+      }
+      mNew++;
+    }
+    if (mNew == 0) {
+      return 0;
+    }
+    double *B = G;
+    int t     = 0;
+    for (int j = 0; j < m; j++) {
+      double lam = eval[j] > 0.0 ? eval[j] : 0.0;
+      if (sqrt(lam) < tol) {
+        continue;
+      }
+      double inv = 1.0 / sqrt(lam);
+      for (int i = 0; i < m; i++) {
+        B[(size_t)i * mNew + t] = evec[(size_t)i * m + j] * inv;
+      }
+      t++;
+    }
+    gpu_vstream_update(vs, Y, m, B, mNew);
+    m = mNew;
+  }
+  return m;
+}
+#endif
 
 /* Step 7: Rayleigh-Ritz: AY = A*Y, then H = Y^T AY (m x m), then cyclic
  * Jacobi for the Ritz values (eval, ascending) and vectors (evec[:,k] pairs
@@ -483,9 +495,10 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     }
     return -1;
   }
-#ifdef SCS
+#if defined(SCS) && !CHEB_GPU
   /* SCS spMMVM puts a per-thread tmp[C * NS] VLA on the worker stack; reject
-   * widths that would overflow it (main.c guards SPMMV the same way). */
+   * widths that would overflow it (main.c guards SPMMV the same way). The
+   * GPU solver never runs the host spMMVM. */
   if (!spMMVMBlockWidthOk(A->C, param->cheb.NS)) {
     if (commIsMaster(comm)) {
       printf("ChebFD: cheb_NS=%d too large for the SCS spMMVM stack scratch "
@@ -499,34 +512,15 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   }
 #endif
 
-  if (param->streamMb < 0 || param->chebNb < 0) {
+  if (param->chebNb < 0) {
     if (commIsMaster(comm)) {
-      printf("ChebFD: gpu_stream_mb and cheb_nb must be >= 0 "
-             "(got %d / %d).\n",
-          param->streamMb,
-          param->chebNb);
+      printf("ChebFD: cheb_nb must be >= 0 (got %d).\n", param->chebNb);
     }
     return -1;
   }
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  if (param->streamMb > 0) {
-    /* The streamed matrix only ever needs to be host-readable (the sweep
-     * copies from it). gpu_alloc explicit is the ideal pairing: the matrix
-     * lands in pinned memory (fast async H2D) while the vector blocks go to
-     * plain cudaMalloc, keeping the SpMV gathers on-device. Managed works
-     * too (the blocks are prefetched once below). Pageable matrix copies
-     * stage through the driver and don't overlap. */
-    if (param->allocType == ALLOC_PAGEABLE && commIsMaster(comm)) {
-      printf("ChebFD: warning: async H2D copies from pageable memory stage "
-             "through the driver and will not overlap compute; "
-             "gpu_alloc explicit or managed is faster.\n");
-    }
-  }
-#else
-  if (param->streamMb > 0 || param->chebNb > 0) {
-    if (commIsMaster(comm)) {
-      printf("ChebFD: gpu_stream_mb / cheb_nb are GPU-only; ignoring.\n");
-    }
+#if !CHEB_GPU
+  if (param->chebNb > 0 && commIsMaster(comm)) {
+    printf("ChebFD: cheb_nb is GPU-only; ignoring.\n");
   }
 #endif
 
@@ -586,45 +580,48 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   double *eval    = d.eval;
   double *evec    = d.evec;
   double *accEval = d.accEval;
-
-  // Alg. 3.1, Step 4: construct NS random search vectors.
-  NVTX_RANGE_PUSH_C("ChebFD.setup.randomInit", NVTX_C_SETUP);
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  gpu_randomInitBlock(
-      (unsigned long long)comm->rank * 0xD1B54A32D192ED03ull, nr, Y->nr, Y->entries, NS);
-#else
-  randomInitBlock(comm, nr, Y->nr, Y->entries, NS);
+  int *sel        = d.sel;
+  double *res2    = d.res2;
+#if CHEB_GPU
+  (void)u; /* host-recurrence scratch; the GPU solver streams Y instead */
+  (void)w;
+  (void)avbuf;
+  (void)evk;
 #endif
+
+  // Alg. 3.1, Step 4: construct NS random search vectors (host block).
+  NVTX_RANGE_PUSH_C("ChebFD.setup.randomInit", NVTX_C_SETUP);
+  randomInitBlock(comm, nr, Y->nr, Y->entries, NS);
   NVTX_RANGE_POP();
 
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  /* Matrix streaming + subblock width (one-time setup, outside the timed
-   * region). The streamed matrix stays host-resident; the four vector
-   * blocks must be device-resident for the SpMV gathers, so under managed
-   * allocation pull them over once instead of faulting page-by-page. */
-  g_chebNb = (param->chebNb > NS) ? NS : param->chebNb;
-  if (param->chebNb > NS && commIsMaster(comm)) {
-    printf("ChebFD: cheb_nb=%d > NS=%d; clamping to NS.\n", param->chebNb, NS);
+#if CHEB_GPU
+  /* One-time setup outside the timed region: pull the managed matrix to
+   * the device (no first-touch migration inside the loop) and create the
+   * search-space streaming context. */
+  int nb = (param->chebNb > 0) ? param->chebNb : CHEB_DEFAULT_NB;
+  if (nb > NS) {
+    if (param->chebNb > NS && commIsMaster(comm)) {
+      printf("ChebFD: cheb_nb=%d > NS=%d; clamping to NS.\n", param->chebNb, NS);
+    }
+    nb = NS;
   }
-  if (param->streamMb > 0) {
-    g_chebStream =
-        gpu_matrix_stream_init(A, (size_t)param->streamMb << 20, param->verbose);
-    if (g_chebStream == NULL) {
-      if (commIsMaster(comm)) {
-        printf("ChebFD: gpu_matrix_stream_init failed (bad arguments?).\n");
-      }
-      freeChebData(&d);
-      chebFilterFree(&f);
-      NVTX_RANGE_POP();
-      return -1;
+  NVTX_RANGE_PUSH_C("ChebFD.setup.prefetch", NVTX_C_SETUP);
+  gpu_matrix_prefetch(A);
+  NVTX_RANGE_POP();
+  GpuVectorStream *vs = gpu_vstream_init(A, NS, nb, 0, param->verbose);
+  if (vs == NULL) {
+    if (commIsMaster(comm)) {
+      printf("ChebFD: gpu_vstream_init failed (bad arguments?).\n");
     }
-    if (param->allocType == ALLOC_MANAGED) {
-      size_t blockBytes = (size_t)Y->nr * (size_t)d.NS * sizeof(V_ELE);
-      gpu_matrix_stream_prefetch(d.Y.entries, blockBytes);
-      gpu_matrix_stream_prefetch(d.AY.entries, blockBytes);
-      gpu_matrix_stream_prefetch(d.u.entries, blockBytes);
-      gpu_matrix_stream_prefetch(d.w.entries, blockBytes);
-    }
+    freeChebData(&d);
+    chebFilterFree(&f);
+    NVTX_RANGE_POP();
+    return -1;
+  }
+  if (commIsMaster(comm)) {
+    printf("ChebFD: matrix device-resident (managed, prefetched); search space "
+           "streamed from pinned host memory in %d-column sub-blocks\n",
+        nb);
   }
 #endif
 
@@ -655,16 +652,24 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     Y->nc = NS;
     SECTION_TIMER_START(chebTimer, CHEBT_FILTER);
     NVTX_RANGE_PUSH_C("ChebFD.filter", NVTX_C_FILTER);
+#if CHEB_GPU
+    gpu_vstream_filter(vs, Y->entries, NS, f.alpha, f.beta, f.gc, f.Np);
+#else
     applyFilter(A, &f, Y, u, w);
+#endif
     NVTX_RANGE_POP();
     SECTION_TIMER_STOP(chebTimer, CHEBT_FILTER);
     accountMatvec(A, NS, param->cheb.Np, &filterFlops, &filterBytes);
     nFilterPasses += param->cheb.Np;
 
-    // Alg. 3.1, Step 6: orthogonalize the filtered search vectors (rank-revealing MGS).
+    // Alg. 3.1, Step 6: orthogonalize the filtered search vectors (rank revealing).
     SECTION_TIMER_START(chebTimer, CHEBT_ORTHO);
     NVTX_RANGE_PUSH_C("ChebFD.ortho", NVTX_C_ORTHO);
+#if CHEB_GPU
+    int m = chebOrthoCholQR2(vs, Y->entries, NS, 1e-8, H, eval, evec, 2);
+#else
     int m = ORTHOMGSFUNC(nr, Y->entries, NS, 1e-8);
+#endif
     NVTX_RANGE_POP();
     SECTION_TIMER_STOP(chebTimer, CHEBT_ORTHO);
     if (m == 0) {
@@ -676,24 +681,31 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     }
     Y->nc = m;
 
+#if !CHEB_GPU
     /* orthoMGS repacks only rows [0,nr); re-zero SCS padding at the new
-     * stride m, or applyFilter's recurrence blows it up to Inf/NaN. */
+     * stride m, or applyFilter's recurrence blows it up to Inf/NaN. (The
+     * streamed block update runs over all vecRows rows, so the GPU path's
+     * padding rows stay zero by construction.) */
     NVTX_RANGE_PUSH_C("ChebFD.repad", NVTX_C_ORTHO);
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-    gpu_zeroPadRows(Y->entries, nr, Y->nr - nr, (CG_UINT)m);
-#else
     for (CG_UINT r = nr; r < Y->nr; r++) {
       for (int i = 0; i < m; i++) {
         Y->entries[r * (CG_UINT)m + i] = (V_ELE)0.0;
       }
     }
-#endif
     NVTX_RANGE_POP();
+#endif
 
     // Alg. 3.1, Step 7: Rayleigh-Ritz — project H = YᵀAY and solve for Ritz pairs.
     SECTION_TIMER_START(chebTimer, CHEBT_RR);
     NVTX_RANGE_PUSH_C("ChebFD.rr", NVTX_C_RR);
+#if CHEB_GPU
+    AY->nc = m;
+    gpu_vstream_spmmv(vs, Y->entries, AY->entries, m);
+    gpu_vstream_gram(vs, Y->entries, AY->entries, m, H);
+    jacobiEigen(H, m, eval, evec);
+#else
     rayleighRitz(A, Y, AY, m, nr, H, eval, evec);
+#endif
     NVTX_RANGE_POP();
     SECTION_TIMER_STOP(chebTimer, CHEBT_RR);
     accountMatvec(A, m, 1, &rrFlops, &rrBytes); /* one A*Y pass */
@@ -721,13 +733,26 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     double accThresh = sqrt(tol);
     SECTION_TIMER_START(chebTimer, CHEBT_RESID);
     NVTX_RANGE_PUSH_C("ChebFD.residual", NVTX_C_RESID);
+    /* Residuals of every in-interval pair: one streamed pass over Y / AY on
+     * the GPU, per-pair host kernels otherwise. */
+    int nsel = 0;
     for (int k = 0; k < m; k++) {
-      if (eval[k] < lam_lo || eval[k] > lam_hi) {
-        continue;
+      if (eval[k] >= lam_lo && eval[k] <= lam_hi) {
+        sel[nsel++] = k;
       }
-      double evalk = eval[k];
-      RITZRESIDUALFUNC(Y, AY, m, nr, evalk, evec, k, evk, avbuf);
-      double res = residualNorm(nr, avbuf);
+    }
+#if CHEB_GPU
+    gpu_vstream_ritzResiduals(vs, Y->entries, AY->entries, m, eval, evec, sel, nsel, res2);
+#else
+    for (int t = 0; t < nsel; t++) {
+      RITZRESIDUALFUNC(Y, AY, m, nr, eval[sel[t]], evec, sel[t], evk, avbuf);
+      double r = residualNorm(nr, avbuf);
+      res2[t]  = r * r;
+    }
+#endif
+    for (int t = 0; t < nsel; t++) {
+      int k      = sel[t];
+      double res = sqrt(res2[t]);
       nInInterval++;
       if (res < minres_in) {
         minres_in = res;
@@ -780,41 +805,22 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   }
   SECTION_TIMER_STOP(chebTimer, CHEBT_SPAN);
 
-#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
-  if (g_chebStream != NULL) {
-    size_t h2dBytes            = 0;
-    int nParts                 = 0;
-    unsigned long long nSweeps = 0;
-    double copyMs              = 0.0;
-    gpu_matrix_stream_stats(g_chebStream, &h2dBytes, &nParts, &nSweeps, &copyMs);
+#if CHEB_GPU
+  {
+    size_t h2d = 0, d2h = 0;
+    unsigned long long colPasses = 0, rowPasses = 0;
+    gpu_vstream_stats(vs, &h2d, &d2h, &colPasses, &rowPasses);
     if (commIsMaster(comm)) {
-      /* copyMs spans first-copy-start to last-copy-end per sweep, i.e. it
-       * includes the stalls where the copies wait on compute — hence an
-       * honest lower bound on the link utilization, not a peak number. */
-      double span = copyMs / 1.0e3;
-      printf("  matrix streaming: %d parts/sweep, %llu sweeps, %.2f GiB H2D, "
-             "copy span %.2fs (%.1f GB/s incl. stalls)\n",
-          nParts,
-          nSweeps,
-          (double)h2dBytes / (1024.0 * 1024.0 * 1024.0),
-          span,
-          span > 0.0 ? ((double)h2dBytes / 1.0e9) / span : 0.0);
-      /* Overlap share: how much of the matrix-pass walltime the copies were
-       * in flight for. ~100% means compute-bound (copies fully hidden);
-       * well below that points at copy/compute serialization. */
-      double tMatvec = SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_FILTER) +
-                       SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_RR);
-      if (tMatvec > 0.0) {
-        printf("  streaming overlap: copy span covers %.1f%% of the %.2fs "
-               "matrix-pass walltime\n",
-            100.0 * span / tMatvec,
-            tMatvec);
-      }
+      double gib = 1.0 / (1024.0 * 1024.0 * 1024.0);
+      printf("  search-space streaming: %.2f GiB H2D, %.2f GiB D2H over %llu "
+             "column passes and %llu row-chunk passes\n",
+          (double)h2d * gib,
+          (double)d2h * gib,
+          colPasses,
+          rowPasses);
     }
-    gpu_matrix_stream_free(g_chebStream);
-    g_chebStream = NULL; /* a second solveChebFD in this process starts clean */
+    gpu_vstream_free(vs);
   }
-  g_chebNb = 0;
 #endif
 
   /* `iter` is maxiter+1 when the loop ran to exhaustion; report what ran. */
@@ -894,14 +900,17 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
 }
 
 /* Allocate one row-major (vecRows x NS) block; size_t math vs 32-bit overflow.
- * Device-resident placement: on GPU builds every access to these blocks goes
- * through dispatched kernels (kernel_dispatch.h), so under ALLOC_EXPLICIT
- * they land in plain cudaMalloc memory. CPU builds fall back to allocate(). */
-static void allocDMat(DMatrix *M, CG_UINT vecRows, int NS)
+ * Y / AY are pinned host memory (allocateHost): the GPU solver streams them
+ * through the device, the CPU build reads them directly. The u / w scratch
+ * blocks only serve the host recurrence (CPU build, unit tests) and stay on
+ * the general allocator, which on GPU builds is managed memory that costs
+ * nothing until touched. */
+static void allocDMat(DMatrix *M, CG_UINT vecRows, int NS, int pinned)
 {
   M->nr      = vecRows;
   M->nc      = NS;
-  M->entries = (V_ELE *)allocateDevice((size_t)vecRows * (size_t)NS * sizeof(V_ELE));
+  size_t sz  = (size_t)vecRows * (size_t)NS * sizeof(V_ELE);
+  M->entries = pinned ? (V_ELE *)allocateHost(sz) : (V_ELE *)allocate(ARRAY_ALIGNMENT, sz);
 }
 
 void allocChebData(ChebData *d, Matrix *m, int NS)
@@ -916,14 +925,13 @@ void allocChebData(ChebData *d, Matrix *m, int NS)
   d->NS = NS;
 
   /* Row-major blocks; .nc shrinks during iterations, storage stays NS-wide. */
-  allocDMat(&d->Y, vecRows, NS);
-  allocDMat(&d->AY, vecRows, NS);
-  allocDMat(&d->u, vecRows, NS);
-  allocDMat(&d->w, vecRows, NS);
+  allocDMat(&d->Y, vecRows, NS, 1);
+  allocDMat(&d->AY, vecRows, NS, 1);
+  allocDMat(&d->u, vecRows, NS, 0);
+  allocDMat(&d->w, vecRows, NS, 0);
 
-  /* avbuf is written by the Ritz residual kernel and consumed by gpu_ddot;
-   * the dense arrays below are host-read (jacobiEigen), so they stay on the
-   * general allocator. */
+  /* avbuf is written by the Ritz residual kernel and consumed by ddot on
+   * the host path; the dense arrays below are host-read (jacobiEigen). */
   d->avbuf   = (V_ELE *)allocateDevice((size_t)nr * sizeof(V_ELE));
   d->evk     = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(double));
 
@@ -931,18 +939,22 @@ void allocChebData(ChebData *d, Matrix *m, int NS)
   d->eval    = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(double));
   d->evec    = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * NS * sizeof(double));
   d->accEval = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(double));
+  d->sel     = (int *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(int));
+  d->res2    = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * sizeof(double));
 }
 
 void freeChebData(ChebData *d)
 {
-  deallocateDevice(d->Y.entries);
-  deallocateDevice(d->AY.entries);
-  deallocateDevice(d->u.entries);
-  deallocateDevice(d->w.entries);
+  deallocateHost(d->Y.entries);
+  deallocateHost(d->AY.entries);
+  deallocate(d->u.entries);
+  deallocate(d->w.entries);
   deallocateDevice(d->avbuf);
   deallocate(d->evk);
   deallocate(d->H);
   deallocate(d->eval);
   deallocate(d->evec);
   deallocate(d->accEval);
+  deallocate(d->sel);
+  deallocate(d->res2);
 }

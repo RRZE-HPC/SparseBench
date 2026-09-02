@@ -99,3 +99,21 @@ extern void deallocateDevice(void *ptr)
   free(ptr);
 #endif
 }
+
+extern void *allocateHost(size_t bytesize)
+{
+#ifdef _GPU
+  return gpu_allocate_host(bytesize);
+#else
+  return allocate(ARRAY_ALIGNMENT, bytesize);
+#endif
+}
+
+extern void deallocateHost(void *ptr)
+{
+#ifdef _GPU
+  gpu_free_host(ptr);
+#else
+  free(ptr);
+#endif
+}

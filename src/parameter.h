@@ -33,11 +33,10 @@ typedef struct {
   int blockwidth;
   int verbose;
   int device;
-  AllocType allocType; /* GPU buffer placement; ignored by the CPU build */
-  int streamMb;        /* gpu_stream_mb: 0=off, else stream the host-resident matrix
-                   to the GPU in ~N MiB parts (GPU build, ChebFD only) */
-  int chebNb;          /* cheb_nb: fused-kernel column-subblock width (0 = full
-                   block width); GPU build, ChebFD only */
+  AllocType allocType; /* GPU buffer placement; ignored by the CPU build and
+                          by ChebFD (matrix managed, blocks pinned) */
+  int chebNb;          /* cheb_nb: columns per streamed search-space sub-block
+                          (0 = default 16); GPU build, ChebFD only */
   ChebFDParam cheb;    // NTS : compostion to keep struct clean
 } Parameter;
 

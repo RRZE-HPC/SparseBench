@@ -103,6 +103,17 @@ int main(int argc, char **argv)
         "run with one rank.\n");
   }
   gpu_init(param.device);
+  /* ChebFD keeps the matrix device-resident as managed memory (prefetched
+   * once in solveChebFD) and streams the pinned search-space blocks; the
+   * gpu_alloc knob only governs the other benchmarks. */
+  if (BenchType == CHEBFD && param.allocType != ALLOC_MANAGED) {
+    if (commIsMaster(&comm)) {
+      printf("ChebFD: gpu_alloc %s overridden to managed (matrix is prefetched to the "
+             "device, search space is streamed from pinned host memory).\n",
+          allocTypeName(param.allocType));
+    }
+    param.allocType = ALLOC_MANAGED;
+  }
   gpu_set_alloc_type(param.allocType);
 #endif
   commPrintBanner(&comm);

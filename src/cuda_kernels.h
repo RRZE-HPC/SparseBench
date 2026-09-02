@@ -69,52 +69,69 @@ void gpu_chebfdOp(Matrix *m,
     V_ELE gc,
     DMatrix *x);
 
-/* Host-resident matrix streaming for ChebFD: the matrix stays where
- * allocate() put it and is streamed to the device in double-buffered parts
- * (machinery in cuda_matrix_stream.cu; the sweeps live next to the kernels
- * in cuda_spmv_{scs,crs}.cu). partBytes is a byte count — callers convert
- * the gpu_stream_mb knob. nb is the column-subblock width, 0 or >= width
- * meaning one full-width launch. This header stays compilable by plain gcc,
- * hence the opaque struct. */
-typedef struct GpuMatrixStream GpuMatrixStream;
+/* cudaMemPrefetchAsync + sync of the whole matrix (val, colInd, ptr and,
+ * for SCS, chunkLens) to the current device, so a managed matrix is
+ * device-resident from the first pass instead of migrating page by page on
+ * first touch inside the timed region. No-op for non-managed buffers. */
+void gpu_matrix_prefetch(const Matrix *m);
 
-GpuMatrixStream *gpu_matrix_stream_init(const Matrix *m, size_t partBytes, int verbose);
+/* Search-space streaming for ChebFD (cuda_vector_stream.cu): the matrix is
+ * device-resident, the dense blocks Y / AY are pinned host memory
+ * (gpu_allocate_host) and are streamed through the device — column
+ * sub-blocks of nb columns for the matrix passes, row chunks of ~chunkBytes
+ * (0 = default 128 MiB) for the dense passes — double-buffered against
+ * compute. All calls return with the device drained. This header stays
+ * compilable by plain gcc, hence the opaque struct. */
+typedef struct GpuVectorStream GpuVectorStream;
 
-void gpu_matrix_stream_free(GpuMatrixStream *s);
+GpuVectorStream *gpu_vstream_init(
+    const Matrix *A, int NS, int nb, size_t chunkBytes, int verbose);
 
-/* cudaMemPrefetchAsync + sync: one-time pull of a managed block to the
- * device (e.g. the ChebFD vector blocks before the first sweep). */
-void gpu_matrix_stream_prefetch(const V_ELE *p, size_t bytes);
+void gpu_vstream_free(GpuVectorStream *s);
 
-void gpu_matrix_stream_stats(const GpuMatrixStream *s,
+/* Y (vecRows x nc, row-major, pinned) <- p(A) Y: the full Chebyshev
+ * recurrence of degree Np with affine map (alpha, beta) and coefficients
+ * gc[0..Np], applied block-outer (all degrees on one column sub-block). */
+void gpu_vstream_filter(GpuVectorStream *s,
+    V_ELE *Yh,
+    int nc,
+    double alpha,
+    double beta,
+    const double *gc,
+    int Np);
+
+/* AY = A * Y over nc columns. */
+void gpu_vstream_spmmv(GpuVectorStream *s, const V_ELE *Yh, V_ELE *AYh, int nc);
+
+/* G (m x m, host) = A^T B for two vecRows x m blocks (pass Bh == Ah or
+ * NULL for A^T A). Exactly symmetric. */
+void gpu_vstream_gram(GpuVectorStream *s, const V_ELE *Ah, const V_ELE *Bh, int m, double *Gh);
+
+/* Y (stride m) <- Y * B with B m x mOut row-major (host); the result is
+ * written back in place at stride mOut (<= m). */
+void gpu_vstream_update(GpuVectorStream *s, V_ELE *Yh, int m, const double *Bh, int mOut);
+
+/* res2[t] = || AY e_k - eval[k] Y e_k ||^2 for k = sel[t], t < nsel, with
+ * e_k = evec[:, k] (evec m x m row-major as produced by jacobiEigen). */
+void gpu_vstream_ritzResiduals(GpuVectorStream *s,
+    const V_ELE *Yh,
+    const V_ELE *AYh,
+    int m,
+    const double *eval,
+    const double *evec,
+    const int *sel,
+    int nsel,
+    double *res2);
+
+void gpu_vstream_stats(const GpuVectorStream *s,
     size_t *h2dBytes,
-    int *nParts,
-    unsigned long long *nSweeps,
-    double *copyMs);
+    size_t *d2hBytes,
+    unsigned long long *colPasses,
+    unsigned long long *rowPasses);
 
-/* Sweeps over a streamed matrix (one pass of the polynomial recurrence). */
-void gpu_stream_spMMVM(GpuMatrixStream *s, const DMatrix *x, DMatrix *y, int nb);
-
-void gpu_stream_spMMVMFused(GpuMatrixStream *s,
-    const DMatrix *x,
-    V_ELE cA,
-    const DMatrix *p,
-    V_ELE cP,
-    const DMatrix *q,
-    V_ELE cQ,
-    DMatrix *y,
-    int nb);
-
-void gpu_stream_chebfdOp(GpuMatrixStream *s,
-    const DMatrix *w,
-    V_ELE cA,
-    V_ELE cP,
-    const DMatrix *q,
-    V_ELE cQ,
-    DMatrix *y,
-    V_ELE gc,
-    DMatrix *x,
-    int nb);
+/* Pinned host memory (cudaMallocHost) for the streamed blocks. */
+void *gpu_allocate_host(size_t bytes);
+void gpu_free_host(void *p);
 
 /* Resident-matrix variants with column-subblock tiling (cheb_nb). */
 void gpu_spMMVM_nb(Matrix *m, const DMatrix *x, DMatrix *y, int nb);
