@@ -17,7 +17,6 @@
 #include "profiler.h"
 #include "section_timer.h"
 #include "solver.h"
-#include "timing.h"
 #include "vtype.h"
 
 /* Map the integer kernel selector to the ChebFilter enum. */
@@ -629,18 +628,15 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   }
 #endif
 
-  int NT_found     = 0;
-  double timeStart = getTimeStamp();
-  /* Per-step wall time; GPU kernels sync before returning, so these host
-   * timers show which steps still run on the host. */
-  double tFilter = 0.0, tOrtho = 0.0, tRR = 0.0, tResid = 0.0;
+  int NT_found = 0;
   /* Throughput accounting over all matrix passes (filter + Rayleigh-Ritz),
    * reported at the end so config comparisons need only one run each. */
   double filterFlops = 0.0, filterBytes = 0.0, rrFlops = 0.0, rrBytes = 0.0;
   unsigned long long nFilterPasses = 0, nRRPasses = 0;
-  double tstep;
   int iter;
-  /* Section timing (section_timer.h); CHEBT_SPAN spans the whole loop. */
+  /* All timing flows through the section timer (section_timer.h): wall
+   * seconds per section, and on GPU builds also device (event) seconds —
+   * the difference is host overhead. CHEBT_SPAN spans the whole loop. */
   enum {
     CHEBT_FILTER,
     CHEBT_ORTHO,
@@ -657,23 +653,19 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     NVTX_RANGE_PUSHF(NVTX_C_FILTER, "ChebFD.iter=%d", iter);
     // Alg. 3.1, Step 5 (Fig. 6): apply the polynomial filter to the whole subspace.
     Y->nc = NS;
-    tstep = getTimeStamp();
     SECTION_TIMER_START(chebTimer, CHEBT_FILTER);
     NVTX_RANGE_PUSH_C("ChebFD.filter", NVTX_C_FILTER);
     applyFilter(A, &f, Y, u, w);
     NVTX_RANGE_POP();
-    tFilter += getTimeStamp() - tstep;
     SECTION_TIMER_STOP(chebTimer, CHEBT_FILTER);
     accountMatvec(A, NS, param->cheb.Np, &filterFlops, &filterBytes);
     nFilterPasses += param->cheb.Np;
 
     // Alg. 3.1, Step 6: orthogonalize the filtered search vectors (rank-revealing MGS).
-    tstep = getTimeStamp();
     SECTION_TIMER_START(chebTimer, CHEBT_ORTHO);
     NVTX_RANGE_PUSH_C("ChebFD.ortho", NVTX_C_ORTHO);
     int m = ORTHOMGSFUNC(nr, Y->entries, NS, 1e-8);
     NVTX_RANGE_POP();
-    tOrtho += getTimeStamp() - tstep;
     SECTION_TIMER_STOP(chebTimer, CHEBT_ORTHO);
     if (m == 0) {
       if (commIsMaster(comm)) {
@@ -699,12 +691,10 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     NVTX_RANGE_POP();
 
     // Alg. 3.1, Step 7: Rayleigh-Ritz — project H = YᵀAY and solve for Ritz pairs.
-    tstep = getTimeStamp();
     SECTION_TIMER_START(chebTimer, CHEBT_RR);
     NVTX_RANGE_PUSH_C("ChebFD.rr", NVTX_C_RR);
     rayleighRitz(A, Y, AY, m, nr, H, eval, evec);
     NVTX_RANGE_POP();
-    tRR += getTimeStamp() - tstep;
     SECTION_TIMER_STOP(chebTimer, CHEBT_RR);
     accountMatvec(A, m, 1, &rrFlops, &rrBytes); /* one A*Y pass */
     nRRPasses += 1;
@@ -729,7 +719,6 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     double maxres_in = 0.0; /* max over ALL in-interval pairs; for reporting */
     int nInInterval  = 0;
     double accThresh = sqrt(tol);
-    tstep            = getTimeStamp();
     SECTION_TIMER_START(chebTimer, CHEBT_RESID);
     NVTX_RANGE_PUSH_C("ChebFD.residual", NVTX_C_RESID);
     for (int k = 0; k < m; k++) {
@@ -755,7 +744,6 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
       }
     }
     NVTX_RANGE_POP();
-    tResid += getTimeStamp() - tstep;
     SECTION_TIMER_STOP(chebTimer, CHEBT_RESID);
     if (commIsMaster(comm) && param->verbose) {
       printf("  [dbg] in-interval residuals over %d pairs: min=%.3e max=%.3e "
@@ -791,7 +779,6 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     NVTX_RANGE_POP();
   }
   SECTION_TIMER_STOP(chebTimer, CHEBT_SPAN);
-  double timeStop = getTimeStamp();
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
   if (g_chebStream != NULL) {
@@ -815,7 +802,8 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
       /* Overlap share: how much of the matrix-pass walltime the copies were
        * in flight for. ~100% means compute-bound (copies fully hidden);
        * well below that points at copy/compute serialization. */
-      double tMatvec = tFilter + tRR;
+      double tMatvec = SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_FILTER) +
+                       SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_RR);
       if (tMatvec > 0.0) {
         printf("  streaming overlap: copy span covers %.1f%% of the %.2fs "
                "matrix-pass walltime\n",
@@ -835,15 +823,16 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
   SECTION_TIMER_SYNC(chebTimer); /* last iteration's pairs + the span */
 
   if (commIsMaster(comm)) {
-    printf(
-        "ChebFD finished after %d iterations in %.2fs\n", itersRun, timeStop - timeStart);
+#if SECTION_TIMER_ON
+    printf("ChebFD finished after %d iterations in %.2fs\n",
+        itersRun,
+        SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_SPAN));
     printf("  step breakdown: filter %.2fs, ortho %.2fs, rayleigh-ritz %.2fs, "
            "residual %.2fs\n",
-        tFilter,
-        tOrtho,
-        tRR,
-        tResid);
-#if SECTION_TIMER_ON
+        SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_FILTER),
+        SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_ORTHO),
+        SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_RR),
+        SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_RESID));
     /* Must stay below the "step breakdown" line: runBench.sh's sed keeps
      * the first regex match, and this wording matches it too. */
     printf("  section time: filter %.2fs, ortho %.2fs, rayleigh-ritz %.2fs, "
@@ -854,7 +843,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
         SECTION_TIMER_SEC(chebTimer, CHEBT_RESID));
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
     double devSpan  = SECTION_TIMER_SEC(chebTimer, CHEBT_SPAN);
-    double wallSpan = timeStop - timeStart;
+    double wallSpan = SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_SPAN);
     /* The gap is host bookkeeping plus unsectioned kernels (e.g. repad). */
     printf("  device vs host: %.2fs of the %.2fs solve span spent on device "
            "(%.1f%%), host/other %.2fs\n",
@@ -863,12 +852,15 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
         wallSpan > 0.0 ? 100.0 * devSpan / wallSpan : 0.0,
         wallSpan - devSpan);
 #endif
+#else
+    printf("ChebFD finished after %d iterations\n", itersRun);
 #endif
     /* Same cost model as accountMatvec. Filter passes dominate (Np per
      * iteration vs one Rayleigh-Ritz pass), hence the separate figure. */
     double matvecFlops         = filterFlops + rrFlops;
     double matvecBytes         = filterBytes + rrBytes;
-    double tMatvec             = tFilter + tRR;
+    double tMatvec             = SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_FILTER) +
+                                 SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_RR);
     unsigned long long nPasses = nFilterPasses + nRRPasses;
     if (tMatvec > 0.0 && nPasses > 0) {
       printf("  matvec throughput: %.2f GFlop/s, %.1f GB/s "
@@ -877,7 +869,10 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
           1.0e-9 * matvecBytes / tMatvec,
           nPasses,
           1.0e3 * tMatvec / (double)nPasses,
-          nFilterPasses > 0 ? 1.0e3 * tFilter / (double)nFilterPasses : 0.0);
+          nFilterPasses > 0
+              ? 1.0e3 * SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_FILTER) /
+                (double)nFilterPasses
+              : 0.0);
     }
     printf("Found %d eigenpairs in target interval [%.6g, %.6g]:\n",
         NT_found,

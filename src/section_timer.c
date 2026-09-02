@@ -95,6 +95,12 @@ double sectionTimerGetSec(SectionTimer *t, int section)
   return t->total[section];
 }
 
+double sectionTimerGetWallSec(SectionTimer *t, int section)
+{
+  /* Host timestamps are the only clock here, so wall == event total. */
+  return sectionTimerGetSec(t, section);
+}
+
 unsigned long long sectionTimerGetCount(SectionTimer *t, int section)
 {
   if (!sectionOk(t, section)) {

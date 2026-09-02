@@ -11,7 +11,8 @@
  * sectionTimerSetStream. Records never synchronize; drainSection folds the
  * intervals in. Both events of a pair share a stream in order, so waiting
  * for the stop implies the start finished — what EventElapsedTime
- * requires.
+ * requires. Wall seconds come from host timestamps taken at Start/Stop
+ * (folded in immediately at Stop), giving the host-vs-device gap for free.
  */
 #include "section_timer.h"
 
@@ -19,6 +20,7 @@
 #include <stdlib.h>
 
 #include "gpu_backend.h"
+#include "timing.h"
 
 typedef struct {
   gpuEvent_t start;
@@ -26,6 +28,8 @@ typedef struct {
   gpuStream_t stream; /* queue both records go on; NULL = legacy default */
   int pending;        /* a pair is recorded but not yet folded into totalSec */
   double totalSec;
+  double wallStart; /* host timestamp of the open interval */
+  double wallSec;   /* accumulated host wall seconds (folded at Stop) */
   unsigned long long counts;
 } SectionTimerPart;
 
@@ -95,6 +99,7 @@ extern "C" void sectionTimerStart(SectionTimer *t, int section)
     return;
   }
   drainSection(t, section); /* else the previous interval is lost */
+  t->sec[section].wallStart = getTimeStamp();
   GPU_SAFE_CALL(gpuEventRecord(t->sec[section].start, t->sec[section].stream));
 }
 
@@ -105,6 +110,7 @@ extern "C" void sectionTimerStop(SectionTimer *t, int section)
   }
   GPU_SAFE_CALL(gpuEventRecord(t->sec[section].stop, t->sec[section].stream));
   t->sec[section].pending = 1;
+  t->sec[section].wallSec += getTimeStamp() - t->sec[section].wallStart;
 }
 
 extern "C" void sectionTimerSetStream(
@@ -135,6 +141,14 @@ extern "C" double sectionTimerGetSec(SectionTimer *t, int section)
   }
   drainSection(t, section);
   return t->sec[section].totalSec;
+}
+
+extern "C" double sectionTimerGetWallSec(SectionTimer *t, int section)
+{
+  if (!sectionOk(t, section)) {
+    return 0.0;
+  }
+  return t->sec[section].wallSec; /* folded at Stop, nothing pending */
 }
 
 extern "C" unsigned long long sectionTimerGetCount(SectionTimer *t, int section)

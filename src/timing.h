@@ -5,7 +5,15 @@
 #ifndef __TIMING_H_
 #define __TIMING_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern double getTimeStamp(void);
 extern double getTimeResolution(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __TIMING_H_

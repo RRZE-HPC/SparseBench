@@ -6,8 +6,10 @@ MTX_FMT ?= CRS
 ENABLE_LIKWID ?= false
 # Enable NVTX range markers for nsys/ncu timelines (TOOLCHAIN=NVCC only)
 ENABLE_NVTX ?= false
-# Enable section timing (events on GPU, getTimeStamp on CPU)
-ENABLE_SECTIMER ?= false
+# Enable section timing (events + host wall on GPU, getTimeStamp on CPU).
+# solveChebFD's step/throughput reporting flows through it — disable only
+# to measure the timer's own (negligible) overhead.
+ENABLE_SECTIMER ?= true
 # Enable MPI parallelization (true or false)
 ENABLE_MPI ?= false
 # Enable OpenMP shared memory parallelization (true or false)

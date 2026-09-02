@@ -15,7 +15,9 @@
  * brackets all work issued in program order because every other stream
  * here is blocking (cuda_matrix_stream.cu). With non-blocking streams the
  * legacy bracket breaks silently — pin such sections to their work stream
- * via sectionTimerSetStream.
+ * via sectionTimerSetStream. GetWallSec additionally brackets each
+ * interval with host timestamps, so one timer yields both views
+ * (device time vs wall time — the gap is host overhead).
  *
  * CPU builds (section_timer.c): getTimeStamp() pairs.
  *
@@ -55,6 +57,11 @@ void sectionTimerSetStream(SectionTimer *t, int section, SectionTimerStream stre
 double sectionTimerGetSec(SectionTimer *t, int section);
 unsigned long long sectionTimerGetCount(SectionTimer *t, int section);
 
+/* Accumulated wall seconds: host-clock bracket of each interval. Same as
+ * GetSec on CPU builds; on GPU builds it differs by the host overhead
+ * around the recorded work. Never pending — folded in at Stop. */
+double sectionTimerGetWallSec(SectionTimer *t, int section);
+
 #ifdef __cplusplus
 }
 #endif
@@ -70,6 +77,7 @@ unsigned long long sectionTimerGetCount(SectionTimer *t, int section);
 #define SECTION_TIMER_SET_STREAM(t, section, stream)                                     \
   sectionTimerSetStream((t), (section), (stream))
 #define SECTION_TIMER_SEC(t, section) sectionTimerGetSec((t), (section))
+#define SECTION_TIMER_WALL_SEC(t, section) sectionTimerGetWallSec((t), (section))
 #define SECTION_TIMER_COUNT(t, section) sectionTimerGetCount((t), (section))
 
 #else /* disabled: (void)-cast the args so locals stay "used" under -Wall */
@@ -83,6 +91,7 @@ unsigned long long sectionTimerGetCount(SectionTimer *t, int section);
 #define SECTION_TIMER_SET_STREAM(t, section, stream)                                     \
   ((void)(t), (void)(section), (void)(stream))
 #define SECTION_TIMER_SEC(t, section) (0.0)
+#define SECTION_TIMER_WALL_SEC(t, section) (0.0)
 #define SECTION_TIMER_COUNT(t, section) (0ull)
 
 #endif /* USE_SECTION_TIMER */
