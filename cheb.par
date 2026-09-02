@@ -11,3 +11,7 @@ eps 1e-6
 itermax 30
 # GPU buffer placement: pageable | explicit | managed (default managed)
 # gpu_alloc managed
+# Stream the host-resident matrix to the GPU in ~N MiB parts, double-buffered
+# against compute (GPU build, ChebFD only; 0 = off). Pairs best with
+# gpu_alloc explicit.
+# gpu_stream_mb 0

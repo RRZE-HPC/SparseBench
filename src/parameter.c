@@ -27,6 +27,7 @@ void initParameter(Parameter *param)
   param->verbose   = 0;
   param->device    = 0;
   param->allocType = ALLOC_MANAGED;
+  param->streamMb  = 0;
   // NTS : if spectrum bounds unpassed Gershgorin is used
   // NTS : lancozs kern mu=2 used by paper
   param->cheb.a           = 0.0;
@@ -95,6 +96,7 @@ void readParameter(Parameter *param, const char *filename)
       PARSE_KEY("cheb_mu", param->cheb.mu, atoi, NO_FLAG);
       // NTS : allocTypeFromName validates and exits on typos
       PARSE_KEY("gpu_alloc", param->allocType, allocTypeFromName, NO_FLAG);
+      PARSE_KEY("gpu_stream_mb", param->streamMb, atoi, NO_FLAG);
     }
   }
 
@@ -141,6 +143,11 @@ void printParameter(Parameter *param)
   printf("\tVerbose Level: %d\n", param->verbose);
   printf("\tGPU device index: %d\n", param->device);
   printf("\tGPU allocation: %s\n", allocTypeName(param->allocType));
+  printf("\tGPU matrix streaming: %s", param->streamMb > 0 ? "on" : "off");
+  if (param->streamMb > 0) {
+    printf(" (~%d MiB parts)", param->streamMb);
+  }
+  printf("\n");
 
   if (BenchType == CHEBFD) {
     printf("ChebFD parameters:\n");

@@ -69,6 +69,53 @@ void gpu_chebfdOp(Matrix *m,
     V_ELE gc,
     DMatrix *x);
 
+/* Host-resident matrix streaming for ChebFD: the matrix stays where
+ * allocate() put it and is streamed to the device in double-buffered parts
+ * (machinery in cuda_matrix_stream.cu; the sweeps live next to the kernels
+ * in cuda_spmv_{scs,crs}.cu). partBytes is a byte count — callers convert
+ * the gpu_stream_mb knob. nb is the column-subblock width, 0 or >= width
+ * meaning one full-width launch. This header stays compilable by plain gcc,
+ * hence the opaque struct. */
+typedef struct GpuMatrixStream GpuMatrixStream;
+
+GpuMatrixStream *gpu_matrix_stream_init(const Matrix *m, size_t partBytes, int verbose);
+
+void gpu_matrix_stream_free(GpuMatrixStream *s);
+
+/* cudaMemPrefetchAsync + sync: one-time pull of a managed block to the
+ * device (e.g. the ChebFD vector blocks before the first sweep). */
+void gpu_matrix_stream_prefetch(const V_ELE *p, size_t bytes);
+
+void gpu_matrix_stream_stats(const GpuMatrixStream *s,
+    size_t *h2dBytes,
+    int *nParts,
+    unsigned long long *nSweeps,
+    double *copyMs);
+
+/* Sweeps over a streamed matrix (one pass of the polynomial recurrence). */
+void gpu_stream_spMMVM(GpuMatrixStream *s, const DMatrix *x, DMatrix *y, int nb);
+
+void gpu_stream_spMMVMFused(GpuMatrixStream *s,
+    const DMatrix *x,
+    V_ELE cA,
+    const DMatrix *p,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y,
+    int nb);
+
+void gpu_stream_chebfdOp(GpuMatrixStream *s,
+    const DMatrix *w,
+    V_ELE cA,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y,
+    V_ELE gc,
+    DMatrix *x,
+    int nb);
+
 void gpu_waxpby_sync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w);
 

@@ -1,0 +1,18 @@
+# ChebFD larger profile-run param file (for nsys timeline generation)
+filename generate7P
+nx 32
+ny 32
+nz 32
+cheb_lam_lo 25
+cheb_lam_hi 32
+cheb_Np 150
+cheb_NS 64
+eps 1e-6
+itermax 10
+# GPU buffer placement: managed pairs with streaming on this cluster
+gpu_alloc managed
+# Stream the host-resident matrix to the GPU in ~1 MiB parts (~3 parts at
+# this size), double-buffered against compute
+gpu_stream_mb 1
+# Fused-kernel column-subblock width for ChebFD (0 = full block width)
+cheb_nb 0
