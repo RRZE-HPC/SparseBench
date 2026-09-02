@@ -116,6 +116,30 @@ void gpu_stream_chebfdOp(GpuMatrixStream *s,
     DMatrix *x,
     int nb);
 
+/* Resident-matrix variants with column-subblock tiling (cheb_nb). */
+void gpu_spMMVM_nb(Matrix *m, const DMatrix *x, DMatrix *y, int nb);
+
+void gpu_spMMVMFused_nb(Matrix *m,
+    const DMatrix *x,
+    V_ELE cA,
+    const DMatrix *p,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y,
+    int nb);
+
+void gpu_chebfdOp_nb(Matrix *m,
+    const DMatrix *w,
+    V_ELE cA,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y,
+    V_ELE gc,
+    DMatrix *x,
+    int nb);
+
 void gpu_waxpby_sync(
     CG_UINT n, V_ELE alpha, const V_ELE *x, V_ELE beta, const V_ELE *y, V_ELE *w);
 

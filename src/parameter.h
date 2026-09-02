@@ -36,6 +36,8 @@ typedef struct {
   AllocType allocType; /* GPU buffer placement; ignored by the CPU build */
   int streamMb;        /* gpu_stream_mb: 0=off, else stream the host-resident matrix
                    to the GPU in ~N MiB parts (GPU build, ChebFD only) */
+  int chebNb;          /* cheb_nb: fused-kernel column-subblock width (0 = full
+                   block width); GPU build, ChebFD only */
   ChebFDParam cheb;    // NTS : compostion to keep struct clean
 } Parameter;
 

@@ -28,6 +28,7 @@ void initParameter(Parameter *param)
   param->device    = 0;
   param->allocType = ALLOC_MANAGED;
   param->streamMb  = 0;
+  param->chebNb    = 0;
   // NTS : if spectrum bounds unpassed Gershgorin is used
   // NTS : lancozs kern mu=2 used by paper
   param->cheb.a           = 0.0;
@@ -97,6 +98,7 @@ void readParameter(Parameter *param, const char *filename)
       // NTS : allocTypeFromName validates and exits on typos
       PARSE_KEY("gpu_alloc", param->allocType, allocTypeFromName, NO_FLAG);
       PARSE_KEY("gpu_stream_mb", param->streamMb, atoi, NO_FLAG);
+      PARSE_KEY("cheb_nb", param->chebNb, atoi, NO_FLAG);
     }
   }
 
@@ -158,5 +160,8 @@ void printParameter(Parameter *param)
     printf("\ttarget interval: [%g, %g]\n", param->cheb.lam_lo, param->cheb.lam_hi);
     printf("\tNp / NS: %d / %d\n", param->cheb.Np, param->cheb.NS);
     printf("\tkernel / mu: %d / %d\n", param->cheb.kernel, param->cheb.mu);
+    printf("\tsubblock width cheb_nb: %d%s\n",
+        param->chebNb,
+        param->chebNb > 0 ? "" : " (full block width)");
   }
 }

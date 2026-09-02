@@ -15,3 +15,5 @@ itermax 30
 # against compute (GPU build, ChebFD only; 0 = off). Pairs best with
 # gpu_alloc explicit.
 # gpu_stream_mb 0
+# Fused-kernel column-subblock width for ChebFD (0 = full block width)
+# cheb_nb 0

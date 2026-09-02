@@ -346,6 +346,83 @@ extern "C" void gpu_chebfdOp(Matrix *m,
 }
 
 /* ------------------------------------------------------------------ */
+/*  Subblock-width variants (cheb_nb) — see cuda_spmv_scs.cu.          */
+/* ------------------------------------------------------------------ */
+extern "C" void gpu_spMMVM_nb(Matrix *m, const DMatrix *x, DMatrix *y, int nb)
+{
+  NVTX_RANGE_PUSH_C("gpu.spMMVM_nb", NVTX_C_MATVEC);
+  GpuPartView v;
+  wholeMatrixView(m, &v);
+  SpmmvArgs a;
+  a.x     = x->entries;
+  a.y     = y->entries;
+  a.width = a.ld = x->nc;
+  a.nb    = (CG_UINT)nb;
+  launchSpmmvPart(&v, 0, &a);
+  GPU_SAFE_CALL(gpuDeviceSynchronize());
+  NVTX_RANGE_POP();
+}
+
+extern "C" void gpu_spMMVMFused_nb(Matrix *m,
+    const DMatrix *x,
+    V_ELE cA,
+    const DMatrix *p,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y,
+    int nb)
+{
+  NVTX_RANGE_PUSH_C("gpu.spMMVMFused_nb", NVTX_C_MATVEC);
+  GpuPartView v;
+  wholeMatrixView(m, &v);
+  ChebfdArgs a;
+  a.x     = x->entries;
+  a.p     = p->entries;
+  a.q     = (q != NULL) ? q->entries : NULL;
+  a.y     = y->entries;
+  a.acc   = NULL;
+  a.cA    = cA;
+  a.cP    = cP;
+  a.cQ    = cQ;
+  a.gc    = VCONST(0, 0);
+  a.width = a.ld = x->nc;
+  a.nb    = (CG_UINT)nb;
+  launchChebfdPart(&v, 0, &a);
+  GPU_SAFE_CALL(gpuDeviceSynchronize());
+  NVTX_RANGE_POP();
+}
+
+extern "C" void gpu_chebfdOp_nb(Matrix *m,
+    const DMatrix *w,
+    V_ELE cA,
+    V_ELE cP,
+    const DMatrix *q,
+    V_ELE cQ,
+    DMatrix *y,
+    V_ELE gc,
+    DMatrix *x,
+    int nb)
+{
+  GpuPartView v;
+  wholeMatrixView(m, &v);
+  ChebfdArgs a;
+  a.x     = w->entries;
+  a.p     = w->entries; /* chebfdOp's cP term is the matvec operand itself */
+  a.q     = (q != NULL) ? q->entries : NULL;
+  a.y     = y->entries;
+  a.acc   = x->entries;
+  a.cA    = cA;
+  a.cP    = cP;
+  a.cQ    = cQ;
+  a.gc    = gc;
+  a.width = a.ld = w->nc;
+  a.nb    = (CG_UINT)nb;
+  launchChebfdPart(&v, 0, &a);
+  GPU_SAFE_CALL(gpuDeviceSynchronize());
+}
+
+/* ------------------------------------------------------------------ */
 /*  Streaming sweeps (host-resident matrix; see cuda_matrix_stream).   */
 /* ------------------------------------------------------------------ */
 extern "C" void gpu_stream_spMMVM(GpuMatrixStream *s,
