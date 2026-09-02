@@ -45,7 +45,8 @@ typedef struct {
 
 /* Per-format launchers (cuda_spmv_{scs,crs}.cu): one fused-ChebFD / SpMMV
  * kernel over the whole matrix on `stream`, over `width` columns of
- * row-major blocks with leading dimension `ld`. Async; no sync. */
+ * row-major blocks with leading dimension `ld`. Async; no sync.
+ *   y = cA*(A x) + cP*p + cQ*q + cR*r  (q, r optional), acc += gc*y (optional) */
 void gpu_launch_chebfd(const Matrix *m,
     gpuStream_t stream,
     const V_ELE *x,
@@ -57,6 +58,8 @@ void gpu_launch_chebfd(const Matrix *m,
     V_ELE *y,
     V_ELE gc,
     V_ELE *acc,
+    const V_ELE *r,
+    V_ELE cR,
     CG_UINT width,
     CG_UINT ld);
 

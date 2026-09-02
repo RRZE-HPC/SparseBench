@@ -535,50 +535,52 @@ typedef struct {
   int Np;
 } FilterCtx;
 
+/* Clenshaw form of p(A') x = sum_n gc_n T_n(A') x with A' = alpha A + beta:
+ *   b_{Np+1} = b_{Np+2} = 0,
+ *   b_k      = gc_k x + 2 A' b_{k+1} - b_{k+2}        (k = Np .. 1),
+ *   p(A') x  = gc_0 x + A' b_1 - b_2.
+ * Same Np matrix applications as the forward T_n recurrence, but every
+ * step streams 3 operands in (gather b_{k+1}, b_{k+2}, x) and 1 out (b_k,
+ * written over b_{k+2}: row-local) instead of the forward form's 3 in and
+ * 2 out (T_n plus the read-modify-write of the accumulator). ncu shows
+ * this kernel at ~64 % of DRAM peak with ~12 GB compulsory per launch, so
+ * bytes are the cost: -20 % block traffic per step, and the smaller
+ * per-row working set keeps more z-neighbour gathers in L2. */
 static void filterSubBlock(GpuVectorStream *s, int k, CG_UINT w, void *vctx)
 {
   const FilterCtx *c = (const FilterCtx *)vctx;
   gpuStream_t st     = s->computeStream;
   const Matrix *A    = s->A;
   CG_UINT ld         = (CG_UINT)s->nb;
-  V_ELE *X = s->X[k], *U = s->U, *Wb = s->W;
+  V_ELE *X  = s->X[k];  /* constant input x, finally overwritten by p(A') x */
+  V_ELE *B1 = s->U;     /* b_{k+1} */
+  V_ELE *B2 = s->W;     /* b_{k+2}, becomes b_k */
   V_ELE two = VCONST(2.0, 0), mone = VCONST(-1.0, 0), zero = VCONST(0, 0);
+  int Np    = c->Np;
 
-  /* u = (alpha A + beta) x = T_1 x */
-  gpu_launch_chebfd(A, st, X, c->alpha, X, c->beta, NULL, zero, U, zero, NULL, w, ld);
-  /* w = 2 (alpha A + beta) u - x = T_2 x */
-  gpu_launch_chebfd(A, st, U, two * c->alpha, U, two * c->beta, X, mone, Wb, zero, NULL, w, ld);
-  /* x = gc0 x + gc1 u + gc2 w */
+  /* k = Np: b = gc_Np x  (no matvec; b_{Np+1} = b_{Np+2} = 0) */
   size_t n   = (size_t)s->vecRows * (size_t)ld;
   int blocks = (int)((n + LIN_THREADS - 1) / LIN_THREADS);
-  kernel_vs_axpby3<<<blocks, LIN_THREADS, 0, st>>>(n,
-      VCONST(c->gc[0], 0),
-      X,
-      VCONST(c->gc[1], 0),
-      U,
-      VCONST(c->gc[2], 0),
-      Wb,
-      X);
-  /* Remaining degrees; invariant U = T_{n-2}, W = T_{n-1}. U <- T_n in
-   * place (row-local: y aliases q) and x += gc[n] T_n in the same pass. */
-  for (int nn = 3; nn <= c->Np; nn++) {
-    gpu_launch_chebfd(A,
-        st,
-        Wb,
-        two * c->alpha,
-        Wb,
-        two * c->beta,
-        U,
-        mone,
-        U,
-        VCONST(c->gc[nn], 0),
-        X,
-        w,
-        ld);
-    V_ELE *t = U;
-    U        = Wb;
-    Wb       = t;
+  kernel_vs_axpby3<<<blocks, LIN_THREADS, 0, st>>>(
+      n, VCONST(c->gc[Np], 0), X, zero, X, zero, X, B1);
+  /* k = Np-1: b = gc_k x + 2 A' b_{k+1}   (b_{k+2} = 0) */
+  gpu_launch_chebfd(A, st, B1, two * c->alpha, B1, two * c->beta, NULL, zero, B2, zero,
+      NULL, X, VCONST(c->gc[Np - 1], 0), w, ld);
+  /* Now B2 = b_{Np-1}, B1 = b_Np: swap so B1 = b_{k+1}, B2 = b_{k+2}. */
+  V_ELE *t = B1;
+  B1       = B2;
+  B2       = t;
+  /* k = Np-2 .. 1: b_k = gc_k x + 2 A' b_{k+1} - b_{k+2}, written over b_{k+2}. */
+  for (int kk = Np - 2; kk >= 1; kk--) {
+    gpu_launch_chebfd(A, st, B1, two * c->alpha, B1, two * c->beta, B2, mone, B2, zero,
+        NULL, X, VCONST(c->gc[kk], 0), w, ld);
+    t  = B1;
+    B1 = B2;
+    B2 = t;
   }
+  /* Result: x <- gc_0 x + A' b_1 - b_2  (y aliases r: row-local). */
+  gpu_launch_chebfd(A, st, B1, c->alpha, B1, c->beta, B2, mone, X, zero, NULL, X,
+      VCONST(c->gc[0], 0), w, ld);
 }
 
 extern "C" void gpu_vstream_filter(GpuVectorStream *s,

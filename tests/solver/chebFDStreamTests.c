@@ -227,8 +227,10 @@ static int testFilterParity(void)
   memcpy(yRef.entries, y0.entries, sz * sizeof(V_ELE));
   applyFilter(&A, &f, &yRef, &uRef, &wRef);
 
-  const int nbs[3] = { 2, 3, NS }; /* partial last sub-block, exact fit */
-  for (int i = 0; i < 3; i++) {
+  /* nb 2 -> column-pair kernel, nb 4 -> column-quad kernel (+ a 3-wide
+   * scalar tail), nb 3 -> scalar, nb NS -> exact fit, one sub-block. */
+  const int nbs[4] = { 2, 4, 3, NS };
+  for (int i = 0; i < 4; i++) {
     GpuVectorStream *vs = gpu_vstream_init(&A, NS, nbs[i], tinyChunkBytes(NS), 0);
     CHECK(vs != NULL, "gpu_vstream_init(nb=%d) failed", nbs[i]);
     if (vs == NULL) {

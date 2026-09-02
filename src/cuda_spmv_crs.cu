@@ -21,6 +21,7 @@
 #define VEC_TILE 32
 #define ROW_TILE 8
 
+
 /* ------------------------------------------------------------------ */
 /*  CRS SpMV:  y = A * x                                             */
 /*  Each thread computes one row.                                     */
@@ -96,7 +97,7 @@ __global__ void kernel_spmmv_crs(CG_UINT nPartRows,
 
 /* ------------------------------------------------------------------ */
 /*  Fused ChebFD kernel — see cuda_spmv_scs.cu for the contract.      */
-/*    y   = cA*(A*xin) + cP*p + cQ*q          (q optional)            */
+/*    y   = cA*(A*xin) + cP*p + cQ*q + cR*r   (q, r optional)         */
 /*    acc = acc + gc*y                        (acc optional)          */
 /* ------------------------------------------------------------------ */
 __global__ void kernel_chebfd_crs(CG_UINT nPartRows,
@@ -115,7 +116,9 @@ __global__ void kernel_chebfd_crs(CG_UINT nPartRows,
     V_ELE cQ,
     V_ELE *y,
     V_ELE gc,
-    V_ELE *acc)
+    V_ELE *acc,
+    const V_ELE *r,
+    V_ELE cR)
 {
   CG_UINT vec = blockIdx.y * blockDim.x + threadIdx.x;
   if (vec >= numVecs)
@@ -137,6 +140,9 @@ __global__ void kernel_chebfd_crs(CG_UINT nPartRows,
   if (q != NULL) {
     t += cQ * q[e];
   }
+  if (r != NULL) {
+    t += cR * r[e];
+  }
   y[e] = t;
   if (acc != NULL) {
     acc[e] += gc * t;
@@ -155,9 +161,9 @@ static inline dim3 blockGrid(const Matrix *m, CG_UINT numVecs)
 }
 
 typedef struct {
-  const V_ELE *x, *p, *q;
+  const V_ELE *x, *p, *q, *r;
   V_ELE *y, *acc;
-  V_ELE cA, cP, cQ, gc;
+  V_ELE cA, cP, cQ, gc, cR;
   CG_UINT width, ld, nb;
 } ChebfdArgs;
 
@@ -199,7 +205,9 @@ static void launchChebfdPart(const GpuPartView *v, gpuStream_t stream, void *ua)
         a->cQ,
         a->y + v0,
         a->gc,
-        (a->acc != NULL) ? a->acc + v0 : NULL);
+        (a->acc != NULL) ? a->acc + v0 : NULL,
+        (a->r != NULL) ? a->r + v0 : NULL,
+        a->cR);
   }
 }
 
@@ -278,7 +286,9 @@ extern "C" void gpu_spMMVMFused_nosync(Matrix *m,
       cQ,
       y->entries,
       VCONST(0, 0),
-      NULL);
+      NULL,
+      NULL,
+      VCONST(0, 0));
 }
 
 extern "C" void gpu_chebfdOp_nosync(Matrix *m,
@@ -307,7 +317,9 @@ extern "C" void gpu_chebfdOp_nosync(Matrix *m,
       cQ,
       y->entries,
       gc,
-      x->entries);
+      x->entries,
+      NULL,
+      VCONST(0, 0));
 }
 
 extern "C" void gpu_spMVM(Matrix *m, const V_ELE *x, V_ELE *y)
@@ -392,6 +404,8 @@ extern "C" void gpu_spMMVMFused_nb(Matrix *m,
   a.q     = (q != NULL) ? q->entries : NULL;
   a.y     = y->entries;
   a.acc   = NULL;
+  a.r     = NULL;
+  a.cR    = VCONST(0, 0);
   a.cA    = cA;
   a.cP    = cP;
   a.cQ    = cQ;
@@ -422,6 +436,8 @@ extern "C" void gpu_chebfdOp_nb(Matrix *m,
   a.q     = (q != NULL) ? q->entries : NULL;
   a.y     = y->entries;
   a.acc   = x->entries;
+  a.r     = NULL;
+  a.cR    = VCONST(0, 0);
   a.cA    = cA;
   a.cP    = cP;
   a.cQ    = cQ;
@@ -447,6 +463,8 @@ extern "C" void gpu_launch_chebfd(const Matrix *m,
     V_ELE *y,
     V_ELE gc,
     V_ELE *acc,
+    const V_ELE *r,
+    V_ELE cR,
     CG_UINT width,
     CG_UINT ld)
 {
@@ -456,8 +474,10 @@ extern "C" void gpu_launch_chebfd(const Matrix *m,
   a.x     = x;
   a.p     = p;
   a.q     = q;
+  a.r     = r;
   a.y     = y;
   a.acc   = acc;
+  a.cR    = cR;
   a.cA    = cA;
   a.cP    = cP;
   a.cQ    = cQ;
