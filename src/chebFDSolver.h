@@ -22,6 +22,16 @@ extern void gershgorinBounds(CommType *comm, Matrix *A, double *a_out, double *b
 // blocks shaped like Y on entry (see allocChebData).
 extern void applyFilter(Matrix *A, ChebFilter *f, DMatrix *X, DMatrix *U, DMatrix *W);
 
+#if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
+// GPU only: install the matrix-streaming context + subblock width used by
+// applyFilter and rayleighRitz (see cuda_matrix_stream.cu). NULL disables
+// streaming; nb=0 means full-width kernels. solveChebFD manages this itself
+// from the gpu_stream_mb / cheb_nb parameters; the setter exists so the
+// streaming unit tests can drive applyFilter directly.
+struct GpuMatrixStream;
+extern void chebFDSetMatrixStream(struct GpuMatrixStream *s, int nb);
+#endif
+
 // Step 6: rank-revealing CGS2 of the nr x nc row-major block e; returns the
 // accepted rank m <= nc and compacts/repacks columns in place.
 extern int orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol);

@@ -69,6 +69,7 @@ for mtx in "${MTX_FORMATS[@]}"; do
                 UINT_TYPE="$uint_type" \
                 TOOLCHAIN="$TOOLCHAIN" \
                 ENABLE_NVTX="false" \
+                ENABLE_SECTIMER="false" \
                 >> "$LOG_FILE" 2>&1; then
 
           echo "  ✓ PASSED  → log: $LOG_FILE"

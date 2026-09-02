@@ -10,6 +10,7 @@
 #include "solver/chebFDGershgorinTests.h"
 #include "solver/chebFDStreamTests.h"
 #include "solver/chebFDUnitTests.h"
+#include "solver/sectionTimerTests.h"
 #include "solver/solverTestsSPMMV.h"
 #include "solver/solverTestsSPMV.h"
 
@@ -28,8 +29,9 @@ enum {
   RC_CHEBFD_GERSHGORIN = RC_BIT,
   RC_CHEBFD_UNIT       = RC_BIT,
   RC_CHEBFD_STREAM     = RC_BIT,
+  RC_SECTIMER          = RC_BIT,
   // Not a test suite failure
-  RC_UNSUPPORTED_MPI   = RC_BIT,
+  RC_UNSUPPORTED_MPI = RC_BIT,
 };
 
 // TODO : add tests for MPI cases
@@ -63,6 +65,7 @@ int main(int argc, char **argv)
     { "chebFDGershgorinTests", chebFDGershgorinTests, RC_CHEBFD_GERSHGORIN },
     { "chebFDUnitTests",       chebFDUnitTests,       RC_CHEBFD_UNIT       },
     { "chebFDStreamTests",     chebFDStreamTests,     RC_CHEBFD_STREAM     },
+    { "sectionTimerTests",     sectionTimerTests,     RC_SECTIMER          },
   };
   const size_t numSuites = sizeof(suites) / sizeof(suites[0]);
 
