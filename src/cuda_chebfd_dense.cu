@@ -24,6 +24,11 @@
 #define GRAM_TILE 16
 #define PROJ_CHUNKS 256
 #define LIN_THREADS 256
+/* Gram row-chunking: aim for this many blocks in flight, at most this many
+ * chunks, and never more partial-buffer bytes than this. */
+#define GRAM_MIN_BLOCKS 2048
+#define GRAM_MAX_CHUNKS 1024
+#define GRAM_PARTIAL_MAX_BYTES ((size_t)256 << 20)
 
 /* Real part of V_ELE as double (under USE_COMPLEX V_ELE is a
  * thrust::complex with no implicit conversion to double). */
@@ -42,6 +47,19 @@ static size_t g_partial_cap = 0;
 static V_ELE *g_scalar      = NULL; /* one device scalar for readback        */
 static V_ELE *g_repack      = NULL; /* out-of-place repack destination       */
 static size_t g_repack_cap  = 0;
+static double *g_gram_partial    = NULL; /* Gram row-chunk partials, nChunks x m x m */
+static size_t g_gram_partial_cap = 0;
+
+static void ensureGramScratch(size_t elems)
+{
+  if (elems > g_gram_partial_cap) {
+    if (g_gram_partial != NULL) {
+      GPU_SAFE_CALL(gpuFree(g_gram_partial));
+    }
+    GPU_SAFE_CALL(gpuMalloc((void **)&g_gram_partial, elems * sizeof(double)));
+    g_gram_partial_cap = elems;
+  }
+}
 
 static void ensureScratch(size_t partialElems, size_t repackElems)
 {
@@ -79,6 +97,11 @@ extern "C" void gpu_chebfd_scratch_free(void)
   if (g_scalar != NULL) {
     GPU_SAFE_CALL(gpuFree(g_scalar));
     g_scalar = NULL;
+  }
+  if (g_gram_partial != NULL) {
+    GPU_SAFE_CALL(gpuFree(g_gram_partial));
+    g_gram_partial     = NULL;
+    g_gram_partial_cap = 0;
   }
 }
 
@@ -218,11 +241,21 @@ __global__ void kernel_copy(size_t n, const V_ELE *src, V_ELE *dst)
   }
 }
 
-/* Rayleigh-Ritz projection H = Y^T (A Y), m x m. Only tiles on or above the
- * diagonal run; each writes both H[i,j] and H[j,i] from one accumulator so
- * H is exactly symmetric, which jacobiEigen assumes. */
-__global__ void kernel_gram(
-    CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H)
+/* Rayleigh-Ritz projection H = Y^T (A Y), m x m.
+ *
+ * Two kernels: kernel_gram_partial splits the rows into gridDim.z chunks so
+ * the (few) m/GRAM_TILE tiles of a small m don't leave the GPU nearly idle
+ * — with m=64 a single-pass tile grid is only 10 blocks streaming 2 GB
+ * serially. Only tiles on or above the diagonal run; each writes its chunk
+ * partial to partial[chunk][i][j]. kernel_gram_reduce sums the chunks in a
+ * fixed order (deterministic) and writes both H[i,j] and H[j,i] from one
+ * accumulator so H is exactly symmetric, which jacobiEigen assumes. */
+__global__ void kernel_gram_partial(CG_UINT nr,
+    int m,
+    const V_ELE *Ye,
+    const V_ELE *AYe,
+    double *partial,
+    CG_UINT rowsPerChunk)
 {
   __shared__ V_ELE As[GRAM_TILE][GRAM_TILE];
   __shared__ V_ELE Bs[GRAM_TILE][GRAM_TILE];
@@ -232,19 +265,24 @@ __global__ void kernel_gram(
   if (blockIdx.x > blockIdx.y)
     return;
 
-  int i      = blockIdx.x * GRAM_TILE + threadIdx.x;
-  int j      = blockIdx.y * GRAM_TILE + threadIdx.y;
+  int i       = blockIdx.x * GRAM_TILE + threadIdx.x;
+  int j       = blockIdx.y * GRAM_TILE + threadIdx.y;
+  int ai      = blockIdx.x * GRAM_TILE + threadIdx.x;
+  int bj      = blockIdx.y * GRAM_TILE + threadIdx.x;
+
+  CG_UINT rs  = (CG_UINT)blockIdx.z * rowsPerChunk;
+  CG_UINT re  = rs + rowsPerChunk;
+  if (re > nr)
+    re = nr;
 
   double acc = 0.0;
-  for (CG_UINT r0 = 0; r0 < nr; r0 += GRAM_TILE) {
+  for (CG_UINT r0 = rs; r0 < re; r0 += GRAM_TILE) {
     CG_UINT r = r0 + threadIdx.y;
-    int ai    = blockIdx.x * GRAM_TILE + threadIdx.x;
-    int bj    = blockIdx.y * GRAM_TILE + threadIdx.x;
 
     As[threadIdx.y][threadIdx.x] =
-        (r < nr && ai < m) ? Ye[(size_t)r * (size_t)m + (size_t)ai] : VCONST(0, 0);
+        (r < re && ai < m) ? Ye[(size_t)r * (size_t)m + (size_t)ai] : VCONST(0, 0);
     Bs[threadIdx.y][threadIdx.x] =
-        (r < nr && bj < m) ? AYe[(size_t)r * (size_t)m + (size_t)bj] : VCONST(0, 0);
+        (r < re && bj < m) ? AYe[(size_t)r * (size_t)m + (size_t)bj] : VCONST(0, 0);
     __syncthreads();
 
     for (int rr = 0; rr < GRAM_TILE; rr++) {
@@ -254,9 +292,23 @@ __global__ void kernel_gram(
   }
 
   if (i < m && j < m && i <= j) {
-    H[(size_t)i * (size_t)m + (size_t)j] = acc;
-    H[(size_t)j * (size_t)m + (size_t)i] = acc;
+    partial[((size_t)blockIdx.z * (size_t)m + (size_t)i) * (size_t)m + (size_t)j] = acc;
   }
+}
+
+__global__ void kernel_gram_reduce(int m, int nChunks, const double *partial, double *H)
+{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  int j = blockIdx.y;
+  if (i >= m || i > j)
+    return;
+
+  double s = 0.0;
+  for (int c = 0; c < nChunks; c++) {
+    s += partial[((size_t)c * (size_t)m + (size_t)i) * (size_t)m + (size_t)j];
+  }
+  H[(size_t)i * (size_t)m + (size_t)j] = s;
+  H[(size_t)j * (size_t)m + (size_t)i] = s;
 }
 
 /* Ritz residual: avbuf = AY*evk - evalk*(Y*evk) */
@@ -305,8 +357,32 @@ extern "C" void gpu_gramYtAY(
     CG_UINT nr, int m, const V_ELE *Ye, const V_ELE *AYe, double *H)
 {
   NVTX_RANGE_PUSH_C("gpu.gramYtAY", NVTX_C_RR);
-  int tiles = (m + GRAM_TILE - 1) / GRAM_TILE;
-  kernel_gram<<<dim3(tiles, tiles), dim3(GRAM_TILE, GRAM_TILE)>>>(nr, m, Ye, AYe, H);
+  int tiles      = (m + GRAM_TILE - 1) / GRAM_TILE;
+  int upperTiles = tiles * (tiles + 1) / 2;
+
+  /* Enough row chunks for >= GRAM_MIN_BLOCKS resident blocks, capped so the
+   * partial buffer (nChunks * m * m doubles) stays modest for wide blocks. */
+  int nChunks = (GRAM_MIN_BLOCKS + upperTiles - 1) / upperTiles;
+  if (nChunks > GRAM_MAX_CHUNKS)
+    nChunks = GRAM_MAX_CHUNKS;
+  size_t mm    = (size_t)m * (size_t)m;
+  size_t capEl = GRAM_PARTIAL_MAX_BYTES / sizeof(double);
+  while (nChunks > 1 && (size_t)nChunks * mm > capEl)
+    nChunks--;
+  /* Whole tiles per chunk: rows can't be more chunks than tile-rows. */
+  CG_UINT tileRows = (nr + GRAM_TILE - 1) / GRAM_TILE;
+  if ((CG_UINT)nChunks > tileRows)
+    nChunks = (int)tileRows;
+  if (nChunks < 1)
+    nChunks = 1;
+  CG_UINT rowsPerChunk = ((tileRows + nChunks - 1) / nChunks) * GRAM_TILE;
+
+  ensureGramScratch((size_t)nChunks * mm);
+
+  kernel_gram_partial<<<dim3(tiles, tiles, nChunks), dim3(GRAM_TILE, GRAM_TILE)>>>(
+      nr, m, Ye, AYe, g_gram_partial, rowsPerChunk);
+  kernel_gram_reduce<<<dim3((m + LIN_THREADS - 1) / LIN_THREADS, m), LIN_THREADS>>>(
+      m, nChunks, g_gram_partial, H);
   GPU_SAFE_CALL(gpuDeviceSynchronize());
   NVTX_RANGE_POP();
 }

@@ -32,10 +32,15 @@ void matrixGenerate(GMatrix *m, Parameter *p, int rank, int size, bool use_7pt_s
 {
 
   CG_UINT local_nrow = p->nx * p->ny * p->nz;
-  CG_UINT local_nnz  = 27 * local_nrow;
+  /* Upper bound on the entries this rank generates: 7 or 27 per row. Sized
+   * for the stencil in use, in size_t — 27 * rows overflows the 32-bit
+   * CG_UINT beyond ~159 M rows (nx ~ 542), which used to shrink the
+   * allocation silently and crash the fill loop. */
+  size_t stencilPts  = use_7pt_stencil ? 7 : 27;
+  size_t local_nnz   = stencilPts * (size_t)local_nrow;
 
   CG_UINT total_nrow = local_nrow * size;
-  CG_UINT total_nnz  = 27 * total_nrow;
+  double total_nnz   = (double)stencilPts * (double)total_nrow;
 
   int start_row      = local_nrow * rank;
   int stop_row       = start_row + local_nrow - 1;
@@ -46,7 +51,7 @@ void matrixGenerate(GMatrix *m, Parameter *p, int rank, int size, bool use_7pt_s
     } else {
       printf("Generate 27pt matrix with ");
     }
-    printf("%.2e total rows and %.2e nonzeros\n", (double)total_nrow, (double)total_nnz);
+    printf("%.2e total rows and up to %.2e nonzeros\n", (double)total_nrow, total_nnz);
   }
 
   m->entries = (Entry *)allocate(ARRAY_ALIGNMENT, local_nnz * sizeof(Entry));

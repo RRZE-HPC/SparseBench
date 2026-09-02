@@ -76,40 +76,45 @@ clean:
 $(TARGET): prebuild runTests.o $(OBJECTS) ${LINKS}
 	$(LD) $(LFLAGS) -o $@ runTests.o $(OBJECTS) ${LINKS} $(LIBS)
 
+# Test objects share struct layouts with the library headers (e.g. ChebData
+# in chebFDSolver.h): rebuild them whenever any header changes, or a stale
+# object silently corrupts the stack.
+HEADERS = $(wildcard ../src/*.h) common.h $(wildcard $(MOD1)/*.h) $(wildcard $(MOD2)/*.h)
+
 # Compile runTests.c into an object file
-runTests.o: runTests.c
+runTests.o: runTests.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Module 1 tests: matrix
-$(MOD1)/matrixTests.o: $(MOD1)/matrixTests.c 
+$(MOD1)/matrixTests.o: $(MOD1)/matrixTests.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c 
+$(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Module 2 tests: solver
-$(MOD2)/solverTestsSPMV.o: $(MOD2)/solverTestsSPMV.c 
+$(MOD2)/solverTestsSPMV.o: $(MOD2)/solverTestsSPMV.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/solverTestsSPMMV.o: $(MOD2)/solverTestsSPMMV.c 
+$(MOD2)/solverTestsSPMMV.o: $(MOD2)/solverTestsSPMMV.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c 
+$(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/spmmvSCS.o: $(MOD2)/spmmvSCS.c 
+$(MOD2)/spmmvSCS.o: $(MOD2)/spmmvSCS.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/chebFDGershgorinTests.o: $(MOD2)/chebFDGershgorinTests.c
+$(MOD2)/chebFDGershgorinTests.o: $(MOD2)/chebFDGershgorinTests.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/chebFDUnitTests.o: $(MOD2)/chebFDUnitTests.c
+$(MOD2)/chebFDUnitTests.o: $(MOD2)/chebFDUnitTests.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/chebFDStreamTests.o: $(MOD2)/chebFDStreamTests.c
+$(MOD2)/chebFDStreamTests.o: $(MOD2)/chebFDStreamTests.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(MOD2)/sectionTimerTests.o: $(MOD2)/sectionTimerTests.c
+$(MOD2)/sectionTimerTests.o: $(MOD2)/sectionTimerTests.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 format:
