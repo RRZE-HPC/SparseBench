@@ -109,7 +109,7 @@ int chebFilterInit(ChebFilter *f,
   for (int n = 1; n <= Np; n++) {
     double cn = 2.0 * (sin((double)n * theta_lo) - sin((double)n * theta_hi)) /
                 (M_PI * (double)n);
-    f->gc[n] = kernelFactor(kernel, n, Np, mu) * cn;
+    f->gc[n]  = kernelFactor(kernel, n, Np, mu) * cn;
   }
 
   return 0;

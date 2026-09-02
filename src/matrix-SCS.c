@@ -460,9 +460,9 @@ void spMMVMFused(Matrix *m,
     }
 
     for (int j = 0; j < C; ++j) {
-      CG_UINT row      = (CG_UINT)i * C + (CG_UINT)j;
-      V_ELE *y_row      = &y->entries[row * numVecs];
-      V_ELE *p_row      = &p->entries[row * numVecs];
+      CG_UINT row     = (CG_UINT)i * C + (CG_UINT)j;
+      V_ELE *y_row    = &y->entries[row * numVecs];
+      V_ELE *p_row    = &p->entries[row * numVecs];
       V_ELE *chunkAcc = &tmp[j * numVecs];
       if (q != NULL) {
         V_ELE *q_row = &q->entries[row * numVecs];
@@ -527,9 +527,9 @@ void chebfdOp(Matrix *m,
 
     for (int j = 0; j < C; ++j) {
       CG_UINT row     = (CG_UINT)i * C + (CG_UINT)j;
-      V_ELE *w_row     = &w->entries[row * numVecs];
-      V_ELE *y_row     = &y->entries[row * numVecs];
-      V_ELE *x_row     = &x->entries[row * numVecs];
+      V_ELE *w_row    = &w->entries[row * numVecs];
+      V_ELE *y_row    = &y->entries[row * numVecs];
+      V_ELE *x_row    = &x->entries[row * numVecs];
       V_ELE *chunkAcc = &tmp[j * numVecs];
       if (q != NULL) {
         V_ELE *q_row = &q->entries[row * numVecs];
