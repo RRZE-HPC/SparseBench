@@ -16,13 +16,13 @@
 
 #include "cuda_kernels.h"
 #include "gpu_backend.h"
+#include "gpu_cub.h"
 #include "nvtx_marker.h"
 
 #define WARP 32
 #define ROWS_PER_BLOCK 8
 #define GRAM_TILE 16
 #define PROJ_CHUNKS 256
-#define DOT_BLOCKS 256
 #define LIN_THREADS 256
 
 /* Real part of V_ELE as double (under USE_COMPLEX V_ELE is a
@@ -39,7 +39,6 @@ __device__ __host__ static inline double asReal(V_ELE z)
 /* Persistent scratch */
 static V_ELE *g_partial     = NULL; /* projection partials, PROJ_CHUNKS x nc */
 static size_t g_partial_cap = 0;
-static V_ELE *g_dotPartial  = NULL; /* column-norm partials, DOT_BLOCKS      */
 static V_ELE *g_scalar      = NULL; /* one device scalar for readback        */
 static V_ELE *g_repack      = NULL; /* out-of-place repack destination       */
 static size_t g_repack_cap  = 0;
@@ -60,9 +59,6 @@ static void ensureScratch(size_t partialElems, size_t repackElems)
     GPU_SAFE_CALL(gpuMalloc((void **)&g_repack, repackElems * sizeof(V_ELE)));
     g_repack_cap = repackElems;
   }
-  if (g_dotPartial == NULL) {
-    GPU_SAFE_CALL(gpuMalloc((void **)&g_dotPartial, DOT_BLOCKS * sizeof(V_ELE)));
-  }
   if (g_scalar == NULL) {
     GPU_SAFE_CALL(gpuMalloc((void **)&g_scalar, sizeof(V_ELE)));
   }
@@ -79,10 +75,6 @@ extern "C" void gpu_chebfd_scratch_free(void)
     GPU_SAFE_CALL(gpuFree(g_repack));
     g_repack     = NULL;
     g_repack_cap = 0;
-  }
-  if (g_dotPartial != NULL) {
-    GPU_SAFE_CALL(gpuFree(g_dotPartial));
-    g_dotPartial = NULL;
   }
   if (g_scalar != NULL) {
     GPU_SAFE_CALL(gpuFree(g_scalar));
@@ -157,50 +149,32 @@ __global__ void kernel_subtract(
   }
 }
 
-/* Column 2-norm squared of e[:,k] (stride nc) */
-__global__ void kernel_col_dot(CG_UINT nr, const V_ELE *e, int nc, int k, V_ELE *partial)
+__device__ static inline void atomicAddV(V_ELE *dst, V_ELE v)
 {
-  __shared__ V_ELE sd[LIN_THREADS];
-
-  V_ELE s = VCONST(0, 0);
-  for (CG_UINT r = blockIdx.x * blockDim.x + threadIdx.x; r < nr;
-       r += (CG_UINT)gridDim.x * blockDim.x) {
-    V_ELE v = e[(size_t)r * (size_t)nc + (size_t)k];
-    s += v * v;
-  }
-  sd[threadIdx.x] = s;
-  __syncthreads();
-
-  for (int t = blockDim.x / 2; t > 0; t >>= 1) {
-    if (threadIdx.x < t) {
-      sd[threadIdx.x] += sd[threadIdx.x + t];
-    }
-    __syncthreads();
-  }
-  if (threadIdx.x == 0) {
-    partial[blockIdx.x] = sd[0];
-  }
+#ifdef USE_COMPLEX
+  atomicAdd(&dst->real(), VREAL(v));
+  atomicAdd(&dst->imag(), VIMAG(v));
+#else
+  atomicAdd(dst, v);
+#endif
 }
 
-__global__ void kernel_reduce_scalar(int n, const V_ELE *partial, V_ELE *result)
+// Column 2-norm squared of e[:,k]
+__global__ void kernel_col_dot(CG_UINT nr, const V_ELE *e, int nc, int k, V_ELE *result)
 {
-  __shared__ V_ELE sd[LIN_THREADS];
+  using BlockReduce = gpucub::BlockReduce<V_ELE, LIN_THREADS>;
+  __shared__ typename BlockReduce::TempStorage tmp;
 
-  V_ELE s = VCONST(0, 0);
-  for (int i = threadIdx.x; i < n; i += blockDim.x) {
-    s += partial[i];
+  CG_UINT r = blockIdx.x * blockDim.x + threadIdx.x;
+  V_ELE v   = VCONST(0, 0);
+  if (r < nr) {
+    V_ELE eik = e[(size_t)r * (size_t)nc + (size_t)k];
+    v         = eik * eik;
   }
-  sd[threadIdx.x] = s;
-  __syncthreads();
 
-  for (int t = blockDim.x / 2; t > 0; t >>= 1) {
-    if (threadIdx.x < t) {
-      sd[threadIdx.x] += sd[threadIdx.x + t];
-    }
-    __syncthreads();
-  }
+  V_ELE sum = BlockReduce(tmp).Sum(v);
   if (threadIdx.x == 0) {
-    *result = sd[0];
+    atomicAddV(result, sum);
   }
 }
 
@@ -387,11 +361,12 @@ extern "C" int gpu_orthoMGS(CG_UINT nr, V_ELE *e, int nc, double tol)
       kernel_subtract<<<rowBlocks, dim3(WARP, ROWS_PER_BLOCK)>>>(nr, e, nc, k, m, coefs);
     }
 
-    kernel_col_dot<<<DOT_BLOCKS, LIN_THREADS>>>(nr, e, nc, k, g_dotPartial);
-    kernel_reduce_scalar<<<1, LIN_THREADS>>>(DOT_BLOCKS, g_dotPartial, g_scalar);
+    GPU_SAFE_CALL(gpuMemsetAsync(g_scalar, 0, sizeof(V_ELE), 0));
+    int colBlocks = (int)((nr + LIN_THREADS - 1) / LIN_THREADS);
+    kernel_col_dot<<<colBlocks, LIN_THREADS>>>(nr, e, nc, k, g_scalar);
 
     V_ELE nrm2;
-    /* Sync point for the kernels above. */
+    // Sync point 
     GPU_SAFE_CALL(gpuMemcpy(&nrm2, g_scalar, sizeof(V_ELE), gpuMemcpyDeviceToHost));
 
     double nrm = sqrt(asReal(nrm2));

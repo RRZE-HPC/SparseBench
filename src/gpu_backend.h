@@ -62,6 +62,9 @@
 #define gpuMallocManaged(ptr, size) GCXX_RUNTIME_BACKEND(MallocManaged)((ptr), (size))
 #define gpuFree(ptr) GCXX_RUNTIME_BACKEND(Free)((ptr))
 #define gpuMemcpy(dst, src, sz, k) GCXX_RUNTIME_BACKEND(Memcpy)((dst), (src), (sz), (k))
+#define gpuMemset(ptr, val, sz) GCXX_RUNTIME_BACKEND(Memset)((ptr), (val), (sz))
+#define gpuMemsetAsync(ptr, val, sz, str)                                               \
+  GCXX_RUNTIME_BACKEND(MemsetAsync)((ptr), (val), (sz), (str))
 #define gpuDeviceSynchronize() GCXX_RUNTIME_BACKEND(DeviceSynchronize)()
 
 /* --- Safe call macro with error checking -------------------------- */

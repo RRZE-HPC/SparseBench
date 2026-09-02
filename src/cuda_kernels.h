@@ -18,6 +18,9 @@ void gpu_waxpby(
 
 void gpu_ddot(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result);
 
+// Whole dot product on the GPU
+void gpu_ddot_device(CG_UINT n, const V_ELE *x, const V_ELE *y, V_ELE *result_d);
+
 void gpu_spmv_scs(CG_UINT nChunks,
     CG_UINT C,
     const CG_UINT *chunkPtr,
