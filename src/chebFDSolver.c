@@ -403,16 +403,14 @@ double residualNorm(CG_UINT nr, V_ELE *avbuf)
   return sqrt((double)res2);
 }
 
-int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
+// Up-front sanity checks for solveChebFD: 
+//     0 when every ChebFD option is in range 
+//    -1 on the first bad one 
+static int verify_params(CommType *comm, Parameter *param, const Matrix *A)
 {
-#ifdef USE_COMPLEX
-  if (commIsMaster(comm)) {
-    printf("ChebFD (v1) supports real-symmetric matrices only "
-           "(rebuild without USE_COMPLEX).\n");
-  }
-  return -1;
+#if !defined(SCS) || CHEB_GPU
+  (void)A; /* only read by the SCS stack-width check on the CPU build */
 #endif
-
   if (!param->cheb.have_target || !(param->cheb.lam_lo < param->cheb.lam_hi)) {
     if (commIsMaster(comm)) {
       printf("ChebFD: set a valid target interval (cheb_lam_lo < cheb_lam_hi) "
@@ -468,6 +466,22 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     printf("ChebFD: cheb_nb is GPU-only; ignoring.\n");
   }
 #endif
+  return 0;
+}
+
+int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
+{
+#ifdef USE_COMPLEX
+  if (commIsMaster(comm)) {
+    printf("ChebFD (v1) supports real-symmetric matrices only "
+           "(rebuild without USE_COMPLEX).\n");
+  }
+  return -1;
+#endif
+
+  if (verify_params(comm, param, A) != 0) {
+    return -1;
+  }
 
   NVTX_RANGE_PUSH_C("ChebFD.solve", NVTX_C_SETUP);
 
@@ -492,7 +506,7 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
           param->cheb.lam_lo,
           param->cheb.lam_hi,
           param->cheb.Np,
-          (KernelType)param->cheb.kernel, /* validated 0..3 above */
+          (KernelType)param->cheb.kernel, /* validated 0..3 in verify_params */
           param->cheb.mu) != 0) {
     NVTX_RANGE_POP();
     return -1;
