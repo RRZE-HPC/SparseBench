@@ -194,7 +194,7 @@ To run the benchmark, call:
 | ------ | ------------------ | --------------------------------------------------------------------------------- |
 | `-h`   | —                  | Show help text.                                                                   |
 | `-f`   | `<parameter file>` | Load options from a parameter file.                                               |
-| `-m`   | `<MM matrix>`      | Load a Matrix Market (.mtx) file.                                                 |
+| `-m`   | `<matrix>`         | Matrix source: MM file (`.mtx`/`.bmx`), `generate`/`generate7P` stencil, or `scamac:<argstring>`. |
 | `-c`   | `<file name>`      | Convert a Matrix Market file to binary matrix format (.bmx).                      |
 | `-t`   | `<bench type>`     | Benchmark type: `cg`, `spmv`, or `gmres`. Default: `cg`.                          |
 | `-x`   | `<int>`            | Size in x dimension for generated matrix (ignored if loading file). Default: 100. |
@@ -208,7 +208,7 @@ To run the benchmark, call:
 SparseBench supports multiple ways to provide input matrices:
 
 1. **Generated matrices**: Use default or specify dimensions with `-x`, `-y`, `-z`:
-   - Default mode generates a 3D 7-point stencil matrix
+   - Default mode (`-m generate`) generates a 3D 27-point stencil matrix
    - Use `-m generate7P` for explicit 7-point stencil generation
 
 2. **Matrix Market files** (`.mtx`): Load standard MatrixMarket format:
@@ -228,6 +228,22 @@ SparseBench supports multiple ways to provide input matrices:
    ```sh
    ./sparseBench-GCC -c matrix.mtx
    ```
+
+4. **ScaMaC generators** (`scamac:<argstring>`, requires `ENABLE_SCAMAC=true`):
+   generate matrices of scalable size in-process from the
+   [ScaMaC](https://bitbucket.org/essex/matrixcollection) library (external
+   dependency, modified BSD license) — no intermediate files, and every rank
+   generates exactly its own rows:
+
+   ```sh
+   ./sparseBench-GCC -m scamac:Anderson,Lx=100,Ly=100,Lz=100,ranpot=2.5 -t cheb
+   ```
+
+   The ScaMaC installation prefix defaults to `~/.local/scamac` and can be
+   overridden with `SCAMAC_INSTALL` (see `mk/include_SCAMAC.mk`). Complex
+   matrices (e.g. `scamac:TridiagonalComplex`) need a `USE_COMPLEX_ELEMENTS=true`
+   build, and matrices beyond the 32-bit index range need `UINT_TYPE=ULL`;
+   both are rejected with a clear error message otherwise.
 
 ### Example Usage
 

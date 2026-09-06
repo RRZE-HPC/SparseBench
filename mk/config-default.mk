@@ -15,6 +15,9 @@ ENABLE_MPI ?= false
 # Enable OpenMP shared memory parallelization (true or false)
 # Can be combined with MPI
 ENABLE_OPENMP ?= false
+# Generate matrices in-process from the ScaMaC library (true or false).
+# Needs a ScaMaC installation - see mk/include_SCAMAC.mk (SCAMAC_INSTALL).
+ENABLE_SCAMAC ?= false
 FLOAT_TYPE ?= DP # SP for float, DP for double
 UINT_TYPE ?= U # U for unsigned int, ULL for unsigned long long int
 USE_COMPLEX_ELEMENTS ?= false

@@ -16,6 +16,7 @@
 #include "kernel_dispatch.h"
 #include "matrix.h"
 #include "matrixBinfile.h"
+#include "matrixScamac.h"
 #include "nvtx_marker.h"
 #include "parameter.h"
 #include "profiler.h"
@@ -39,7 +40,9 @@ static void firstTouchFill(V_ELE *data_ptr, size_t elem_count, V_ELE value)
 
 static void initMatrix(CommType *c, Parameter *p, GMatrix *m)
 {
-  if (strcmp(p->filename, "generate") == 0) {
+  if (matrixIsScamac(p->filename)) {
+    matrixGenerateScamac(m, p->filename, c->rank, c->size);
+  } else if (strcmp(p->filename, "generate") == 0) {
     matrixGenerate(m, p, c->rank, c->size, false);
   } else if (strcmp(p->filename, "generate7P") == 0) {
     matrixGenerate(m, p, c->rank, c->size, true);

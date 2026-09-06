@@ -23,7 +23,10 @@ extern int BenchType;
   "  -h         Show this help text\n"                                                   \
   "  -c <file name>   Convert MM matrix to binary matrix file.\n"                        \
   "  -f <parameter file>   Load options from a parameter file\n"                         \
-  "  -m <MM matrix>   Load a matrix market file\n"                                       \
+  "  -m <matrix>   Matrix source: a Matrix Market file, 'generate' (27pt "               \
+  "stencil),\n"                                                                          \
+  "     'generate7P' (7pt stencil) or 'scamac:<argstring>' (ScaMaC generator,\n"         \
+  "     needs ENABLE_SCAMAC), e.g. scamac:Anderson,Lx=100,Ly=100,Lz=100.\n"              \
   "  -t <bench type>   Benchmark type, can be cg, spmv, spmmv, cheb or gmres. "          \
   "Default cg\n"                                                                         \
   "  -x <int>   Size in x for generated matrix, ignored if MM file is "                  \
