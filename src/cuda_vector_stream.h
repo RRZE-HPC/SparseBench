@@ -74,10 +74,10 @@ void gpu_launch_spmmv(const Matrix *m,
 
 typedef struct GpuVectorStream {
   const Matrix *A;
-  CG_UINT nr;      /* matrix rows */
-  CG_UINT vecRows; /* block rows incl. SCS padding */
-  int NS;          /* allocation width of the host blocks */
-  int nb;          /* columns per streamed sub-block */
+  CG_UINT nr;        /* matrix rows */
+  CG_UINT vecRows;   /* block rows incl. SCS padding */
+  int NS;            /* allocation width of the host blocks */
+  int nb;            /* columns per streamed sub-block */
   CG_UINT chunkRows; /* rows per streamed row chunk (multiple of 16) */
 
   /* Column sub-block buffers, all vecRows x nb with ld = nb. X is

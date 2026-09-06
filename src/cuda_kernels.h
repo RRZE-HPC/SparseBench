@@ -102,7 +102,8 @@ void gpu_vstream_spmmv(GpuVectorStream *s, const V_ELE *Yh, V_ELE *AYh, int nc);
 
 /* G (m x m, host) = A^T B for two vecRows x m blocks (pass Bh == Ah or
  * NULL for A^T A). Exactly symmetric. */
-void gpu_vstream_gram(GpuVectorStream *s, const V_ELE *Ah, const V_ELE *Bh, int m, double *Gh);
+void gpu_vstream_gram(
+    GpuVectorStream *s, const V_ELE *Ah, const V_ELE *Bh, int m, double *Gh);
 
 /* Y (stride m) <- Y * B with B m x mOut row-major (host); the result is
  * written back in place at stride mOut (<= m). */

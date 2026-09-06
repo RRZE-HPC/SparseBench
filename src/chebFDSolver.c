@@ -403,9 +403,9 @@ double residualNorm(CG_UINT nr, V_ELE *avbuf)
   return sqrt((double)res2);
 }
 
-// Up-front sanity checks for solveChebFD: 
-//     0 when every ChebFD option is in range 
-//    -1 on the first bad one 
+// Up-front sanity checks for solveChebFD:
+//     0 when every ChebFD option is in range
+//    -1 on the first bad one
 static int verify_params(CommType *comm, Parameter *param, const Matrix *A)
 {
 #if !defined(SCS) || CHEB_GPU
@@ -693,7 +693,8 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
     /* Residuals of every in-interval pair: one streamed pass over Y / AY on
      * the GPU, per-pair host kernels otherwise. */
 #if CHEB_GPU
-    gpu_vstream_ritzResiduals(vs, Y->entries, AY->entries, m, eval, evec, sel, nsel, res2);
+    gpu_vstream_ritzResiduals(
+        vs, Y->entries, AY->entries, m, eval, evec, sel, nsel, res2);
 #else
     for (int t = 0; t < nsel; t++) {
       computeRitzResidual(Y, AY, m, nr, eval[sel[t]], evec, sel[t], evk, avbuf);
@@ -825,10 +826,9 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
           1.0e-9 * matvecBytes / tMatvec,
           nPasses,
           1.0e3 * tMatvec / (double)nPasses,
-          nFilterPasses > 0
-              ? 1.0e3 * SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_FILTER) /
-                (double)nFilterPasses
-              : 0.0);
+          nFilterPasses > 0 ? 1.0e3 * SECTION_TIMER_WALL_SEC(chebTimer, CHEBT_FILTER) /
+                                  (double)nFilterPasses
+                            : 0.0);
     }
     printf("Found %d eigenpairs in target interval [%.6g, %.6g]:\n",
         NT_found,
@@ -857,10 +857,11 @@ int solveChebFD(CommType *comm, Parameter *param, Matrix *A)
  * nothing until touched. */
 static void allocDMat(DMatrix *M, CG_UINT vecRows, int NS, int pinned)
 {
-  M->nr      = vecRows;
-  M->nc      = NS;
-  size_t sz  = (size_t)vecRows * (size_t)NS * sizeof(V_ELE);
-  M->entries = pinned ? (V_ELE *)allocateHost(sz) : (V_ELE *)allocate(ARRAY_ALIGNMENT, sz);
+  M->nr     = vecRows;
+  M->nc     = NS;
+  size_t sz = (size_t)vecRows * (size_t)NS * sizeof(V_ELE);
+  M->entries =
+      pinned ? (V_ELE *)allocateHost(sz) : (V_ELE *)allocate(ARRAY_ALIGNMENT, sz);
 }
 
 void allocChebData(ChebData *d, Matrix *m, int NS)

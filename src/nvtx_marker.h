@@ -5,7 +5,6 @@
 #ifndef NVTX_MARKER_H
 #define NVTX_MARKER_H
 
-
 /* ---- range colors (ARGB; nsys ignores the alpha byte) ---------------- */
 #define NVTX_C_SETUP 0x76B900u   /* green    init / alloc / teardown      */
 #define NVTX_C_CONVERT 0x8B6914u /* brown    matrix read + format convert */
@@ -20,16 +19,16 @@
 
 /* ---- categories (filterable in nsys / ncu --nvtx-include) ------------ */
 typedef enum {
-  NVTX_CAT_SETUP = 1,
+  NVTX_CAT_SETUP   = 1,
   NVTX_CAT_CONVERT = 2,
-  NVTX_CAT_MATVEC = 3,
-  NVTX_CAT_FILTER = 4,
-  NVTX_CAT_ORTHO = 5,
-  NVTX_CAT_RR = 6,
-  NVTX_CAT_RESID = 7,
-  NVTX_CAT_VECTOR = 8,
-  NVTX_CAT_CG = 9,
-  NVTX_CAT_STREAM = 10
+  NVTX_CAT_MATVEC  = 3,
+  NVTX_CAT_FILTER  = 4,
+  NVTX_CAT_ORTHO   = 5,
+  NVTX_CAT_RR      = 6,
+  NVTX_CAT_RESID   = 7,
+  NVTX_CAT_VECTOR  = 8,
+  NVTX_CAT_CG      = 9,
+  NVTX_CAT_STREAM  = 10
 } NvtxCategory;
 
 #ifdef USE_NVTX
