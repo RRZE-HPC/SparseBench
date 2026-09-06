@@ -317,6 +317,7 @@ int main(int argc, char **argv)
   gpu_finalize();
 #endif
   commFinalize(&comm);
+  freeParameter(&param);
 
   return rc;
 }

@@ -41,8 +41,10 @@ typedef struct {
 } Parameter;
 
 void initParameter(Parameter *);
+void setParameterFilename(Parameter *, const char *);
 void readParameter(Parameter *, const char *);
 void printParameter(Parameter *);
+void freeParameter(Parameter *);
 
 #ifdef CRS
 #define FMT "CRS"

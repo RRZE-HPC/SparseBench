@@ -11,9 +11,27 @@
 #include "cli.h" // BenchType / CHEBFD, for the ChebFD section of printParameter
 #define MAXLINE 4096
 
+void setParameterFilename(Parameter *param, const char *filename)
+{
+  char *dup = strdup(filename);
+  if (dup == NULL) {
+    fprintf(stderr, "Error: could not copy matrix name '%s'\n", filename);
+    exit(EXIT_FAILURE);
+  }
+  free(param->filename);
+  param->filename = dup;
+}
+
+void freeParameter(Parameter *param)
+{
+  free(param->filename);
+  param->filename = NULL;
+}
+
 void initParameter(Parameter *param)
 {
-  param->filename   = "generate";
+  param->filename   = NULL;
+  setParameterFilename(param, "generate");
   param->nx         = 100;
   param->ny         = 100;
   param->nz         = 100;
@@ -79,7 +97,9 @@ void readParameter(Parameter *param, const char *filename)
 #define NO_FLAG ((void)0)
 
     if (tok != NULL && val != NULL) {
-      PARSE_KEY("filename", param->filename, strdup, NO_FLAG);
+      if (strcmp(tok, "filename") == 0) {
+        setParameterFilename(param, val);
+      }
       PARSE_KEY("nx", param->nx, atoi, NO_FLAG);
       PARSE_KEY("ny", param->ny, atoi, NO_FLAG);
       PARSE_KEY("nz", param->nz, atoi, NO_FLAG);

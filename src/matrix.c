@@ -281,6 +281,8 @@ void matrixConvertfromMM(MMMatrix *mm, GMatrix *m)
       m->entries[id].col = (CG_UINT)entries[id].col;
     }
   }
+
+  deallocate(valsPerRow);
 }
 
 void freeGMatrix(GMatrix *m)

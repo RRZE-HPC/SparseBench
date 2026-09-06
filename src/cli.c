@@ -68,7 +68,7 @@ void parseArguments(CommType *comm, Parameter *param, int argc, char **argv)
       readParameter(param, optarg);
       break;
     case 'm':
-      param->filename = optarg;
+      setParameterFilename(param, optarg);
       break;
     case 't':
       if (strcmp(optarg, "cg") == 0) {
