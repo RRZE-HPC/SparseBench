@@ -86,13 +86,16 @@ extern "C" void gpu_waxpby3_sync(CG_UINT n,
 #define DDOT_THREADS 256
 
 /* atomicAdd for V_ELE — there is no complex atomic, so under USE_COMPLEX
- * the components accumulate separately (thrust::complex is layout-locked,
- * &real() and &imag() give plain float/double pointers into the value). */
+ * the components accumulate separately (thrust::complex accessors return
+ * by value, so the component pointers come from a reinterpret_cast onto
+ * the layout-locked {real, imag} pair). */
 __device__ static inline void atomicAddV(V_ELE *dst, V_ELE v)
 {
 #ifdef USE_COMPLEX
-  atomicAdd(&dst->real(), VREAL(v));
-  atomicAdd(&dst->imag(), VIMAG(v));
+  typename V_ELE::value_type *c =
+      reinterpret_cast<typename V_ELE::value_type *>(dst);
+  atomicAdd(c + 0, VREAL(v));
+  atomicAdd(c + 1, VIMAG(v));
 #else
   atomicAdd(dst, v);
 #endif
