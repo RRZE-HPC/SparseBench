@@ -30,7 +30,7 @@ void freeParameter(Parameter *param)
 
 void initParameter(Parameter *param)
 {
-  param->filename   = NULL;
+  param->filename = NULL;
   setParameterFilename(param, "generate");
   param->nx         = 100;
   param->ny         = 100;

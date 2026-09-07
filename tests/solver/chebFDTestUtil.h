@@ -68,7 +68,7 @@ static inline void buildTridiagMatrix(Matrix *A, GMatrix *gm, int n, int C, int 
   gm->rowPtr   = (CG_UINT *)allocate(ARRAY_ALIGNMENT, (size_t)(n + 1) * sizeof(CG_UINT));
   gm->entries  = (Entry *)allocate(ARRAY_ALIGNMENT, (size_t)gm->nnz * sizeof(Entry));
 
-  CG_UINT idx = 0;
+  CG_UINT idx  = 0;
   for (int i = 0; i < n; i++) {
     gm->rowPtr[i] = idx;
     if (i > 0) {
@@ -118,9 +118,10 @@ static inline void fillRandomBlock(
     for (int c = 0; c < nc; c++) {
       double rv = 0.0;
       if (r < nr) {
-        unsigned long long h = splitmix64Local(seed + r * 0x9E3779B97F4A7C15ull +
-                                               (unsigned long long)c * 0xff51afd7ed558ccdull);
-        rv                   = (double)(h >> 11) / (double)(1ull << 53) * 2.0 - 1.0;
+        unsigned long long h =
+            splitmix64Local(seed + r * 0x9E3779B97F4A7C15ull +
+                            (unsigned long long)c * 0xff51afd7ed558ccdull);
+        rv = (double)(h >> 11) / (double)(1ull << 53) * 2.0 - 1.0;
       }
       e[r * (CG_UINT)nc + (CG_UINT)c] = (V_ELE)rv;
     }

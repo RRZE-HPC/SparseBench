@@ -78,16 +78,16 @@ static int testChebFilterInit(void)
 
   /* gc[0] closed form: kernelFactor(.,0,..) == 1 for every kernel, so
    * gc[0] = (theta_lo - theta_hi)/pi with theta = acos(alpha*x+beta). */
-  double alpha    = 2.0 / (b - a);
-  double beta     = -(a + b) / (b - a);
-  double thetaLo  = acos(alpha * lamLo + beta);
-  double thetaHi  = acos(alpha * lamHi + beta);
-  double gc0Ref   = (thetaLo - thetaHi) / M_PI;
+  double alpha   = 2.0 / (b - a);
+  double beta    = -(a + b) / (b - a);
+  double thetaLo = acos(alpha * lamLo + beta);
+  double thetaHi = acos(alpha * lamHi + beta);
+  double gc0Ref  = (thetaLo - thetaHi) / M_PI;
   CHECK(fabs(f.gc[0] - gc0Ref) < 1e-12, "gc[0]=%.10g expected %.10g", f.gc[0], gc0Ref);
 
   /* Deep inside the target interval, p(x) should be close to the window's
    * value of 1; well outside, close to 0. */
-  double pIn  = evalChebFilterAt(&f, 1.0);
+  double pIn   = evalChebFilterAt(&f, 1.0);
   double pOut1 = evalChebFilterAt(&f, -0.5);
   double pOut2 = evalChebFilterAt(&f, 2.5);
   CHECK(fabs(pIn - 1.0) < 0.05, "p(1.0)=%.6f should be close to 1", pIn);
@@ -125,7 +125,10 @@ static int testJacobiEigen(void)
     double lambdaRef;
     tridiagEigenvalue(n, k, &lambdaRef);
     double got = eval[k - 1];
-    CHECK(fabs(got - lambdaRef) < 1e-9, "eval[%d]=%.10g expected %.10g", k - 1, got,
+    CHECK(fabs(got - lambdaRef) < 1e-9,
+        "eval[%d]=%.10g expected %.10g",
+        k - 1,
+        got,
         lambdaRef);
 
     /* Residual check against the untouched copy: A*v - lambda*v ~ 0. */
@@ -138,7 +141,10 @@ static int testJacobiEigen(void)
       double d = avi - got * evec[i * n + (k - 1)];
       res2 += d * d;
     }
-    CHECK(sqrt(res2) < 1e-8, "||A v_%d - lambda v_%d|| = %.3e too large", k - 1, k - 1,
+    CHECK(sqrt(res2) < 1e-8,
+        "||A v_%d - lambda v_%d|| = %.3e too large",
+        k - 1,
+        k - 1,
         sqrt(res2));
   }
 
@@ -159,17 +165,17 @@ static int testFusedKernels(void)
   buildTridiagMatrix(&A, &gm, n, 1, 1);
   CG_UINT vecRows = matrixVecRows(&A);
 
-  int nc     = 4;
-  CG_UINT sz = vecRows * (CG_UINT)nc;
+  int nc          = 4;
+  CG_UINT sz      = vecRows * (CG_UINT)nc;
   DMatrix w, q, yRef, yFused, xRef, xFused;
   w.nr = q.nr = yRef.nr = yFused.nr = xRef.nr = xFused.nr = vecRows;
   w.nc = q.nc = yRef.nc = yFused.nc = xRef.nc = xFused.nc = nc;
-  w.entries       = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
-  q.entries       = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
-  yRef.entries    = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
-  yFused.entries  = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
-  xRef.entries    = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
-  xFused.entries  = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
+  w.entries      = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
+  q.entries      = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
+  yRef.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
+  yFused.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
+  xRef.entries   = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
+  xFused.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
 
   fillRandomBlock(w.entries, vecRows, vecRows, nc, 0x1234);
   fillRandomBlock(q.entries, vecRows, vecRows, nc, 0x5678);
@@ -180,8 +186,8 @@ static int testFusedKernels(void)
 
   /* spMMVMFused vs. spMMVM+waxpby composition (2-term and 3-term forms). */
   DMatrix Aw;
-  Aw.nr = vecRows;
-  Aw.nc = nc;
+  Aw.nr      = vecRows;
+  Aw.nc      = nc;
   Aw.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
   spMMVM(&A, &w, &Aw);
   waxpby((CG_UINT)sz, cA, Aw.entries, cP, w.entries, yRef.entries);
@@ -228,8 +234,14 @@ static int testFusedKernels(void)
   V_ELE *w2 = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)sz * sizeof(V_ELE));
   waxpby((CG_UINT)sz, (V_ELE)1.1, xRef.entries, (V_ELE)(-0.4), w.entries, w1);
   waxpby((CG_UINT)sz, (V_ELE)1.0, w1, (V_ELE)0.9, q.entries, w1);
-  waxpby3((CG_UINT)sz, (V_ELE)1.1, xRef.entries, (V_ELE)(-0.4), w.entries, (V_ELE)0.9,
-      q.entries, w2);
+  waxpby3((CG_UINT)sz,
+      (V_ELE)1.1,
+      xRef.entries,
+      (V_ELE)(-0.4),
+      w.entries,
+      (V_ELE)0.9,
+      q.entries,
+      w2);
   maxd = maxAbsDiff(w1, w2, sz);
   CHECK(maxd < 1e-9, "waxpby3 max|diff|=%.3e", maxd);
 
@@ -312,7 +324,9 @@ static int testApplyFilter(void)
       diff2 += dd * dd;
     }
     CHECK(sqrt(diff2) < 1e-6,
-        "column %d: ||Y[:,k] - p(lambda_k) v_k|| = %.3e too large", k - 1, sqrt(diff2));
+        "column %d: ||Y[:,k] - p(lambda_k) v_k|| = %.3e too large",
+        k - 1,
+        sqrt(diff2));
   }
 
   free(v);
@@ -335,10 +349,11 @@ static double gramOffDiagMax(V_ELE *e, CG_UINT nr, int m)
     for (int j = i; j < m; j++) {
       double dot = 0.0;
       for (CG_UINT r = 0; r < nr; r++) {
-        dot += (double)e[r * (CG_UINT)m + (CG_UINT)i] * (double)e[r * (CG_UINT)m + (CG_UINT)j];
+        dot += (double)e[r * (CG_UINT)m + (CG_UINT)i] *
+               (double)e[r * (CG_UINT)m + (CG_UINT)j];
       }
       double target = (i == j) ? 1.0 : 0.0;
-      double d       = fabs(dot - target);
+      double d      = fabs(dot - target);
       if (d > maxOff)
         maxOff = d;
     }
@@ -353,7 +368,7 @@ static int testOrthoMGS(void)
 
   CG_UINT nr = 50;
   int nc     = 8;
-  V_ELE *e   = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)nr * (size_t)nc * sizeof(V_ELE));
+  V_ELE *e = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)nr * (size_t)nc * sizeof(V_ELE));
 
   fillRandomBlock(e, nr, nr, nc, 0xdeadbeef);
   int m = orthoMGS(nr, e, nc, 1e-8);
@@ -412,7 +427,10 @@ static int testRayleighRitzAndResidual(void)
     double lambdaRef;
     tridiagEigenvalue(n, k, &lambdaRef);
     double got = d.eval[k - 1];
-    CHECK(fabs(got - lambdaRef) < 1e-8, "eval[%d]=%.10g expected %.10g", k - 1, got,
+    CHECK(fabs(got - lambdaRef) < 1e-8,
+        "eval[%d]=%.10g expected %.10g",
+        k - 1,
+        got,
         lambdaRef);
 
     computeRitzResidual(&d.Y, &d.AY, n, nr, got, d.evec, k - 1, d.evk, d.avbuf);
@@ -458,20 +476,21 @@ static int testSolveChebFDEndToEnd(void)
 
   Parameter param;
   memset(&param, 0, sizeof(param));
-  param.eps            = 1e-10;
-  param.itermax         = 60;
-  param.verbose         = 0;
-  param.cheb.lam_lo     = lamLo;
-  param.cheb.lam_hi     = lamHi;
-  param.cheb.Np         = 80;
-  param.cheb.NS         = 10;
-  param.cheb.kernel     = 3; /* Lanczos */
-  param.cheb.mu         = 2;
+  param.eps              = 1e-10;
+  param.itermax          = 60;
+  param.verbose          = 0;
+  param.cheb.lam_lo      = lamLo;
+  param.cheb.lam_hi      = lamHi;
+  param.cheb.Np          = 80;
+  param.cheb.NS          = 10;
+  param.cheb.kernel      = 3; /* Lanczos */
+  param.cheb.mu          = 2;
   param.cheb.have_bounds = 0;
   param.cheb.have_target = 1;
 
-  int found = solveChebFD(&comm, &param, &A);
-  CHECK(found == 3, "found %d eigenpairs in [%.4f, %.4f], expected 3", found, lamLo, lamHi);
+  int found              = solveChebFD(&comm, &param, &A);
+  CHECK(
+      found == 3, "found %d eigenpairs in [%.4f, %.4f], expected 3", found, lamLo, lamHi);
 
   freeMatrix(&A);
   freeGMatrix(&gm);
@@ -487,7 +506,7 @@ int chebFDUnitTests(int argc, char **argv)
   printf("Running ChebFD unit tests:\n");
 
   int results[7];
-  int i = 0;
+  int i        = 0;
   results[i++] = testChebFilterInit();
   results[i++] = testJacobiEigen();
   results[i++] = testFusedKernels();
@@ -496,7 +515,7 @@ int chebFDUnitTests(int argc, char **argv)
   results[i++] = testRayleighRitzAndResidual();
   results[i++] = testSolveChebFDEndToEnd();
 
-  int passed = 0;
+  int passed   = 0;
   for (int j = 0; j < i; j++) {
     passed += results[j] ? 1 : 0;
   }

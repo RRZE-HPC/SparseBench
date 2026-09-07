@@ -75,7 +75,7 @@ void matrixGenerateScamac(GMatrix *m, const char *matarg, int rank, int size)
   free(errstr);
   errstr = NULL;
 
-  err = scamac_generator_finalize(gen);
+  err    = scamac_generator_finalize(gen);
   if (err == SCAMAC_EOVERFLOW) {
     die("ScaMaC matrix '%s': dimension exceeds the maximal index value", argstr);
   }

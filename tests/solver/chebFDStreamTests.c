@@ -66,9 +66,10 @@ static void buildTridiagMatrixCS(Matrix *A, GMatrix *gm, int n, int C, int sigma
 static DMatrix makeBlock(CG_UINT rows, int nc)
 {
   DMatrix m;
-  m.nr      = rows;
-  m.nc      = (CG_UINT)nc;
-  m.entries = (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)rows * (size_t)nc * sizeof(V_ELE));
+  m.nr = rows;
+  m.nc = (CG_UINT)nc;
+  m.entries =
+      (V_ELE *)allocate(ARRAY_ALIGNMENT, (size_t)rows * (size_t)nc * sizeof(V_ELE));
   return m;
 }
 
@@ -102,7 +103,7 @@ static int testFilterParity(void)
   buildTridiagMatrixCS(&A, &gm, n, C, sigma);
   CG_UINT vecRows = matrixVecRows(&A);
 
-  const int NS = 7;
+  const int NS    = 7;
   ChebFilter f;
   double lamLo, lamHi;
   tridiagEigenvalue(n, n / 2, &lamLo);
@@ -145,8 +146,8 @@ static int testFilterParity(void)
     double maxdn = 0.0;
     for (CG_UINT r = 0; r < vecRows; r++) {
       for (int c = 0; c < nc; c++) {
-        maxdn = fmax(maxdn,
-            fabs((double)(yRef.entries[r * NS + c] - yStr.entries[r * nc + c])));
+        maxdn = fmax(
+            maxdn, fabs((double)(yRef.entries[r * NS + c] - yStr.entries[r * nc + c])));
       }
     }
     CHECK(maxdn < 1e-10, "filter nb=%d nc=%d max|diff|=%.3e", nbs[i], nc, maxdn);
@@ -275,8 +276,8 @@ static int testUpdateAndOrtho(void)
   const int NS    = 6;
   size_t sz       = (size_t)vecRows * (size_t)NS;
 
-  DMatrix y0 = makeBlock(vecRows, NS);
-  DMatrix yH = makeHostBlock(vecRows, NS);
+  DMatrix y0      = makeBlock(vecRows, NS);
+  DMatrix yH      = makeHostBlock(vecRows, NS);
   fillRandomBlock(y0.entries, vecRows, A.nr, NS, 0x4321);
 
   GpuVectorStream *vs = gpu_vstream_init(&A, NS, 3, tinyChunkBytes(NS), 0);
@@ -284,7 +285,7 @@ static int testUpdateAndOrtho(void)
   if (vs != NULL) {
     /* Y <- Y B with B = 2 * [I_4 ; 0] (m=6 -> mOut=4): compaction + scale. */
     const int mOut = 4;
-    double *B      = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * mOut * sizeof(double));
+    double *B = (double *)allocate(ARRAY_ALIGNMENT, (size_t)NS * mOut * sizeof(double));
     for (int i = 0; i < NS; i++) {
       for (int j = 0; j < mOut; j++) {
         B[i * mOut + j] = (i == j) ? 2.0 : 0.0;
@@ -296,7 +297,8 @@ static int testUpdateAndOrtho(void)
     for (CG_UINT r = 0; r < vecRows; r++) {
       for (int j = 0; j < mOut; j++) {
         maxd = fmax(maxd,
-            fabs((double)yH.entries[r * mOut + j] - 2.0 * (double)y0.entries[r * NS + j]));
+            fabs(
+                (double)yH.entries[r * mOut + j] - 2.0 * (double)y0.entries[r * NS + j]));
       }
     }
     CHECK(maxd < 1e-12, "update (compact to %d, x2) max|diff|=%.3e", mOut, maxd);
@@ -400,8 +402,8 @@ static int testSolveChebFD(void)
   param.cheb.have_bounds = 0;
   param.cheb.have_target = 1;
 
-  param.chebNb = 0; /* default width (clamped to NS) */
-  int found1   = solveChebFD(&comm, &param, &A);
+  param.chebNb           = 0; /* default width (clamped to NS) */
+  int found1             = solveChebFD(&comm, &param, &A);
   CHECK(found1 == 3, "cheb_nb=0: found %d eigenpairs, expected 3", found1);
 
   param.chebNb = 4; /* three sub-blocks, partial last one */
@@ -422,13 +424,13 @@ int chebFDStreamTests(int argc, char **argv)
   printf("Running ChebFD search-space streaming tests:\n");
 
   int results[4];
-  int i = 0;
+  int i        = 0;
   results[i++] = testFilterParity();
   results[i++] = testDensePassParity();
   results[i++] = testUpdateAndOrtho();
   results[i++] = testSolveChebFD();
 
-  int passed = 0;
+  int passed   = 0;
   for (int j = 0; j < i; j++) {
     passed += results[j] ? 1 : 0;
   }

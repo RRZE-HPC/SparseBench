@@ -24,7 +24,7 @@ int matrixTests(int argc, char **argv)
   // Get the directory path from the command line argument
   // const char *dataDir = argv[1];
 
-  Test tests[C_SIGMA_MAX * C_SIGMA_MAX] = {};
+  Test tests[C_SIGMA_MAX * C_SIGMA_MAX] = { };
 
   int num_tests                         = sizeof(tests) / sizeof(tests[0]);
   int passed                            = 0;
