@@ -104,10 +104,8 @@ int test_spmvSCS(void *args, const char *dataDir)
         VALIDATE_MATRIX_FORMAT(matrixFormat);
         // A.matrixFormat = matrixFormat;
 
-        CG_FLOAT *x =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
-        CG_FLOAT *y =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+        V_ELE *x = (V_ELE *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(V_ELE));
+        V_ELE *y = (V_ELE *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(V_ELE));
 
         // Fix x = 1 for now
         for (int i = 0; i < vectorSize; ++i) {
@@ -117,10 +115,8 @@ int test_spmvSCS(void *args, const char *dataDir)
 
 #ifdef SCS
 
-        CG_FLOAT *x_perm =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
-        CG_FLOAT *y_perm =
-            (CG_FLOAT *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(CG_FLOAT));
+        V_ELE *x_perm = (V_ELE *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(V_ELE));
+        V_ELE *y_perm = (V_ELE *)allocate(ARRAY_ALIGNMENT, vectorSize * sizeof(V_ELE));
 
         // Permute x into SCS ordering once (colInd already remapped)
         permute_vector(A.oldToNewPerm, x, x_perm, A.nr);

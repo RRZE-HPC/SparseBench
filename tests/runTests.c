@@ -13,6 +13,7 @@
 #include "solver/sectionTimerTests.h"
 #include "solver/solverTestsSPMMV.h"
 #include "solver/solverTestsSPMV.h"
+#include "solver/vectorOpsTests.h"
 
 #if defined(RUNTIME_BACKEND_IS_CUDA) || defined(RUNTIME_BACKEND_IS_HIP)
 #include "../src/cuda_kernels.h"
@@ -30,6 +31,7 @@ enum {
   RC_CHEBFD_UNIT       = RC_BIT,
   RC_CHEBFD_STREAM     = RC_BIT,
   RC_SECTIMER          = RC_BIT,
+  RC_VECTOR_OPS        = RC_BIT,
   // Not a test suite failure
   RC_UNSUPPORTED_MPI = RC_BIT,
 };
@@ -50,6 +52,7 @@ static const struct {
   { "chebFDUnitTests",       chebFDUnitTests,       RC_CHEBFD_UNIT       },
   { "chebFDStreamTests",     chebFDStreamTests,     RC_CHEBFD_STREAM     },
   { "sectionTimerTests",     sectionTimerTests,     RC_SECTIMER          },
+  { "vectorOpsTests",        vectorOpsTests,        RC_VECTOR_OPS        },
 };
 static const size_t numSuites = sizeof(suites) / sizeof(suites[0]);
 

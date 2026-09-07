@@ -3,6 +3,7 @@
 
 include ../config.mk
 include ../mk/include_$(TOOLCHAIN).mk
+include ../mk/include_SCAMAC.mk
 
 BUILD_DIR=../build
 TC_DIR=${BUILD_DIR}/$(MTX_FMT)-$(TOOLCHAIN)
@@ -18,15 +19,20 @@ LINKS = $(shell ls ${TC_DIR}/*.o 2>/dev/null | grep -v main.o)
 # Target executable
 TARGET=runTests
 
-# Collect objects from all test modules
-# Module 1 (matrix) test objects: only include when MTX_FMT is not CRS
+# Test sources per module; the object lists follow from them (.c=.o below),
+# so adding a suite means adding one .c here and nothing else.
+# Module 1 (matrix) tests are the SCS reference kernels: only built when
+# the library itself is SCS.
 ifeq ($(MTX_FMT),CRS)
-MOD1_OBJECTS=
+MOD1_SOURCES=
 else
-MOD1_OBJECTS=${MOD1}/convertSCS.o ${MOD1}/matrixTests.o
+MOD1_SOURCES=${MOD1}/convertSCS.c ${MOD1}/matrixTests.c
 endif
-MOD2_OBJECTS=${MOD2}/spmvSCS.o ${MOD2}/spmmvSCS.o ${MOD2}/solverTestsSPMV.o ${MOD2}/solverTestsSPMMV.o ${MOD2}/chebFDGershgorinTests.o ${MOD2}/chebFDUnitTests.o ${MOD2}/chebFDStreamTests.o ${MOD2}/sectionTimerTests.o
-OBJECTS := $(shell echo $(MOD1_OBJECTS) $(MOD2_OBJECTS) | tr ' ' '\n' | sort -u | tr '\n' ' ')
+MOD2_SOURCES=${MOD2}/spmvSCS.c ${MOD2}/spmmvSCS.c ${MOD2}/solverTestsSPMV.c ${MOD2}/solverTestsSPMMV.c ${MOD2}/chebFDGershgorinTests.c ${MOD2}/chebFDUnitTests.c ${MOD2}/chebFDStreamTests.c ${MOD2}/sectionTimerTests.c ${MOD2}/vectorOpsTests.c
+
+MOD1_OBJECTS := $(MOD1_SOURCES:.c=.o)
+MOD2_OBJECTS := $(MOD2_SOURCES:.c=.o)
+OBJECTS := $(sort $(MOD1_OBJECTS) $(MOD2_OBJECTS))
 
 # Always leave debugging flag on
 CFLAGS=-g -O0 $(OPENMP) $(DEFINES)
@@ -42,16 +48,12 @@ all: $(TARGET)
 
 # Build (if needed) and run the whole test suite.
 run: all
-	@./$(TARGET) || { rc=$$? ; \
-		[ $$rc -le 128 ] || echo "===>  runTests KILLED BY SIGNAL $$((rc - 128)) (rc=$$rc)" ; \
-		exit $$rc ; }
+	@./$(TARGET)
 
 # Build (if needed) and run a single suite, e.g. `make run-chebFDStreamTests`.
 # Use `make list` (or `./runTests --list`) to see the available suite names.
 run-%: all
-	@./$(TARGET) $* || { rc=$$? ; \
-		[ $$rc -le 128 ] || echo "===>  runTests KILLED BY SIGNAL $$((rc - 128)) (rc=$$rc)" ; \
-		exit $$rc ; }
+	@./$(TARGET) $*
 
 list: all
 	@./$(TARGET) --list
@@ -81,40 +83,7 @@ $(TARGET): prebuild runTests.o $(OBJECTS) ${LINKS}
 # object silently corrupts the stack.
 HEADERS = $(wildcard ../src/*.h) common.h $(wildcard $(MOD1)/*.h) $(wildcard $(MOD2)/*.h)
 
-# Compile runTests.c into an object file
-runTests.o: runTests.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-# Module 1 tests: matrix
-$(MOD1)/matrixTests.o: $(MOD1)/matrixTests.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD1)/convertSCS.o: $(MOD1)/convertSCS.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-# Module 2 tests: solver
-$(MOD2)/solverTestsSPMV.o: $(MOD2)/solverTestsSPMV.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD2)/solverTestsSPMMV.o: $(MOD2)/solverTestsSPMMV.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD2)/spmvSCS.o: $(MOD2)/spmvSCS.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD2)/spmmvSCS.o: $(MOD2)/spmmvSCS.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD2)/chebFDGershgorinTests.o: $(MOD2)/chebFDGershgorinTests.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD2)/chebFDUnitTests.o: $(MOD2)/chebFDUnitTests.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD2)/chebFDStreamTests.o: $(MOD2)/chebFDStreamTests.c $(HEADERS)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(MOD2)/sectionTimerTests.o: $(MOD2)/sectionTimerTests.c $(HEADERS)
+%.o: %.c $(HEADERS)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 format:
